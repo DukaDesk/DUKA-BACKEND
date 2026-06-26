@@ -1,0 +1,375 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserStatus {
+  active
+  suspended
+  deleted
+}
+
+enum TenantStatus {
+  draft
+  published
+  suspended
+}
+
+enum TenantUserRole {
+  owner
+  manager
+  staff
+}
+
+enum ConsentStatus {
+  active
+  revoked
+}
+
+model User {
+  id            String     @id @default(uuid())
+  email         String     @unique
+  phoneNumber   String?
+  passwordHash  String
+  firstName     String
+  lastName      String
+  status        UserStatus @default(active)
+  emailVerified Boolean    @default(false)
+  phoneVerified Boolean    @default(false)
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  profile       Profile?
+  tenants       TenantUser[]
+  consents      Consent[]
+  refreshTokens RefreshToken[]
+  auditLogs     AuditLog[]
+
+  @@map("users")
+}
+
+model Profile {
+  id             String    @id @default(uuid())
+  userId         String    @unique
+  gender         String?
+  dateOfBirth    DateTime?
+  avatarUrl      String?
+  defaultAddress String?
+  country        String?
+  state          String?
+  city           String?
+  preferences    Json?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("profiles")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  revoked   Boolean  @default(false)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([token])
+  @@map("refresh_tokens")
+}
+
+model Tenant {
+  id          String       @id @default(uuid())
+  name        String
+  slug        String       @unique
+  email       String?
+  phone       String?
+  logo        String?
+  status      TenantStatus @default(draft)
+  publishedAt DateTime?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  users      TenantUser[]
+  consents   Consent[]
+  pages      Page[]
+  navigation Navigation?
+  theme      Theme?
+  products   Product[]
+  categories Category[]
+  media      Media[]
+  auditLogs  AuditLog[]
+
+  @@map("tenants")
+}
+
+model TenantUser {
+  id       String         @id @default(uuid())
+  tenantId String
+  userId   String
+  role     TenantUserRole @default(staff)
+  status   UserStatus     @default(active)
+  joinedAt DateTime       @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, userId])
+  @@index([tenantId])
+  @@index([userId])
+  @@map("tenant_users")
+}
+
+model Consent {
+  id        String        @id @default(uuid())
+  tenantId  String
+  userId    String
+  status    ConsentStatus @default(active)
+  version   Int           @default(1)
+  grantedAt DateTime      @default(now())
+  revokedAt DateTime?
+
+  scopes ConsentScope[]
+  tenant Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, userId])
+  @@index([tenantId])
+  @@index([userId])
+  @@map("consents")
+}
+
+model ConsentScope {
+  id        String @id @default(uuid())
+  consentId String
+  scope     String
+
+  consent Consent @relation(fields: [consentId], references: [id], onDelete: Cascade)
+
+  @@index([consentId])
+  @@map("consent_scopes")
+}
+
+model Template {
+  id          String   @id @default(uuid())
+  name        String
+  slug        String   @unique
+  description String?
+  category    String?
+  thumbnail   String?
+  isActive    Boolean  @default(true)
+  config      Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  pages Page[]
+
+  @@map("templates")
+}
+
+model Page {
+  id         String   @id @default(uuid())
+  tenantId   String
+  templateId String?
+  name       String
+  slug       String
+  sortOrder  Int      @default(0)
+  isHome     Boolean  @default(false)
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  template Template? @relation(fields: [templateId], references: [id])
+  sections Section[]
+
+  @@unique([tenantId, slug])
+  @@index([tenantId])
+  @@map("pages")
+}
+
+model Section {
+  id        String   @id @default(uuid())
+  pageId    String
+  type      String
+  sortOrder Int      @default(0)
+  config    Json?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  page       Page        @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  components Component[]
+
+  @@index([pageId])
+  @@map("sections")
+}
+
+model Component {
+  id        String   @id @default(uuid())
+  sectionId String
+  type      String
+  props     Json?
+  sortOrder Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  section Section @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+
+  @@index([sectionId])
+  @@map("components")
+}
+
+model Navigation {
+  id        String   @id @default(uuid())
+  tenantId  String   @unique
+  items     Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("navigations")
+}
+
+model Theme {
+  id              String   @id @default(uuid())
+  tenantId        String   @unique
+  primaryColor    String   @default("#0066FF")
+  secondaryColor  String   @default("#00CC66")
+  backgroundColor String   @default("#FFFFFF")
+  textColor       String   @default("#1A1A1A")
+  fontFamily      String   @default("Inter")
+  borderRadius    String   @default("8px")
+  logo            String?
+  favicon         String?
+  custom          Json?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("themes")
+}
+
+model Category {
+  id          String   @id @default(uuid())
+  tenantId    String
+  parentId    String?
+  name        String
+  slug        String
+  description String?
+  image       String?
+  sortOrder   Int      @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant   Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  parent   Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  children Category[] @relation("CategoryHierarchy")
+  products Product[]
+
+  @@unique([tenantId, slug])
+  @@index([tenantId])
+  @@map("categories")
+}
+
+model Product {
+  id             String   @id @default(uuid())
+  tenantId       String
+  categoryId     String?
+  name           String
+  slug           String
+  description    String?
+  price          Decimal  @default(0)
+  compareAtPrice Decimal?
+  currency       String   @default("NGN")
+  stock          Int      @default(0)
+  sku            String?
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  tenant   Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  category Category?      @relation(fields: [categoryId], references: [id])
+  images   ProductImage[]
+
+  @@unique([tenantId, slug])
+  @@index([tenantId])
+  @@index([categoryId])
+  @@map("products")
+}
+
+model ProductImage {
+  id        String  @id @default(uuid())
+  productId String
+  url       String
+  alt       String?
+  sortOrder Int     @default(0)
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@map("product_images")
+}
+
+model Media {
+  id        String   @id @default(uuid())
+  tenantId  String
+  fileName  String
+  mimeType  String
+  size      Int
+  url       String
+  alt       String?
+  type      String   @default("image")
+  createdAt DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("media")
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  tenantId  String?
+  userId    String?
+  action    String
+  entity    String
+  entityId  String?
+  metadata  Json?
+  ipAddress String?
+  createdAt DateTime @default(now())
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id])
+  user   User?   @relation(fields: [userId], references: [id])
+
+  @@index([tenantId])
+  @@index([userId])
+  @@index([action])
+  @@map("audit_logs")
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  tenantId  String?
+  type      String
+  title     String
+  body      String?
+  data      Json?
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([tenantId])
+  @@map("notifications")
+}

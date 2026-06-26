@@ -1,0 +1,55 @@
+import { Module } from '@nestjs/common';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { APP_GUARD } from '@nestjs/core';
+import { PrismaModule } from './common/prisma.module';
+import { AuthModule } from './modules/auth/auth.module';
+import { TenantsModule } from './modules/tenants/tenants.module';
+import { TemplatesModule } from './modules/templates/templates.module';
+import { BuilderModule } from './modules/builder/builder.module';
+import { RendererModule } from './modules/renderer/renderer.module';
+import { CommerceModule } from './modules/commerce/commerce.module';
+import { MediaModule } from './modules/media/media.module';
+import { QrModule } from './modules/qr/qr.module';
+import { DiscoveryModule } from './modules/discovery/discovery.module';
+import { AdminModule } from './modules/admin/admin.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
+import { UsersModule } from './modules/users/users.module';
+
+@Module({
+  imports: [
+    ConfigModule.forRoot({ isGlobal: true }),
+    ThrottlerModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        throttlers: [
+          {
+            ttl: (config.get<number>('THROTTLE_TTL') || 60) * 1000,
+            limit: config.get<number>('THROTTLE_LIMIT') || 100,
+          },
+        ],
+      }),
+    }),
+    PrismaModule,
+    AuthModule,
+    UsersModule,
+    TenantsModule,
+    TemplatesModule,
+    BuilderModule,
+    RendererModule,
+    CommerceModule,
+    MediaModule,
+    QrModule,
+    DiscoveryModule,
+    AdminModule,
+    NotificationsModule,
+  ],
+  providers: [
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
+  ],
+})
+export class AppModule {}
