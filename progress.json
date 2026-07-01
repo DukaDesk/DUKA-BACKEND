@@ -161,6 +161,12 @@
       "date": "2026-07-01T12:00:00+01:00",
       "type": "refactor",
       "description": "Auth service — OTP migrated from in-memory Map to Redis, registration uses PasswordService for validation + history"
+    },
+    {
+      "id": "28",
+      "date": "2026-07-01T13:00:00+01:00",
+      "type": "feat",
+      "description": "Tenant Platform — runtime configuration (languages/currency/timezone/offlinePolicy), subscription management (subscribe/cancel/status), feature flag resolution from plan"
     }
   ]
 }
