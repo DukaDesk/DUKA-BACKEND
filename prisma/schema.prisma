@@ -550,6 +550,7 @@ model Booking {
   service  BookingService?   @relation(fields: [serviceId], references: [id])
   staff    StaffMember?      @relation(fields: [staffId], references: [id])
   resource BookingResource?  @relation(fields: [resourceId], references: [id])
+  bookingHistory BookingHistory[]
 
   @@index([tenantId])
   @@index([userId])
@@ -565,6 +566,8 @@ model BookingHistory {
   changedBy String?
   reason    String?
   createdAt DateTime @default(now())
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
 
   @@index([bookingId])
   @@map("booking_history")

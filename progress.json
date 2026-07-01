@@ -215,6 +215,12 @@
       "date": "2026-07-01T17:00:00+01:00",
       "type": "feat",
       "description": "Commerce Platform — cart engine (getOrCreate/add/update/remove/applyCoupon/recalculate), checkout flow (cart→order conversion, coupon usage increment), order lifecycle (create/status transition validation/paid/fulfilled timestamps, OrderCreated/OrderStatusChanged events), coupons CRUD with usage tracking, fulfillments CRUD with completion timestamp, tax rules CRUD with default-handling + calculation endpoint, product variants CRUD, enhanced product listing with price/sort filters"
+    },
+    {
+      "id": "37",
+      "date": "2026-07-01T18:00:00+01:00",
+      "type": "feat",
+      "description": "Booking & Scheduling — service CRUD, staff CRUD with service assignments, resource CRUD, schedule management (recurring weekly + date-specific), availability engine (slot generation from schedules, conflict detection with existing bookings, capacity check), booking workflow (create/7-state status transitions with validation, BookingCreated/BookingStatusChanged events), waiting list (add/list/notify), calendar endpoint"
     }
   ]
 }
