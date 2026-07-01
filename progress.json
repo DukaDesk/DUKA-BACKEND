@@ -227,6 +227,12 @@
       "date": "2026-07-01T19:00:00+01:00",
       "type": "feat",
       "description": "Forms & Workflow — form CRUD with fields/sections/config, server-side validation engine (required/minLength/maxLength/min/max/pattern/email type checks), submission handling (version tracking, FormSubmitted event), approval workflow engine (upsert workflow steps, approve/reject with step counting, auto-status transition to approved/rejected), SubmissionApproved event"
+    },
+    {
+      "id": "39",
+      "date": "2026-07-01T20:00:00+01:00",
+      "type": "feat",
+      "description": "Payments Platform — PaymentAdapter interface with PaystackAdapter + FlutterwaveAdapter (initialize/verify/webhook), PaymentsService (initialize intent with tenant account lookup, verify with provider, webhook processing with logging and intent status update, PaymentCompleted event), PaymentsController (initialize/verify/list/webhook endpoints)"
     }
   ]
 }
