@@ -233,6 +233,12 @@
       "date": "2026-07-01T20:00:00+01:00",
       "type": "feat",
       "description": "Payments Platform — PaymentAdapter interface with PaystackAdapter + FlutterwaveAdapter (initialize/verify/webhook), PaymentsService (initialize intent with tenant account lookup, verify with provider, webhook processing with logging and intent status update, PaymentCompleted event), PaymentsController (initialize/verify/list/webhook endpoints)"
+    },
+    {
+      "id": "40",
+      "date": "2026-07-01T21:00:00+01:00",
+      "type": "feat",
+      "description": "Notification Platform — in-app notifications (list/markRead/markAllRead/unread count), dispatch engine (sendPush with FCM token delivery, sendEmail stub, sendFromTemplate with variable injection), template CRUD with version tracking, preference management per user/channel/category with quiet hours, device token registration/unregistration, delivery result tracking"
     }
   ]
 }
