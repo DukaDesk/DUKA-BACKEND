@@ -203,6 +203,12 @@
       "date": "2026-07-01T15:00:00+01:00",
       "type": "feat",
       "description": "Publishing Pipeline — validation engine (pages/home/slugs/sections checks), manifest compiler (SDUI JSON with theme/navigation/features/screens), release management (publish/rollback/history), draft tracking, Redis cache invalidation, ReleasePublished/RollbackCompleted events"
+    },
+    {
+      "id": "35",
+      "date": "2026-07-01T16:00:00+01:00",
+      "type": "feat",
+      "description": "DAM Platform — ImageOptimizer (Sharp-based pipeline: webp conversion, 5 preset variants {thumbnail/small/medium/large/og-image}, responsive sizing), enhanced MediaService (upload with auto-optimization, variant generation, CDN URL resolver, folder CRUD, version tracking via AssetVersion, hash-based dedup), enhanced controller with folder endpoints"
     }
   ]
 }
