@@ -167,6 +167,36 @@
       "date": "2026-07-01T13:00:00+01:00",
       "type": "feat",
       "description": "Tenant Platform — runtime configuration (languages/currency/timezone/offlinePolicy), subscription management (subscribe/cancel/status), feature flag resolution from plan"
+    },
+    {
+      "id": "29",
+      "date": "2026-07-01T14:00:00+01:00",
+      "type": "feat",
+      "description": "API Gateway — GatewayRateLimiter with Redis-backed sliding window, BFF module with 4 client-specific backends"
+    },
+    {
+      "id": "30",
+      "date": "2026-07-01T14:00:00+01:00",
+      "type": "feat",
+      "description": "Mobile BFF — manifest delivery with Redis caching, discovery feed, aggregated user profile, notifications with unread count, tenant catalog"
+    },
+    {
+      "id": "31",
+      "date": "2026-07-01T14:00:00+01:00",
+      "type": "feat",
+      "description": "Tenant Dashboard BFF — dashboard summary (pages/products/orders/bookings counts), 30-day analytics, integration status"
+    },
+    {
+      "id": "32",
+      "date": "2026-07-01T14:00:00+01:00",
+      "type": "feat",
+      "description": "Business Dashboard BFF — platform overview stats, paginated tenant list with subscription info, recent audit logs"
+    },
+    {
+      "id": "33",
+      "date": "2026-07-01T14:00:00+01:00",
+      "type": "feat",
+      "description": "Website BFF — public categories, featured tenants for landing page, pricing plans from subscription DB"
     }
   ]
 }
