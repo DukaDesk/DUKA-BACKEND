@@ -3,6 +3,116 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 
 async function main() {
+  // Seed RBAC: Platform Roles
+  const platformRoles = [
+    { name: 'super_admin', description: 'Full platform access', isSystem: true },
+    { name: 'support', description: 'Customer support access', isSystem: true },
+    { name: 'operations', description: 'Platform operations', isSystem: true },
+    { name: 'finance', description: 'Financial reports access', isSystem: true },
+  ];
+
+  const permissions = [
+    { name: 'tenant:create', resource: 'tenant', action: 'create' },
+    { name: 'tenant:read', resource: 'tenant', action: 'read' },
+    { name: 'tenant:update', resource: 'tenant', action: 'update' },
+    { name: 'tenant:delete', resource: 'tenant', action: 'delete' },
+    { name: 'tenant:publish', resource: 'tenant', action: 'publish' },
+    { name: 'tenant:suspend', resource: 'tenant', action: 'suspend' },
+    { name: 'tenant:approve', resource: 'tenant', action: 'approve' },
+    { name: 'user:read', resource: 'user', action: 'read' },
+    { name: 'user:update', resource: 'user', action: 'update' },
+    { name: 'user:delete', resource: 'user', action: 'delete' },
+    { name: 'product:create', resource: 'product', action: 'create' },
+    { name: 'product:read', resource: 'product', action: 'read' },
+    { name: 'product:update', resource: 'product', action: 'update' },
+    { name: 'product:delete', resource: 'product', action: 'delete' },
+    { name: 'order:read', resource: 'order', action: 'read' },
+    { name: 'order:update', resource: 'order', action: 'update' },
+    { name: 'payment:read', resource: 'payment', action: 'read' },
+    { name: 'analytics:read', resource: 'analytics', action: 'read' },
+    { name: 'settings:read', resource: 'settings', action: 'read' },
+    { name: 'settings:update', resource: 'settings', action: 'update' },
+  ];
+
+  for (const role of platformRoles) {
+    await prisma.role.upsert({
+      where: { name: role.name },
+      update: role,
+      create: role,
+    });
+  }
+
+  for (const perm of permissions) {
+    await prisma.permission.upsert({
+      where: { name: perm.name },
+      update: perm,
+      create: perm,
+    });
+  }
+
+  // Assign all permissions to super_admin
+  const superAdminRole = await prisma.role.findUnique({ where: { name: 'super_admin' } });
+  if (superAdminRole) {
+    for (const perm of permissions) {
+      const p = await prisma.permission.findUnique({ where: { name: perm.name } });
+      if (p) {
+        await prisma.rolePermission.upsert({
+          where: { roleId_permissionId: { roleId: superAdminRole.id, permissionId: p.id } },
+          update: {},
+          create: { roleId: superAdminRole.id, permissionId: p.id },
+        });
+      }
+    }
+  }
+
+  // Seed starter subscription plans
+  const plans = [
+    {
+      name: 'Starter',
+      slug: 'starter',
+      price: 0,
+      features: { commerce: true, forms: true, notifications: true, booking: false, analytics: false, integrations: false, custom_domain: false },
+      limits: { products: 20, pages: 5, staff: 2, storage: 100, bandwidth: 1000 },
+    },
+    {
+      name: 'Business',
+      slug: 'business',
+      price: 29.99,
+      features: { commerce: true, forms: true, notifications: true, booking: true, analytics: true, integrations: true, custom_domain: false },
+      limits: { products: 200, pages: 20, staff: 10, storage: 1000, bandwidth: 10000 },
+    },
+    {
+      name: 'Enterprise',
+      slug: 'enterprise',
+      price: 99.99,
+      features: { commerce: true, forms: true, notifications: true, booking: true, analytics: true, integrations: true, custom_domain: true, sso: true, multi_workspace: true },
+      limits: { products: -1, pages: -1, staff: -1, storage: 10000, bandwidth: -1 },
+    },
+  ];
+
+  for (const plan of plans) {
+    await prisma.plan.upsert({
+      where: { slug: plan.slug },
+      update: plan,
+      create: plan,
+    });
+  }
+
+  // Seed supported payment providers
+  const providers = [
+    { name: 'Flutterwave', slug: 'flutterwave' },
+    { name: 'Paystack', slug: 'paystack' },
+    { name: 'Stripe', slug: 'stripe' },
+  ];
+
+  for (const provider of providers) {
+    await prisma.paymentProvider.upsert({
+      where: { slug: provider.slug },
+      update: provider,
+      create: provider,
+    });
+  }
+
   const templates = [
     {
       name: 'Modern Store',

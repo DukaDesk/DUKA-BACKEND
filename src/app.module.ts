@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, MiddlewareConsumer, NestModule } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
@@ -15,6 +15,15 @@ import { DiscoveryModule } from './modules/discovery/discovery.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { UsersModule } from './modules/users/users.module';
+import { HealthModule } from './modules/health/health.module';
+import { RbacModule } from './modules/rbac/rbac.module';
+import { EventBusModule } from './shared/events/event-bus.module';
+import { TenantContextModule } from './shared/context/tenant-context.module';
+import { RedisModule } from './common/redis/redis.module';
+import { QueueModule } from './shared/queue/queue.module';
+import { LoggerModule } from './common/logger/logger.module';
+import { CorrelationIdMiddleware } from './common/middleware/correlation-id.middleware';
+import { TenantResolverMiddleware } from './shared/context/tenant-resolver.middleware';
 
 @Module({
   imports: [
@@ -31,7 +40,15 @@ import { UsersModule } from './modules/users/users.module';
         ],
       }),
     }),
+    // Infrastructure
     PrismaModule,
+    RedisModule,
+    QueueModule,
+    LoggerModule,
+    EventBusModule,
+    TenantContextModule,
+    RbacModule,
+    // Modules
     AuthModule,
     UsersModule,
     TenantsModule,
@@ -44,6 +61,7 @@ import { UsersModule } from './modules/users/users.module';
     DiscoveryModule,
     AdminModule,
     NotificationsModule,
+    HealthModule,
   ],
   providers: [
     {
@@ -52,4 +70,10 @@ import { UsersModule } from './modules/users/users.module';
     },
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer
+      .apply(CorrelationIdMiddleware, TenantResolverMiddleware)
+      .forRoutes('*');
+  }
+}

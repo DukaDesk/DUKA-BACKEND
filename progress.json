@@ -1,0 +1,154 @@
+{
+  "entries": [
+    {
+      "id": "1",
+      "date": "2026-07-01T10:00:00+01:00",
+      "type": "feat",
+      "description": "Project scaffold — NestJS 11, Prisma 6, modular monolith architecture with 13 domain modules"
+    },
+    {
+      "id": "2",
+      "date": "2026-07-01T10:00:00+01:00",
+      "type": "feat",
+      "description": "Identity Module — register, login, JWT access+refresh tokens, OTP (in-memory), email verification"
+    },
+    {
+      "id": "3",
+      "date": "2026-07-01T10:00:00+01:00",
+      "type": "feat",
+      "description": "Users/Profile Module — profile CRUD, tenant memberships, consent management with scopes & versioning"
+    },
+    {
+      "id": "4",
+      "date": "2026-07-01T10:00:00+01:00",
+      "type": "feat",
+      "description": "Tenant Module — CRUD, slug uniqueness, publish workflow with auto-default theme, ownership verification"
+    },
+    {
+      "id": "5",
+      "date": "2026-07-01T10:00:00+01:00",
+      "type": "feat",
+      "description": "Builder Module — Page→Section→Component hierarchy, navigation & theme management per tenant"
+    },
+    {
+      "id": "6",
+      "date": "2026-07-01T10:00:00+01:00",
+      "type": "feat",
+      "description": "Renderer Module — SDUI app definition endpoint generating {theme, navigation, screens} JSON contract"
+    },
+    {
+      "id": "7",
+      "date": "2026-07-01T10:00:00+01:00",
+      "type": "feat",
+      "description": "Commerce Module — products, categories, pagination, soft-delete, case-insensitive search, product images"
+    },
+    {
+      "id": "8",
+      "date": "2026-07-01T10:00:00+01:00",
+      "type": "feat",
+      "description": "Templates Module — 3 seed templates (Store, Restaurant, Clinic), non-destructive template application"
+    },
+    {
+      "id": "9",
+      "date": "2026-07-01T10:00:00+01:00",
+      "type": "feat",
+      "description": "Media Module — local file upload with UUID naming, static asset serving, tenant-scoped media listing"
+    },
+    {
+      "id": "10",
+      "date": "2026-07-01T10:00:00+01:00",
+      "type": "feat",
+      "description": "QR Module — QR metadata generation with deep-link format, slug→tenant resolution"
+    },
+    {
+      "id": "11",
+      "date": "2026-07-01T10:00:00+01:00",
+      "type": "feat",
+      "description": "Discovery Module — featured tenants, case-insensitive search, 12 hardcoded vertical categories, stub nearby"
+    },
+    {
+      "id": "12",
+      "date": "2026-07-01T10:00:00+01:00",
+      "type": "feat",
+      "description": "Admin Module — approve/suspend tenants, platform stats, stub admin verification"
+    },
+    {
+      "id": "13",
+      "date": "2026-07-01T10:00:00+01:00",
+      "type": "feat",
+      "description": "Notifications Module — DB-persisted notification records, sendPush helper, mark-as-read endpoint"
+    },
+    {
+      "id": "14",
+      "date": "2026-07-01T10:00:00+01:00",
+      "type": "feat",
+      "description": "Global response envelope ({success, message, data}), exception filter, validation pipe, throttler guard, Swagger docs"
+    },
+    {
+      "id": "15",
+      "date": "2026-07-01T11:00:00+01:00",
+      "type": "feat",
+      "description": "PLAN.md — comprehensive master implementation plan covering all 12 PRD specifications"
+    },
+    {
+      "id": "16",
+      "date": "2026-07-01T11:00:00+01:00",
+      "type": "infra",
+      "description": "Event Bus — in-process pub/sub with sync/async dispatch, DomainEvent interface, typed event classes"
+    },
+    {
+      "id": "17",
+      "date": "2026-07-01T11:00:00+01:00",
+      "type": "infra",
+      "description": "Tenant Context — AsyncLocalStorage-based context propagation, tenant resolver middleware (header/slug/domain)"
+    },
+    {
+      "id": "18",
+      "date": "2026-07-01T11:00:00+01:00",
+      "type": "infra",
+      "description": "Redis Module — ioredis wrapper with in-memory mock fallback, OTP store, cache, pub/sub"
+    },
+    {
+      "id": "19",
+      "date": "2026-07-01T11:00:00+01:00",
+      "type": "infra",
+      "description": "Background Job Queue — Bull/BullMQ with 5 queues (publishing, notifications, assets, webhooks, analytics)"
+    },
+    {
+      "id": "20",
+      "date": "2026-07-01T11:00:00+01:00",
+      "type": "infra",
+      "description": "Structured Logging — nestjs-pino with pino-pretty, LoggerService with correlationId/tenantId/userId context"
+    },
+    {
+      "id": "21",
+      "date": "2026-07-01T11:00:00+01:00",
+      "type": "infra",
+      "description": "Correlation ID Middleware — generates/carries x-correlation-id across all requests"
+    },
+    {
+      "id": "22",
+      "date": "2026-07-01T11:00:00+01:00",
+      "type": "infra",
+      "description": "Health Check — /health endpoint with DB connectivity check, uptime, status reporting"
+    },
+    {
+      "id": "23",
+      "date": "2026-07-01T11:00:00+01:00",
+      "type": "infra",
+      "description": "Full RBAC System — Role, Permission, RolePermission, UserRole models; RequireRole/RequirePermission decorators; RbacGuard"
+    },
+    {
+      "id": "24",
+      "date": "2026-07-01T11:00:00+01:00",
+      "type": "db",
+      "description": "Prisma Schema — added 30+ models for IAM (Device, PasswordHistory), Tenant (Config, Plan, Subscription, Domain), Publishing (Draft, Release, Validation), Assets (Folder, Version), Commerce (Cart, Order, Coupon, Fulfillment, Tax, Variant), Booking (Service, Staff, Resource, Schedule, WaitingList), Forms (Field, Submission, Approval, Workflow), Payments (Provider, Account, Intent, Transaction, Webhook, FinancialEvent), Notifications (Template, Event, Preference, DeviceToken, DeliveryResult)"
+    },
+    {
+      "id": "25",
+      "date": "2026-07-01T11:00:00+01:00",
+      "type": "db",
+      "description": "Seed — roles (super_admin, support, operations, finance), 20 permissions, 3 subscription plans (Starter/Business/Enterprise), 3 payment providers (Flutterwave, Paystack, Stripe)"
+    }
+  ]
+}
