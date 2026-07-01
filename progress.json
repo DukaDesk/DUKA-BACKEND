@@ -221,6 +221,12 @@
       "date": "2026-07-01T18:00:00+01:00",
       "type": "feat",
       "description": "Booking & Scheduling — service CRUD, staff CRUD with service assignments, resource CRUD, schedule management (recurring weekly + date-specific), availability engine (slot generation from schedules, conflict detection with existing bookings, capacity check), booking workflow (create/7-state status transitions with validation, BookingCreated/BookingStatusChanged events), waiting list (add/list/notify), calendar endpoint"
+    },
+    {
+      "id": "38",
+      "date": "2026-07-01T19:00:00+01:00",
+      "type": "feat",
+      "description": "Forms & Workflow — form CRUD with fields/sections/config, server-side validation engine (required/minLength/maxLength/min/max/pattern/email type checks), submission handling (version tracking, FormSubmitted event), approval workflow engine (upsert workflow steps, approve/reject with step counting, auto-status transition to approved/rejected), SubmissionApproved event"
     }
   ]
 }

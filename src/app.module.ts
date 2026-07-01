@@ -20,6 +20,7 @@ import { IamModule } from './modules/iam/iam.module';
 import { BffModule } from './bff/bff.module';
 import { PublishingModule } from './modules/publishing/publishing.module';
 import { BookingModule } from './modules/booking/booking.module';
+import { FormsModule } from './modules/forms/forms.module';
 import { RbacModule } from './modules/rbac/rbac.module';
 import { EventBusModule } from './shared/events/event-bus.module';
 import { TenantContextModule } from './shared/context/tenant-context.module';
@@ -70,6 +71,7 @@ import { TenantResolverMiddleware } from './shared/context/tenant-resolver.middl
     BffModule,
     PublishingModule,
     BookingModule,
+    FormsModule,
   ],
   providers: [
     {
