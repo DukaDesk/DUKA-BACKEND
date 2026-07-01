@@ -8,6 +8,8 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../../common/prisma.service';
+import { PasswordService } from '../iam/password.service';
+import { RedisService } from '../../common/redis/redis.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { RefreshDto } from './dto/refresh.dto';
@@ -16,12 +18,12 @@ import { randomUUID } from 'crypto';
 
 @Injectable()
 export class AuthService {
-  private otpStore = new Map<string, { otp: string; expiresAt: Date }>();
-
   constructor(
     private prisma: PrismaService,
     private jwtService: JwtService,
     private configService: ConfigService,
+    private passwordService: PasswordService,
+    private redis: RedisService,
   ) {}
 
   async register(dto: RegisterDto) {
@@ -30,7 +32,8 @@ export class AuthService {
       throw new ConflictException('Email already registered');
     }
 
-    const passwordHash = await bcrypt.hash(dto.password, 12);
+    await this.passwordService.validatePasswordStrength(dto.password);
+    const passwordHash = await this.passwordService.hash(dto.password);
     const user = await this.prisma.user.create({
       data: {
         email: dto.email,
@@ -48,6 +51,8 @@ export class AuthService {
         createdAt: true,
       },
     });
+
+    await this.passwordService.recordHistory(user.id, passwordHash);
 
     const tokens = await this.generateTokens(user.id, user.email);
 
@@ -111,26 +116,21 @@ export class AuthService {
 
   async sendOtp(email: string) {
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
-    this.otpStore.set(email, { otp, expiresAt });
+    await this.redis.set(`otp:${email}`, otp, 300);
     console.log(`OTP for ${email}: ${otp}`);
     return { message: 'OTP sent successfully' };
   }
 
   async verifyOtp(dto: VerifyOtpDto) {
-    const stored = this.otpStore.get(dto.email);
-    if (!stored) {
-      throw new BadRequestException('No OTP found for this email');
+    const storedOtp = await this.redis.get(`otp:${dto.email}`);
+    if (!storedOtp) {
+      throw new BadRequestException('No OTP found or OTP expired');
     }
-    if (stored.expiresAt < new Date()) {
-      this.otpStore.delete(dto.email);
-      throw new BadRequestException('OTP has expired');
-    }
-    if (stored.otp !== dto.otp) {
+    if (storedOtp !== dto.otp) {
       throw new BadRequestException('Invalid OTP');
     }
 
-    this.otpStore.delete(dto.email);
+    await this.redis.del(`otp:${dto.email}`);
 
     await this.prisma.user.update({
       where: { email: dto.email },

@@ -149,6 +149,18 @@
       "date": "2026-07-01T11:00:00+01:00",
       "type": "db",
       "description": "Seed — roles (super_admin, support, operations, finance), 20 permissions, 3 subscription plans (Starter/Business/Enterprise), 3 payment providers (Flutterwave, Paystack, Stripe)"
+    },
+    {
+      "id": "26",
+      "date": "2026-07-01T12:00:00+01:00",
+      "type": "feat",
+      "description": "IAM Platform — device management (register/list/update/revoke), password validation (strength/history/recording), account recovery (forgot/reset with Redis-backed tokens)"
+    },
+    {
+      "id": "27",
+      "date": "2026-07-01T12:00:00+01:00",
+      "type": "refactor",
+      "description": "Auth service — OTP migrated from in-memory Map to Redis, registration uses PasswordService for validation + history"
     }
   ]
 }
