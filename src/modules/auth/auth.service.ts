@@ -3,10 +3,13 @@ import {
   UnauthorizedException,
   ConflictException,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcryptjs';
+import { OAuth2Client } from 'google-auth-library';
+import * as appleSignin from 'apple-signin-auth';
 import { PrismaService } from '../../common/prisma.service';
 import { PasswordService } from '../iam/password.service';
 import { RedisService } from '../../common/redis/redis.service';
@@ -14,6 +17,7 @@ import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { RefreshDto } from './dto/refresh.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
+import { GoogleLoginDto, AppleLoginDto } from './dto/social-login.dto';
 import { randomUUID } from 'crypto';
 
 @Injectable()
@@ -63,7 +67,7 @@ export class AuthService {
     const user = await this.prisma.user.findUnique({
       where: { email: dto.email },
     });
-    if (!user) {
+    if (!user || !user.passwordHash) {
       throw new UnauthorizedException('Invalid email or password');
     }
 
@@ -140,13 +144,118 @@ export class AuthService {
     return { message: 'Email verified successfully' };
   }
 
+  async googleLogin(dto: GoogleLoginDto) {
+    const clientId = this.configService.get<string>('GOOGLE_CLIENT_ID');
+    if (!clientId) throw new BadRequestException('Google auth not configured');
+
+    const client = new OAuth2Client(clientId);
+    let payload: any;
+    try {
+      const ticket = await client.verifyIdToken({ idToken: dto.idToken, audience: clientId });
+      payload = ticket.getPayload();
+    } catch {
+      throw new UnauthorizedException('Invalid Google ID token');
+    }
+
+    if (!payload.email) {
+      throw new BadRequestException('Google account has no email');
+    }
+
+    const googleId = payload.sub;
+    const email = payload.email;
+    const firstName = dto.firstName || payload.given_name || payload.name?.split(' ')[0] || '';
+    const lastName = dto.lastName || payload.family_name || '';
+
+    let user = await this.prisma.user.findFirst({
+      where: { OR: [{ googleId }, { email }] },
+    });
+
+    if (user) {
+      if (!user.googleId) {
+        await this.prisma.user.update({
+          where: { id: user.id },
+          data: { googleId, emailVerified: true },
+        });
+      }
+    } else {
+      user = await this.prisma.user.create({
+        data: {
+          email,
+          googleId,
+          emailVerified: true,
+          firstName,
+          lastName,
+        },
+      });
+    }
+
+    const tokens = await this.generateTokens(user.id, user.email);
+    return {
+      user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, status: user.status },
+      ...tokens,
+    };
+  }
+
+  async appleLogin(dto: AppleLoginDto) {
+    const clientId = this.configService.get<string>('APPLE_CLIENT_ID');
+    if (!clientId) throw new BadRequestException('Apple auth not configured');
+
+    let jwtClaims: any;
+    try {
+      jwtClaims = await appleSignin.verifyIdToken(dto.identityToken, {
+        audience: clientId,
+        ignoreExpiration: false,
+      });
+    } catch {
+      throw new UnauthorizedException('Invalid Apple identity token');
+    }
+
+    const appleId = jwtClaims.sub;
+    const email = dto.email || jwtClaims.email;
+    if (!email) {
+      throw new BadRequestException('Apple account has no email — provide email in request');
+    }
+
+    const firstName = dto.firstName || '';
+    const lastName = dto.lastName || '';
+
+    let user = await this.prisma.user.findFirst({
+      where: { OR: [{ appleId }, { email }] },
+    });
+
+    if (user) {
+      if (!user.appleId) {
+        await this.prisma.user.update({
+          where: { id: user.id },
+          data: { appleId, emailVerified: true },
+        });
+      }
+    } else {
+      user = await this.prisma.user.create({
+        data: {
+          email,
+          appleId,
+          emailVerified: true,
+          firstName,
+          lastName,
+        },
+      });
+    }
+
+    const tokens = await this.generateTokens(user.id, user.email);
+    return {
+      user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, status: user.status },
+      ...tokens,
+    };
+  }
+
   async getProfile(userId: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       include: { profile: true },
     });
     if (!user) throw new UnauthorizedException('User not found');
-    const { passwordHash, ...rest } = user;
+    const { passwordHash, googleId, appleId, ...rest } = user;
     return rest;
   }
 

@@ -245,6 +245,12 @@
       "date": "2026-07-01T22:00:00+01:00",
       "type": "docs",
       "description": "Documentation overhaul — README.md rewritten with full Phase 0-2 platform architecture, complete API reference tables (~120 endpoints), current project structure, seed data, and status; IMPLEMENTATION.md updated with all 14+ modules, Phase 0 infrastructure docs, entity relationship diagram, environment variables; PLAN.md archived as PLAN_ARCHIVED.md (superseded)"
+    },
+    {
+      "id": "42",
+      "date": "2026-07-01T23:00:00+01:00",
+      "type": "feat",
+      "description": "Google & Apple Sign-In — googleId/appleId fields on User (unique, nullable), passwordHash made optional for social-only users, Google OAuth strategy + google-auth-library ID token verification, Apple Sign-In strategy + apple-signin-auth identity token verification, /auth/google and /auth/apple POST endpoints with account linking (finds by googleId/appleId or email, creates if new), updated env vars"
     }
   ]
 }

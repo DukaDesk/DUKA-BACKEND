@@ -5,6 +5,7 @@ import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { RefreshDto } from './dto/refresh.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
+import { GoogleLoginDto, AppleLoginDto } from './dto/social-login.dto';
 import { Public } from '../../common/decorators/public.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -57,4 +58,17 @@ export class AuthController {
     return this.authService.verifyOtp(dto);
   }
 
+  @Public()
+  @Post('google')
+  @ApiOperation({ summary: 'Sign in or register with Google ID token' })
+  googleLogin(@Body() dto: GoogleLoginDto) {
+    return this.authService.googleLogin(dto);
+  }
+
+  @Public()
+  @Post('apple')
+  @ApiOperation({ summary: 'Sign in or register with Apple identity token' })
+  appleLogin(@Body() dto: AppleLoginDto) {
+    return this.authService.appleLogin(dto);
+  }
 }
