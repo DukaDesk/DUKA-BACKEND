@@ -198,5 +198,11 @@
       "type": "feat",
       "description": "Website BFF — public categories, featured tenants for landing page, pricing plans from subscription DB"
     }
+    {
+      "id": "34",
+      "date": "2026-07-01T15:00:00+01:00",
+      "type": "feat",
+      "description": "Publishing Pipeline — validation engine (pages/home/slugs/sections checks), manifest compiler (SDUI JSON with theme/navigation/features/screens), release management (publish/rollback/history), draft tracking, Redis cache invalidation, ReleasePublished/RollbackCompleted events"
+    }
   ]
 }

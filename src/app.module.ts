@@ -18,6 +18,7 @@ import { UsersModule } from './modules/users/users.module';
 import { HealthModule } from './modules/health/health.module';
 import { IamModule } from './modules/iam/iam.module';
 import { BffModule } from './bff/bff.module';
+import { PublishingModule } from './modules/publishing/publishing.module';
 import { RbacModule } from './modules/rbac/rbac.module';
 import { EventBusModule } from './shared/events/event-bus.module';
 import { TenantContextModule } from './shared/context/tenant-context.module';
@@ -66,6 +67,7 @@ import { TenantResolverMiddleware } from './shared/context/tenant-resolver.middl
     HealthModule,
     IamModule,
     BffModule,
+    PublishingModule,
   ],
   providers: [
     {
