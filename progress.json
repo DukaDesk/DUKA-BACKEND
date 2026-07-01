@@ -239,6 +239,12 @@
       "date": "2026-07-01T21:00:00+01:00",
       "type": "feat",
       "description": "Notification Platform — in-app notifications (list/markRead/markAllRead/unread count), dispatch engine (sendPush with FCM token delivery, sendEmail stub, sendFromTemplate with variable injection), template CRUD with version tracking, preference management per user/channel/category with quiet hours, device token registration/unregistration, delivery result tracking"
+    },
+    {
+      "id": "41",
+      "date": "2026-07-01T22:00:00+01:00",
+      "type": "docs",
+      "description": "Documentation overhaul — README.md rewritten with full Phase 0-2 platform architecture, complete API reference tables (~120 endpoints), current project structure, seed data, and status; IMPLEMENTATION.md updated with all 14+ modules, Phase 0 infrastructure docs, entity relationship diagram, environment variables; PLAN.md archived as PLAN_ARCHIVED.md (superseded)"
     }
   ]
 }
