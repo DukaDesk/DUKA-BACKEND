@@ -49,6 +49,75 @@ export class BookingController {
     return this.bookingService.deleteService(id);
   }
 
+  // ─── Locations ───────────────────────────────
+
+  @UseGuards(JwtAuthGuard) @ApiBearerAuth()
+  @Post('tenants/:tenantId/booking/locations')
+  @ApiOperation({ summary: 'Create booking location' })
+  createLocation(@Param('tenantId') tenantId: string, @Body() data: any) {
+    return this.bookingService.createLocation(tenantId, data);
+  }
+
+  @Public()
+  @Get('tenants/:tenantId/booking/locations')
+  @ApiOperation({ summary: 'List booking locations' })
+  getLocations(@Param('tenantId') tenantId: string) {
+    return this.bookingService.getLocations(tenantId);
+  }
+
+  @UseGuards(JwtAuthGuard) @ApiBearerAuth()
+  @Put('booking/locations/:id')
+  @ApiOperation({ summary: 'Update booking location' })
+  updateLocation(@Param('id') id: string, @Body() data: any) {
+    return this.bookingService.updateLocation(id, data);
+  }
+
+  @UseGuards(JwtAuthGuard) @ApiBearerAuth()
+  @Delete('booking/locations/:id')
+  @ApiOperation({ summary: 'Delete booking location' })
+  deleteLocation(@Param('id') id: string) {
+    return this.bookingService.deleteLocation(id);
+  }
+
+  // ─── Cancellation Policies ────────────────────
+
+  @UseGuards(JwtAuthGuard) @ApiBearerAuth()
+  @Post('tenants/:tenantId/booking/cancellation-policies')
+  @ApiOperation({ summary: 'Create cancellation policy with refund tiers' })
+  createCancellationPolicy(@Param('tenantId') tenantId: string, @Body() data: any) {
+    return this.bookingService.createCancellationPolicy(tenantId, data);
+  }
+
+  @UseGuards(JwtAuthGuard) @ApiBearerAuth()
+  @Get('tenants/:tenantId/booking/cancellation-policies')
+  @ApiOperation({ summary: 'List cancellation policies' })
+  getCancellationPolicies(@Param('tenantId') tenantId: string) {
+    return this.bookingService.getCancellationPolicies(tenantId);
+  }
+
+  @UseGuards(JwtAuthGuard) @ApiBearerAuth()
+  @Get('booking/:id/cancellation-refund')
+  @ApiOperation({ summary: 'Calculate refund amount if cancelled now' })
+  calculateCancellationRefund(@Param('id') id: string) {
+    return this.bookingService.calculateCancellationRefund(id);
+  }
+
+  // ─── Reminders ────────────────────────────────
+
+  @UseGuards(JwtAuthGuard) @ApiBearerAuth()
+  @Post('booking/:id/reminders')
+  @ApiOperation({ summary: 'Schedule reminders for a booking' })
+  scheduleReminders(@Param('id') id: string, @Body() data: { minutesBefore: number[] }) {
+    return this.bookingService.scheduleReminders(id, data.minutesBefore);
+  }
+
+  @UseGuards(JwtAuthGuard) @ApiBearerAuth()
+  @Post('booking/reminders/process')
+  @ApiOperation({ summary: 'Process pending reminders and send due ones' })
+  processReminders() {
+    return this.bookingService.processReminders();
+  }
+
   // ─── Staff ───────────────────────────────────
 
   @UseGuards(JwtAuthGuard) @ApiBearerAuth()

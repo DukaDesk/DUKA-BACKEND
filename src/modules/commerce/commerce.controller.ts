@@ -86,6 +86,73 @@ export class CommerceController {
     return this.commerceService.deleteProduct(id);
   }
 
+  @Public()
+  @Get('product-types')
+  @ApiOperation({ summary: 'List valid product types' })
+  getProductTypes() {
+    return this.commerceService.getProductTypes();
+  }
+
+  @Public()
+  @Get('tenants/:tenantId/products/type/:type')
+  @ApiOperation({ summary: 'List products by type (physical/service/digital/donation/membership/event_ticket)' })
+  getProductsByType(@Param('tenantId') tenantId: string, @Param('type') type: string, @Query() query: any) {
+    return this.commerceService.getProductsByType(tenantId, type, query);
+  }
+
+  @UseGuards(JwtAuthGuard) @ApiBearerAuth()
+  @Put('products/:id/extended-pricing')
+  @ApiOperation({ summary: 'Set multi-currency pricing for product' })
+  setExtendedPricing(@Param('id') id: string, @Body() pricing: Record<string, { price: number; compareAtPrice?: number }>) {
+    return this.commerceService.setExtendedPricing(id, pricing);
+  }
+
+  @Public()
+  @Get('products/:id/price')
+  @ApiOperation({ summary: 'Get product price in specific currency' })
+  @ApiQuery({ name: 'currency', required: false })
+  getPriceInCurrency(@Param('id') id: string, @Query('currency') currency?: string) {
+    return this.commerceService.getPriceInCurrency(id, currency || 'NGN');
+  }
+
+  // ─── Inventory ────────────────────────────────
+
+  @Public()
+  @Get('products/:id/stock')
+  @ApiOperation({ summary: 'Get available stock for product/variant' })
+  @ApiQuery({ name: 'variantId', required: false })
+  getAvailableStock(@Param('id') id: string, @Query('variantId') variantId?: string) {
+    return this.commerceService.getAvailableStock(id, variantId);
+  }
+
+  @UseGuards(JwtAuthGuard) @ApiBearerAuth()
+  @Post('products/:id/reserve')
+  @ApiOperation({ summary: 'Reserve inventory' })
+  reserveInventory(@Param('id') id: string, @Body() data: { quantity: number; variantId?: string; sessionId?: string; userId?: string; ttlMinutes?: number }) {
+    return this.commerceService.reserveInventory(id, data.quantity, data.variantId, data.sessionId, data.userId, data.ttlMinutes);
+  }
+
+  @UseGuards(JwtAuthGuard) @ApiBearerAuth()
+  @Post('reservations/:id/release')
+  @ApiOperation({ summary: 'Release inventory reservation' })
+  releaseReservation(@Param('id') id: string) {
+    return this.commerceService.releaseReservation(id);
+  }
+
+  @UseGuards(JwtAuthGuard) @ApiBearerAuth()
+  @Post('reservations/:id/confirm')
+  @ApiOperation({ summary: 'Confirm reservation and deduct inventory' })
+  confirmReservation(@Param('id') id: string) {
+    return this.commerceService.confirmReservation(id);
+  }
+
+  @UseGuards(JwtAuthGuard) @ApiBearerAuth()
+  @Post('products/:id/adjust-stock')
+  @ApiOperation({ summary: 'Adjust stock level (positive or negative delta)' })
+  adjustStock(@Param('id') id: string, @Body() data: { delta: number; variantId?: string }) {
+    return this.commerceService.adjustStock(id, data.delta, data.variantId);
+  }
+
   // ─── Variants ─────────────────────────────────
 
   @UseGuards(JwtAuthGuard) @ApiBearerAuth()

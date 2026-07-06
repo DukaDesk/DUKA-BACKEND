@@ -117,6 +117,40 @@ export class NotificationsController {
     return this.notificationsService.unregisterDevice(token);
   }
 
+  // ─── SMS ─────────────────────────────────────
+
+  @UseGuards(JwtAuthGuard) @ApiBearerAuth()
+  @Post('notifications/sms')
+  @ApiOperation({ summary: 'Send SMS notification' })
+  sendSms(@Body() data: { phoneNumber: string; message: string; userId?: string }) {
+    return this.notificationsService.sendSms(data.phoneNumber, data.message, data.userId);
+  }
+
+  // ─── Campaigns ────────────────────────────────
+
+  @UseGuards(JwtAuthGuard) @ApiBearerAuth()
+  @Post('notifications/campaigns')
+  @ApiOperation({ summary: 'Send push/email campaign to multiple users' })
+  sendCampaign(@Body() data: { tenantId?: string; templateId: string; userIds: string[]; variables?: Record<string, string> }) {
+    return this.notificationsService.sendCampaign(data);
+  }
+
+  @UseGuards(JwtAuthGuard) @ApiBearerAuth()
+  @Post('notifications/campaigns/sms')
+  @ApiOperation({ summary: 'Send SMS campaign to multiple recipients' })
+  sendSmsCampaign(@Body() data: { tenantId?: string; message: string; recipients: { phoneNumber: string; userId?: string }[] }) {
+    return this.notificationsService.sendSmsCampaign(data);
+  }
+
+  // ─── Click Tracking ──────────────────────────
+
+  @UseGuards(JwtAuthGuard) @ApiBearerAuth()
+  @Post('notifications/:id/click')
+  @ApiOperation({ summary: 'Track notification click' })
+  clickTrack(@Param('id') id: string) {
+    return this.notificationsService.clickTrack(id);
+  }
+
   // ─── Send (admin) ────────────────────────────
 
   @UseGuards(JwtAuthGuard) @ApiBearerAuth()

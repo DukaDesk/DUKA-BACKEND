@@ -1,7 +1,7 @@
 import { Controller, Get, Put, Post, Body, Param, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { BuilderService } from './builder.service';
-import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { PreviewOutput, RenderedPage } from './live-preview.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 
 @ApiTags('Builder')
@@ -58,6 +58,84 @@ export class BuilderController {
   updateNavigation(@Param('tenantId') tenantId: string, @Body() items: any) {
     return this.builderService.updateNavigation(tenantId, items);
   }
+
+  // ─── Component Registry ───────────────────────────────────
+
+  @Get('component-types')
+  @ApiOperation({ summary: 'Get all registered component definitions' })
+  getComponentTypes() {
+    return this.builderService.getComponentTypes();
+  }
+
+  @Get('component-types/:type')
+  @ApiOperation({ summary: 'Get a specific component type definition' })
+  getComponentType(@Param('type') type: string) {
+    return this.builderService.getComponentType(type);
+  }
+
+  // ─── Action Builder ───────────────────────────────────────
+
+  @Get('action-types')
+  @ApiOperation({ summary: 'Get all registered action definitions' })
+  getActionTypes() {
+    return this.builderService.getActionTypes();
+  }
+
+  @Post('actions/execute')
+  @ApiOperation({ summary: 'Execute an action with given context' })
+  executeAction(@Body() body: { config: any; context: Record<string, any> }) {
+    return this.builderService.executeAction(body.config, body.context);
+  }
+
+  // ─── Conditional Rendering ─────────────────────────────────
+
+  @Post('conditions/evaluate')
+  @ApiOperation({ summary: 'Evaluate conditional visibility' })
+  evaluateConditions(@Body() body: { conditions: any; context: Record<string, any> }) {
+    return this.builderService.evaluateConditions(body.conditions, body.context);
+  }
+
+  // ─── Data Binding ──────────────────────────────────────────
+
+  @Post('data-binding/resolve')
+  @ApiOperation({ summary: 'Resolve a data binding against context' })
+  resolveDataBinding(
+    @Param('tenantId') tenantId: string,
+    @Body() body: { binding: any; context: Record<string, any> },
+  ) {
+    return this.builderService.resolveDataBinding(body.binding, body.context, tenantId);
+  }
+
+  // ─── Live Preview ──────────────────────────────────────────
+
+  @Post('preview')
+  @ApiOperation({ summary: 'Preview the full tenant rendering with optional context overrides' })
+  previewTenant(@Param('tenantId') tenantId: string, @Body() context?: any): Promise<PreviewOutput> {
+    return this.builderService.previewTenant(tenantId, context);
+  }
+
+  @Post('pages/:pageId/preview')
+  @ApiOperation({ summary: 'Preview a single page with optional context overrides' })
+  previewPage(
+    @Param('tenantId') tenantId: string,
+    @Param('pageId') pageId: string,
+    @Body() context?: any,
+  ): Promise<RenderedPage> {
+    return this.builderService.previewPage(tenantId, pageId, context);
+  }
+
+  // ─── Component Preview ─────────────────────────────────────
+
+  @Post('component-preview')
+  @ApiOperation({ summary: 'Validate and preview a component configuration' })
+  componentPreview(
+    @Param('tenantId') tenantId: string,
+    @Body() data: { type: string; props: Record<string, any> },
+  ) {
+    return this.builderService.componentPreview(tenantId, data);
+  }
+
+  // ─── Legacy theme endpoints ────────────────────────────────
 
   @Get('theme')
   @ApiOperation({ summary: 'Get theme for a tenant' })

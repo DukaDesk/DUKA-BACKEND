@@ -288,6 +288,7 @@ model ProductVariant {
   price           Decimal @default(0)
   compareAtPrice  Decimal?
   stock           Int     @default(0)
+  reservedStock   Int     @default(0)
   images          Json?
   attributes      Json?
   sortOrder       Int     @default(0)
@@ -529,12 +530,64 @@ model Schedule {
   @@map("schedules")
 }
 
+model BookingLocation {
+  id           String  @id @default(uuid())
+  tenantId     String
+  name         String
+  address      String?
+  latitude     Float?
+  longitude    Float?
+  phone        String?
+  email        String?
+  instructions String?
+  isActive     Boolean @default(true)
+  createdAt    DateTime @default(now())
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  bookings Booking[]
+
+  @@index([tenantId])
+  @@map("booking_locations")
+}
+
+model CancellationPolicy {
+  id             String   @id @default(uuid())
+  tenantId       String
+  name           String
+  description    String?
+  tiers          Json?
+  isDefault      Boolean  @default(false)
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("cancellation_policies")
+}
+
+model BookingReminder {
+  id        String   @id @default(uuid())
+  bookingId String
+  type      String   @default("email")
+  minutesBefore Int  @default(60)
+  status    String   @default("pending")
+  sentAt    DateTime?
+  createdAt DateTime @default(now())
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@index([bookingId])
+  @@map("booking_reminders")
+}
+
 model Booking {
   id              String   @id @default(uuid())
   tenantId        String
   serviceId       String?
   staffId         String?
   resourceId      String?
+  locationId      String?
   userId          String?
   customerName    String
   customerEmail   String?
@@ -542,6 +595,9 @@ model Booking {
   startTime       DateTime
   endTime         DateTime
   status          String   @default("requested")
+  cancellationPolicyId String?
+  cancelReason    String?
+  cancelledAt     DateTime?
   notes           String?
   paymentStatus   String   @default("free")
   paymentIntentId String?
@@ -550,7 +606,9 @@ model Booking {
   service  BookingService?   @relation(fields: [serviceId], references: [id])
   staff    StaffMember?      @relation(fields: [staffId], references: [id])
   resource BookingResource?  @relation(fields: [resourceId], references: [id])
+  location BookingLocation?  @relation(fields: [locationId], references: [id])
   bookingHistory BookingHistory[]
+  reminders BookingReminder[]
 
   @@index([tenantId])
   @@index([userId])
@@ -769,6 +827,27 @@ model WebhookEvent {
   @@map("webhook_events")
 }
 
+model Settlement {
+  id            String   @id @default(uuid())
+  tenantId      String
+  provider      String
+  reference     String   @unique
+  amount        Decimal  @default(0)
+  fees          Decimal  @default(0)
+  netAmount     Decimal  @default(0)
+  currency      String   @default("NGN")
+  status        String   @default("pending")
+  periodStart   DateTime?
+  periodEnd     DateTime?
+  settledAt     DateTime?
+  metadata      Json?
+  createdAt     DateTime @default(now())
+
+  @@index([tenantId])
+  @@index([status])
+  @@map("settlements")
+}
+
 model FinancialEvent {
   id          String   @id @default(uuid())
   tenantId    String
@@ -776,6 +855,7 @@ model FinancialEvent {
   amount      Decimal  @default(0)
   currency    String   @default("NGN")
   transactionId String?
+  settlementId String?
   orderId     String?
   bookingId   String?
   metadata    Json?
@@ -958,6 +1038,8 @@ model Tenant {
   staffMembers        StaffMember[]
   resources           BookingResource[]
   schedules           Schedule[]
+  bookingLocations    BookingLocation[]
+  cancellationPolicies CancellationPolicy[]
   forms               Form[]
   paymentAccounts     TenantPaymentAccount[]
 
@@ -1095,23 +1177,47 @@ model Navigation {
 }
 
 model Theme {
-  id              String   @id @default(uuid())
-  tenantId        String   @unique
-  primaryColor    String   @default("#0066FF")
-  secondaryColor  String   @default("#00CC66")
-  backgroundColor String   @default("#FFFFFF")
-  textColor       String   @default("#1A1A1A")
-  fontFamily      String   @default("Inter")
-  borderRadius    String   @default("8px")
-  logo            String?
-  favicon         String?
-  custom          Json?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id                 String   @id @default(uuid())
+  tenantId           String   @unique
+  primaryColor       String   @default("#0066FF")
+  secondaryColor     String   @default("#00CC66")
+  backgroundColor    String   @default("#FFFFFF")
+  textColor          String   @default("#1A1A1A")
+  fontFamily         String   @default("Inter")
+  borderRadius       String   @default("8px")
+  logo               String?
+  favicon            String?
+  darkPrimaryColor   String   @default("#4D9FFF")
+  darkSecondaryColor String   @default("#33DD77")
+  darkBackgroundColor String  @default("#121212")
+  darkTextColor      String   @default("#E0E0E0")
+  typography         Json?
+  spacing            Json?
+  version            Int      @default(1)
+  isActive           Boolean  @default(true)
+  custom             Json?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant   Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  versions ThemeVersion[]
 
   @@map("themes")
+}
+
+model ThemeVersion {
+  id        String   @id @default(uuid())
+  themeId   String
+  version   Int
+  snapshot  Json
+  createdBy String?
+  createdAt DateTime @default(now())
+
+  theme Theme @relation(fields: [themeId], references: [id], onDelete: Cascade)
+
+  @@unique([themeId, version])
+  @@index([themeId])
+  @@map("theme_versions")
 }
 
 model Category {
@@ -1144,10 +1250,13 @@ model Product {
   name           String
   slug           String
   description    String?
+  type           String   @default("physical")
   price          Decimal  @default(0)
   compareAtPrice Decimal?
   currency       String   @default("NGN")
+  extendedPricing Json?
   stock          Int      @default(0)
+  reservedStock  Int      @default(0)
   sku            String?
   isActive       Boolean  @default(true)
   createdAt      DateTime @default(now())
@@ -1164,6 +1273,25 @@ model Product {
   @@index([tenantId])
   @@index([categoryId])
   @@map("products")
+}
+
+model InventoryReservation {
+  id             String   @id @default(uuid())
+  tenantId       String
+  productId      String
+  variantId      String?
+  quantity       Int      @default(1)
+  sessionId      String?
+  userId         String?
+  expiresAt      DateTime
+  status         String   @default("active")
+  createdAt      DateTime @default(now())
+
+  @@index([tenantId])
+  @@index([productId])
+  @@index([sessionId])
+  @@index([expiresAt])
+  @@map("inventory_reservations")
 }
 
 model ProductImage {

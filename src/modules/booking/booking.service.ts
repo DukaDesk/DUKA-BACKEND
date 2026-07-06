@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma.service';
 import { EventBusService } from '../../shared/events/event-bus.service';
+import * as crypto from 'crypto';
 
 @Injectable()
 export class BookingService {
@@ -43,6 +44,138 @@ export class BookingService {
     await this.prisma.bookingService.update({ where: { id: serviceId }, data: { isActive: false } });
     return { message: 'Service deleted' };
   }
+
+  // ─── Locations ───────────────────────────────
+
+  async createLocation(tenantId: string, data: any) {
+    return this.prisma.bookingLocation.create({ data: { tenantId, ...data } });
+  }
+
+  async getLocations(tenantId: string) {
+    return this.prisma.bookingLocation.findMany({
+      where: { tenantId, isActive: true },
+      orderBy: { name: 'asc' },
+    });
+  }
+
+  async updateLocation(locationId: string, data: any) {
+    const loc = await this.prisma.bookingLocation.findUnique({ where: { id: locationId } });
+    if (!loc) throw new NotFoundException('Location not found');
+    return this.prisma.bookingLocation.update({ where: { id: locationId }, data });
+  }
+
+  async deleteLocation(locationId: string) {
+    await this.prisma.bookingLocation.update({ where: { id: locationId }, data: { isActive: false } });
+    return { message: 'Location deleted' };
+  }
+
+  // ─── Cancellation Policies ───────────────────
+
+  async createCancellationPolicy(tenantId: string, data: any) {
+    if (data.isDefault) {
+      await this.prisma.cancellationPolicy.updateMany({
+        where: { tenantId, isDefault: true },
+        data: { isDefault: false },
+      });
+    }
+    return this.prisma.cancellationPolicy.create({ data: { tenantId, ...data } });
+  }
+
+  async getCancellationPolicies(tenantId: string) {
+    return this.prisma.cancellationPolicy.findMany({
+      where: { tenantId, isActive: true },
+      orderBy: { name: 'asc' },
+    });
+  }
+
+  async calculateCancellationRefund(bookingId: string) {
+    const booking = await this.prisma.booking.findUnique({
+      where: { id: bookingId },
+      include: { service: true },
+    });
+    if (!booking) throw new NotFoundException('Booking not found');
+
+    if (!booking.cancellationPolicyId) {
+      return { refundPercent: 0, refundAmount: 0, policyName: 'No cancellation policy' };
+    }
+
+    const policy = await this.prisma.cancellationPolicy.findUnique({
+      where: { id: booking.cancellationPolicyId },
+    });
+    if (!policy) return { refundPercent: 0, refundAmount: 0, policyName: 'Policy not found' };
+
+    const tiers = (policy.tiers as any[]) || [];
+    const now = new Date();
+    const hoursUntilBooking = (booking.startTime.getTime() - now.getTime()) / (1000 * 60 * 60);
+
+    let refundPercent = 0;
+    for (const tier of tiers) {
+      if (tier.hoursBefore && hoursUntilBooking >= tier.hoursBefore) {
+        refundPercent = tier.refundPercent;
+        break;
+      }
+    }
+
+    const price = booking.service?.price?.toNumber() || 0;
+    const refundAmount = Math.round(price * (refundPercent / 100) * 100) / 100;
+
+    return { refundPercent, refundAmount, policyName: policy.name };
+  }
+
+  // ─── Reminder Engine ─────────────────────────
+
+  async scheduleReminders(bookingId: string, minutesBeforeList: number[] = [60, 1440]) {
+    const booking = await this.prisma.booking.findUnique({ where: { id: bookingId } });
+    if (!booking) throw new NotFoundException('Booking not found');
+
+    const reminders = await Promise.all(
+      minutesBeforeList.map((minutesBefore) =>
+        this.prisma.bookingReminder.create({
+          data: { bookingId, minutesBefore, type: 'email' },
+        }),
+      ),
+    );
+
+    return reminders;
+  }
+
+  async getPendingReminders() {
+    const now = new Date();
+    return this.prisma.bookingReminder.findMany({
+      where: {
+        status: 'pending',
+        booking: {
+          status: { notIn: ['cancelled', 'no_show', 'completed'] },
+          startTime: { gt: now },
+        },
+      },
+      include: { booking: { include: { service: true, location: true } } },
+    });
+  }
+
+  async processReminders() {
+    const reminders = await this.getPendingReminders();
+    const now = new Date();
+    let processed = 0;
+
+    for (const reminder of reminders) {
+      const diffMs = reminder.booking.startTime.getTime() - now.getTime();
+      const diffMinutes = Math.floor(diffMs / 60000);
+
+      if (diffMinutes <= reminder.minutesBefore) {
+        await this.prisma.bookingReminder.update({
+          where: { id: reminder.id },
+          data: { status: 'sent', sentAt: now },
+        });
+        this.logger.log(`Reminder sent for booking ${reminder.bookingId} (${reminder.minutesBefore}min before)`);
+        processed++;
+      }
+    }
+
+    return { processed, total: reminders.length };
+  }
+
+  // ─── Staff ───────────────────────────────────
 
   // ─── Staff ───────────────────────────────────
 
@@ -214,7 +347,7 @@ export class BookingService {
   // ─── Bookings ────────────────────────────────
 
   async createBooking(tenantId: string, data: any) {
-    const { serviceId, staffId, resourceId, startTime, customerName, customerEmail, customerPhone, notes } = data;
+    const { serviceId, staffId, resourceId, locationId, startTime, customerName, customerEmail, customerPhone, notes, cancellationPolicyId } = data;
     const startDate = new Date(startTime);
 
     const service = await this.prisma.bookingService.findUnique({ where: { id: serviceId } });
@@ -243,19 +376,23 @@ export class BookingService {
         serviceId,
         staffId,
         resourceId,
+        locationId,
         customerName,
         customerEmail,
         customerPhone,
         startTime: startDate,
         endTime: endDate,
         notes,
+        cancellationPolicyId,
         status: 'requested',
         bookingHistory: {
           create: { to: 'requested' },
         },
       },
-      include: { service: true, staff: true },
+      include: { service: true, staff: true, location: true },
     });
+
+    await this.scheduleReminders(booking.id);
 
     await this.eventBus.publish({
       type: 'BookingCreated',
@@ -323,16 +460,47 @@ export class BookingService {
       throw new BadRequestException(`Cannot transition from ${booking.status} to ${status}`);
     }
 
+    const updateData: any = {
+      status,
+      bookingHistory: {
+        create: { from: booking.status, to: status, reason },
+      },
+    };
+
+    if (status === 'cancelled') {
+      updateData.cancelReason = reason;
+      updateData.cancelledAt = new Date();
+    }
+
+    if (status === 'rescheduled') {
+      updateData.bookingHistory.create.reason = reason;
+    }
+
     const updated = await this.prisma.booking.update({
       where: { id: bookingId },
-      data: {
-        status,
-        bookingHistory: {
-          create: { from: booking.status, to: status, reason },
-        },
-      },
+      data: updateData,
       include: { bookingHistory: { orderBy: { createdAt: 'asc' } } },
     });
+
+    if (status === 'cancelled') {
+      const refund = await this.calculateCancellationRefund(bookingId);
+      this.logger.log(`Booking ${bookingId} cancelled. Refund: ${refund.refundPercent}% (${refund.refundAmount})`);
+    }
+
+    // Notify waiting list if cancelled
+    if (status === 'cancelled' && booking.serviceId) {
+      const nextInQueue = await this.prisma.waitingListEntry.findFirst({
+        where: { tenantId: booking.tenantId, serviceId: booking.serviceId, notified: false },
+        orderBy: { createdAt: 'asc' },
+      });
+      if (nextInQueue) {
+        await this.prisma.waitingListEntry.update({
+          where: { id: nextInQueue.id },
+          data: { notified: true },
+        });
+        this.logger.log(`Waiting list entry ${nextInQueue.id} notified for service ${booking.serviceId}`);
+      }
+    }
 
     await this.eventBus.publish({
       type: 'BookingStatusChanged',

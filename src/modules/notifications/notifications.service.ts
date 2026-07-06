@@ -1,6 +1,7 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma.service';
 import { EventBusService } from '../../shared/events/event-bus.service';
+import { SmsAdapter } from './adapters/sms.adapter';
 
 @Injectable()
 export class NotificationsService {
@@ -9,6 +10,7 @@ export class NotificationsService {
   constructor(
     private prisma: PrismaService,
     private eventBus: EventBusService,
+    private smsAdapter: SmsAdapter,
   ) {}
 
   // ─── In-App Notifications ────────────────────
@@ -46,7 +48,12 @@ export class NotificationsService {
     return { count };
   }
 
-  // ─── Notification Events (dispatch) ──────────
+  async clickTrack(notificationId: string) {
+    await this.prisma.notification.update({ where: { id: notificationId }, data: { isRead: true } });
+    return { message: 'Click tracked' };
+  }
+
+  // ─── Dispatch Engine ─────────────────────────
 
   async sendPush(userId: string, title: string, body?: string, data?: any) {
     const notification = await this.prisma.notification.create({
@@ -77,6 +84,31 @@ export class NotificationsService {
     return notification;
   }
 
+  async sendSms(phoneNumber: string, message: string, userId?: string) {
+    const result = await this.smsAdapter.send(phoneNumber, message);
+
+    if (userId) {
+      const notification = await this.prisma.notification.create({
+        data: { userId, type: 'sms', title: 'SMS', body: message },
+      });
+
+      await this.prisma.deliveryResult.create({
+        data: {
+          eventId: notification.id,
+          channel: 'sms',
+          provider: 'sms',
+          status: result.success ? 'sent' : 'failed',
+          providerMessageId: result.providerMessageId,
+          error: result.error,
+        },
+      });
+
+      return notification;
+    }
+
+    return { message: 'SMS sent', providerMessageId: result.providerMessageId };
+  }
+
   async createNotification(data: { userId: string; tenantId?: string; type: string; title: string; body?: string; data?: any }) {
     return this.prisma.notification.create({ data });
   }
@@ -88,10 +120,66 @@ export class NotificationsService {
     const renderedBody = this.renderTemplate(template.body, variables);
     const renderedSubject = template.subject ? this.renderTemplate(template.subject, variables) : undefined;
 
-    if (template.channel === 'email') {
-      return this.sendEmail(userId, renderedSubject || '', renderedBody);
+    switch (template.channel) {
+      case 'email':
+        return this.sendEmail(userId, renderedSubject || '', renderedBody);
+      case 'sms':
+        return this.sendSms(userId, renderedBody, userId);
+      default:
+        return this.sendPush(userId, renderedSubject || renderedBody, renderedBody);
     }
-    return this.sendPush(userId, renderedSubject || renderedBody, renderedBody);
+  }
+
+  // ─── Campaigns ───────────────────────────────
+
+  async sendCampaign(data: {
+    tenantId?: string;
+    templateId: string;
+    userIds: string[];
+    variables?: Record<string, string>;
+    scheduledAt?: string;
+  }) {
+    const template = await this.prisma.notificationTemplate.findUnique({ where: { id: data.templateId } });
+    if (!template) throw new NotFoundException('Template not found');
+
+    if (data.userIds.length === 0) throw new BadRequestException('No recipients specified');
+
+    const results = await Promise.allSettled(
+      data.userIds.map((userId) =>
+        this.sendFromTemplate(data.templateId, userId, data.variables || {}),
+      ),
+    );
+
+    const succeeded = results.filter((r) => r.status === 'fulfilled').length;
+    const failed = results.filter((r) => r.status === 'rejected').length;
+
+    this.logger.log(`Campaign sent: ${succeeded} succeeded, ${failed} failed`);
+
+    return {
+      message: `Campaign sent to ${data.userIds.length} recipients`,
+      stats: { total: data.userIds.length, succeeded, failed },
+    };
+  }
+
+  async sendSmsCampaign(data: {
+    tenantId?: string;
+    message: string;
+    recipients: { phoneNumber: string; userId?: string }[];
+    scheduledAt?: string;
+  }) {
+    if (data.recipients.length === 0) throw new BadRequestException('No recipients specified');
+
+    const results = await Promise.allSettled(
+      data.recipients.map((r) => this.sendSms(r.phoneNumber, data.message, r.userId)),
+    );
+
+    const succeeded = results.filter((r) => r.status === 'fulfilled').length;
+    const failed = results.filter((r) => r.status === 'rejected').length;
+
+    return {
+      message: `SMS campaign sent to ${data.recipients.length} recipients`,
+      stats: { total: data.recipients.length, succeeded, failed },
+    };
   }
 
   // ─── Templates ───────────────────────────────

@@ -1,9 +1,21 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma.service';
+import { ComponentRegistryService } from './component-registry.service';
+import { ActionBuilderService, ActionConfig, ActionExecutionResult } from './action-builder.service';
+import { ConditionalEngineService, ConditionGroup } from './conditional-engine.service';
+import { DataBindingService } from './data-binding.service';
+import { LivePreviewService, PreviewOutput, RenderedPage } from './live-preview.service';
 
 @Injectable()
 export class BuilderService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private componentRegistry: ComponentRegistryService,
+    private actionBuilder: ActionBuilderService,
+    private conditionalEngine: ConditionalEngineService,
+    private dataBinding: DataBindingService,
+    private livePreview: LivePreviewService,
+  ) {}
 
   async getPages(tenantId: string) {
     return this.prisma.page.findMany({
@@ -114,5 +126,56 @@ export class BuilderService {
       create: { tenantId, ...data },
       update: data,
     });
+  }
+
+  getComponentTypes() {
+    return this.componentRegistry.getAll();
+  }
+
+  getComponentType(type: string) {
+    const def = this.componentRegistry.get(type);
+    if (!def) throw new NotFoundException(`Component type '${type}' not found`);
+    return def;
+  }
+
+  getActionTypes() {
+    return this.actionBuilder.getAll();
+  }
+
+  async componentPreview(tenantId: string, data: { type: string; props: Record<string, any> }) {
+    const valid = this.componentRegistry.validate(data.type, data.props);
+    if (!valid.valid) {
+      return { valid: false, errors: valid.errors };
+    }
+
+    return {
+      valid: true,
+      type: data.type,
+      rendered: {
+        type: data.type,
+        props: data.props,
+        actions: data.props.actions || [],
+      },
+    };
+  }
+
+  async executeAction(config: ActionConfig, context: Record<string, any>): Promise<ActionExecutionResult> {
+    return this.actionBuilder.execute(config, context);
+  }
+
+  async evaluateConditions(conditions: ConditionGroup, context: Record<string, any>): Promise<boolean> {
+    return this.conditionalEngine.evaluate(conditions, context);
+  }
+
+  async resolveDataBinding(binding: any, context: Record<string, any>, tenantId: string) {
+    return this.dataBinding.resolve(binding, context, tenantId);
+  }
+
+  async previewTenant(tenantId: string, context?: any): Promise<PreviewOutput> {
+    return this.livePreview.previewTenant(tenantId, context);
+  }
+
+  async previewPage(tenantId: string, pageId: string, context?: any): Promise<RenderedPage> {
+    return this.livePreview.previewPage(tenantId, pageId, context);
   }
 }

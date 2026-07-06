@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { PaymentAdapter, PaymentRequest, PaymentResponse, VerifyResponse } from './payment-adapter.interface';
+import { PaymentAdapter, PaymentRequest, PaymentResponse, VerifyResponse, RefundRequest, RefundResponse, HealthCheckResult } from './payment-adapter.interface';
 
 @Injectable()
 export class FlutterwaveAdapter implements PaymentAdapter {
@@ -61,5 +61,49 @@ export class FlutterwaveAdapter implements PaymentAdapter {
     const status = payload.data?.status || 'unknown';
     this.logger.log(`Flutterwave webhook: ${event} ref=${reference}`);
     return { event, reference, status };
+  }
+
+  async refundPayment(request: RefundRequest): Promise<RefundResponse> {
+    const secretKey = process.env.FLUTTERWAVE_SECRET_KEY || 'FLWSECK_test_placeholder';
+    try {
+      const res = await fetch(`${this.baseUrl}/transactions/${request.reference}/refund`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${secretKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount: request.amount,
+          reason: request.reason,
+          meta: request.metadata,
+        }),
+      });
+      const data: any = await res.json();
+      if (data.status !== 'success') throw new Error(data.message || 'Refund failed');
+      return {
+        success: true,
+        refundRef: data.data?.id?.toString(),
+        amount: data.data?.amount || request.amount || 0,
+        status: data.data?.status || 'pending',
+      };
+    } catch (err: any) {
+      this.logger.error(`Flutterwave refund error: ${err.message}`);
+      return { success: false, amount: request.amount || 0, status: 'failed', message: err.message };
+    }
+  }
+
+  async healthCheck(): Promise<HealthCheckResult> {
+    const secretKey = process.env.FLUTTERWAVE_SECRET_KEY || 'FLWSECK_test_placeholder';
+    const start = Date.now();
+    try {
+      const res = await fetch(`${this.baseUrl}/banks/NG`, {
+        headers: { Authorization: `Bearer ${secretKey}` },
+      });
+      const data: any = await res.json();
+      return {
+        status: data.status === 'success' ? 'ok' : 'error',
+        message: data.status === 'success' ? 'Flutterwave API reachable' : data.message || 'Health check failed',
+        latencyMs: Date.now() - start,
+      };
+    } catch (err: any) {
+      return { status: 'error', message: err.message, latencyMs: Date.now() - start };
+    }
   }
 }
