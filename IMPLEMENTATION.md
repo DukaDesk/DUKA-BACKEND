@@ -18,7 +18,7 @@ Standard NestJS authentication pattern. JWT access tokens (15min) + UUID refresh
 The renderer generates a JSON application definition consumed by the React Native app. The publishing pipeline compiles manifests with versioning, checksum validation, and rollback support.
 
 ### Provider Adapter Pattern
-Payments (Paystack, Flutterwave) and notifications use an adapter interface, making it trivial to add new providers.
+Payments (Paystack, Flutterwave, Stripe), notifications (Email — SendGrid/Resend/SES/SMTP, Push — Expo/FCM/APNS, SMS — Twilio/Termii/AfricaTalking), and integrations (SendGrid, Google Calendar) use a uniform adapter interface, making it trivial to add new providers.
 
 ---
 
@@ -356,14 +356,18 @@ interface PaymentAdapter {
 ```
 
 **Adapters**:
-- **PaystackAdapter** — REST client for `/transaction/initialize`, `/transaction/verify/:ref`, webhook signature verification
-- **FlutterwaveAdapter** — REST client for `/v3/payments`, `/transactions/verify_by_reference`, webhook parsing
+- **PaystackAdapter** — REST client for `/transaction/initialize`, `/transaction/verify/:ref`, webhook signature verification, refunds, health check
+- **FlutterwaveAdapter** — REST client for `/v3/payments`, `/transactions/verify_by_reference`, webhook parsing, refunds, health check
+- **StripeAdapter** — Stripe Checkout Sessions API (hosted page, minimal PCI scope), webhook signature verification, refunds (partial/full), health check. Uses `STRIPE_SECRET_KEY` env var.
 
 **PaymentsService**:
 - `initializePayment`: Looks up tenant payment account, generates unique reference, creates PaymentIntent + PaymentTransaction, calls provider init API
 - `verifyPayment`: Calls provider verify endpoint, updates intent + transaction status, creates FinancialEvent, emits `PaymentCompleted`
 - `processWebhook`: Logs raw webhook to WebhookEvent table, processes via adapter, updates matching intents
+- `processRefund`: Processes partial or full refunds with financial event recording
+- `recordSettlement` / `confirmSettlement`: Manages Settlement records for payout tracking
 - `getIntents`: Paginated listing with status/provider filters
+- `healthCheck` / `healthCheckAll`: Provider health status endpoint
 
 **Seed**: 3 payment providers (Flutterwave, Paystack, Stripe)
 
@@ -375,9 +379,14 @@ interface PaymentAdapter {
 **In-App**: List with pagination and unread filter, mark read, mark all read, unread count.
 
 **Dispatch Engine**:
-- `sendPush`: Creates notification record, iterates user's active device tokens, logs push delivery, tracks DeliveryResult
-- `sendEmail`: Creates notification record, logs (stub — SES/SendGrid integration point)
-- `sendFromTemplate`: Renders template body/subject with `{{variable}}` injection, dispatches via appropriate channel
+- `sendPush`: Creates notification record, iterates user's active device tokens, sends via PushAdapter (Expo Push API / FCM HTTP v1 / APNS stub / log), tracks DeliveryResult with clickedAt/openedAt
+- `sendEmail`: Creates notification record, sends via EmailAdapter (SendGrid/Resend/SES/SMTP/log), supports optional HTML body
+- `sendSms`: Sends via SmsAdapter (Twilio/Termii/AfricaTalking/log)
+- `sendFromTemplate`: Renders template body/subject with `{{variable}}` injection, generates HTML for email (`<p>${body}<br></p>`), dispatches via appropriate channel
+
+**Campaigns**: Bulk dispatch to multiple users with channel selection, template rendering, optional scheduling (`scheduledAt`), and segmentation (`segment: { field, operator, value }` — pre-filters recipients by user fields like status/emailVerified before sending)
+
+**Click Tracking**: `GET /notifications/analytics/click` returns total/read/unread/readRate per user or tenant. Each DeliveryResult tracks `openedAt` and `clickedAt` timestamps for analytics.
 
 **Templates**: CRUD with name, type, channel, subject, body, variables array, locale, version tracking.
 
@@ -499,11 +508,25 @@ Tenant
  ├── Form (1:N) → FormField (1:N)
  │   ├── FormSubmission (1:N) → FormApproval (1:N)
  │   └── FormWorkflow (1:1)
- ├── TenantPaymentAccount (1:N) → PaymentProvider
- ├── PaymentIntent (1:N) → PaymentTransaction (1:N)
- ├── FinancialEvent (1:N)
- ├── NotificationTemplate (1:N)
- └── AuditLog (1:N)
+  ├── TenantPaymentAccount (1:N) → PaymentProvider
+  ├── PaymentIntent (1:N) → PaymentTransaction (1:N)
+  ├── Settlement (1:N)
+  ├── FinancialEvent (1:N)
+  ├── NotificationTemplate (1:N)
+  ├── AuditLog (1:N)
+  ├── IntegrationConnector (1:N) → OAuthToken / WebhookOutbox / SyncJob
+  ├── AnalyticsEvent (1:N) / Dashboard / DashboardWidget / SavedReport
+  ├── SearchIndex / SearchQuery / SearchSynonym
+  ├── AIProvider / AIPrompt / AICompletion / AIEmbedding
+  ├── PlatformSetting / SystemAnnouncement / FeatureFlag / ApiQuota
+  ├── Deployment / Environment / HealthCheck / Backup
+  ├── SecurityPolicy / ApiKey / SecurityEvent / ConsentAudit
+  ├── DeveloperApp / WebhookEndpoint / WebhookEventLog
+  ├── MarketplaceListing / PluginInstallation
+  ├── AssetCollection / AssetCollectionItem / AssetShare / StorageProvider
+  ├── BookingLocation / CancellationPolicy / BookingReminder
+  ├── InventoryReservation
+  └── DeliveryResult (clickedAt, openedAt)
 
 Platform (no tenant):
  ├── SubscriptionPlan
@@ -553,6 +576,18 @@ Error → HttpExceptionFilter → { success, errors: [] }
 | `CDN_URL` | (empty) | CDN base URL for media delivery |
 | `PAYSTACK_SECRET_KEY` | sk_test_... | Paystack API secret |
 | `FLUTTERWAVE_SECRET_KEY` | FLWSECK_test_... | Flutterwave API secret |
+| `STRIPE_SECRET_KEY` | sk_test_... | Stripe API secret |
+| `EMAIL_PROVIDER` | log | Email provider: sendgrid/resend/ses/smtp/log |
+| `EMAIL_API_KEY` | (empty) | SendGrid/Resend API key |
+| `EMAIL_FROM_NAME` | DUKADESK | Sender name for emails |
+| `EMAIL_FROM_EMAIL` | noreply@dukadesk.app | Sender email address |
+| `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` | (empty) | SMTP credentials for `smtp` provider |
+| `PUSH_PROVIDER` | log | Push provider: expo/fcm/apns/log |
+| `FCM_SERVER_KEY` | (empty) | Firebase Cloud Messaging server key |
+| `SMS_PROVIDER` | log | SMS provider: twilio/termii/africatalking/log |
+| `SMS_API_KEY` / `SMS_API_SECRET` / `SMS_FROM` | (empty) | SMS provider credentials |
+| `OPENAI_API_KEY` | (empty) | OpenAI API key (completions + embeddings) |
+| `ANTHROPIC_API_KEY` | (empty) | Anthropic API key (Claude completions) |
 | `CORS_ORIGINS` | * | Allowed origins |
 | `THROTTLE_TTL` | 60 | Rate limit window (sec) |
 | `THROTTLE_LIMIT` | 100 | Max requests per window |

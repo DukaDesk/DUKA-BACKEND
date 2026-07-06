@@ -4,6 +4,7 @@ import { EventBusService } from '../../shared/events/event-bus.service';
 import { PaymentAdapter, RefundRequest } from './providers/payment-adapter.interface';
 import { PaystackAdapter } from './providers/paystack.adapter';
 import { FlutterwaveAdapter } from './providers/flutterwave.adapter';
+import { StripeAdapter } from './providers/stripe.adapter';
 
 @Injectable()
 export class PaymentsService {
@@ -15,9 +16,11 @@ export class PaymentsService {
     private eventBus: EventBusService,
     paystack: PaystackAdapter,
     flutterwave: FlutterwaveAdapter,
+    stripe: StripeAdapter,
   ) {
     this.providers.set('paystack', paystack);
     this.providers.set('flutterwave', flutterwave);
+    this.providers.set('stripe', stripe);
   }
 
   async initializePayment(tenantId: string, data: {

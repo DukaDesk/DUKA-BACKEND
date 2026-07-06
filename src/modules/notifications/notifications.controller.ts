@@ -151,6 +151,18 @@ export class NotificationsController {
     return this.notificationsService.clickTrack(id);
   }
 
+  @UseGuards(JwtAuthGuard) @ApiBearerAuth()
+  @Get('notifications/analytics')
+  @ApiOperation({ summary: 'Notification click analytics' })
+  @ApiQuery({ name: 'userId', required: false })
+  @ApiQuery({ name: 'tenantId', required: false })
+  getClickAnalytics(
+    @Query('userId') userId?: string,
+    @Query('tenantId') tenantId?: string,
+  ) {
+    return this.notificationsService.getClickAnalytics(userId, tenantId);
+  }
+
   // ─── Send (admin) ────────────────────────────
 
   @UseGuards(JwtAuthGuard) @ApiBearerAuth()

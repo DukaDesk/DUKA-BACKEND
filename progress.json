@@ -251,6 +251,108 @@
       "date": "2026-07-01T23:00:00+01:00",
       "type": "feat",
       "description": "Google & Apple Sign-In — googleId/appleId fields on User (unique, nullable), passwordHash made optional for social-only users, Google OAuth strategy + google-auth-library ID token verification, Apple Sign-In strategy + apple-signin-auth identity token verification, /auth/google and /auth/apple POST endpoints with account linking (finds by googleId/appleId or email, creates if new), updated env vars"
+    },
+    {
+      "id": "43",
+      "date": "2026-07-06T10:00:00+01:00",
+      "type": "feat",
+      "description": "Theme Module — full CRUD with versioning (ThemeVersion model), ThemeCompiler for SDUI token bundles (light/dark mode), restore/reset to defaults, Redis caching, ThemeUpdated/Created/Restored events"
+    },
+    {
+      "id": "44",
+      "date": "2026-07-06T10:00:00+01:00",
+      "type": "feat",
+      "description": "Builder Enhancement — ComponentRegistryService (12 component types with prop schemas), ActionBuilderService (10 action types: navigate/open_url/api_call/call_phone/email/share/add_to_cart/book_service/open_form/scroll_to), ConditionalEngineService (AND/OR groups, 10 operators), DataBindingService (static/context/api/query sources), LivePreviewService (full tenant/page/component preview with context overrides)"
+    },
+    {
+      "id": "45",
+      "date": "2026-07-06T10:00:00+01:00",
+      "type": "feat",
+      "description": "Commerce Enhancement — unified catalog (physical/service/digital/donation/membership/event_ticket product types), multi-currency extended pricing, InventoryReservation model + reserve/release/confirm/adjust-stock workflow, stock-aware cart add"
+    },
+    {
+      "id": "46",
+      "date": "2026-07-06T10:00:00+01:00",
+      "type": "feat",
+      "description": "Booking Enhancement — BookingLocation model (CRUD), CancellationPolicy model with refund tier calculation, BookingReminder model + schedule/process reminders engine, cancellation-aware status transitions with cancelledAt/cancelReason timestamps, waiting list auto-notify on cancel"
+    },
+    {
+      "id": "47",
+      "date": "2026-07-06T10:00:00+01:00",
+      "type": "feat",
+      "description": "Notifications Enhancement — SmsAdapter (Twilio/Termii/AfricaTalking/log), campaign support (bulk push/email/SMS to multiple users), click tracking endpoint, enhanced dispatch engine with channel-aware template routing"
+    },
+    {
+      "id": "48",
+      "date": "2026-07-06T10:00:00+01:00",
+      "type": "feat",
+      "description": "Payments Enhancement — refundPayment + healthCheck on PaymentAdapter interface implemented for Paystack and Flutterwave, processRefund (partial/full) with financial event recording, Settlement model + record/confirm settlements, provider health check endpoint (per-provider and all), transaction listing with type/status filters"
+    },
+    {
+      "id": "49",
+      "date": "2026-07-06T12:00:00+01:00",
+      "type": "feat",
+      "description": "Phase 3b.7 Integration Platform — IntegrationConnector/OAuthToken/WebhookOutbox/SyncJob models, IntegrationsService (connect/disconnect/test/sync/queueWebhook/processPendingWebhooks), IntegrationsController, retry with exponential backoff"
+    },
+    {
+      "id": "50",
+      "date": "2026-07-06T12:00:00+01:00",
+      "type": "feat",
+      "description": "Phase 3b.8 Analytics & BI — AnalyticsEvent/Dashboard/DashboardWidget/SavedReport models, AnalyticsService (trackEvent/getEvents/getEventAggregation/getRevenueReport/getUserAnalytics/getBookingAnalytics/getDashboardSummary), DashboardsService, ReportsService, full CRUD endpoints"
+    },
+    {
+      "id": "51",
+      "date": "2026-07-06T12:00:00+01:00",
+      "type": "feat",
+      "description": "Phase 3b.9 Search & Discovery — SearchIndex/SearchQuery/SearchSynonym models, SearchService (index/remove/bulkIndex/search/autocomplete/getFacets/popularSearches/noResultQueries/synonyms CRUD)"
+    },
+    {
+      "id": "52",
+      "date": "2026-07-06T12:00:00+01:00",
+      "type": "feat",
+      "description": "Phase 3b.10 AI Platform — AIProvider/AIPrompt/AICompletion/AIEmbedding models, OpenAIProvider (completions + embeddings with cost calc), MockAIProvider fallback, AiService (complete/embed/prompt CRUD/render/usageStats)"
+    },
+    {
+      "id": "53",
+      "date": "2026-07-06T12:00:00+01:00",
+      "type": "feat",
+      "description": "Phase 3b.11 Platform Administration — PlatformSetting/SystemAnnouncement/FeatureFlag/ApiQuota models, PlatformAdminService (settings/announcements/featureFlags/plans/subscriptions/quotas/platformStats CRUD)"
+    },
+    {
+      "id": "54",
+      "date": "2026-07-06T12:00:00+01:00",
+      "type": "feat",
+      "description": "Phase 3c.12 Infrastructure & DevOps — Deployment/Environment/HealthCheck/Backup models, InfrastructureService (deployments/environments/healthChecks/backups/cache/infraOverview)"
+    },
+    {
+      "id": "55",
+      "date": "2026-07-06T12:00:00+01:00",
+      "type": "feat",
+      "description": "Phase 3c.13 Security & Compliance — SecurityPolicy/ApiKey/SecurityEvent/ConsentAudit models, SecurityService (policy CRUD/password validation/API key management with SHA-256 hashing/security events/consent audits)"
+    },
+    {
+      "id": "56",
+      "date": "2026-07-06T12:00:00+01:00",
+      "type": "feat",
+      "description": "Phase 3c.14 Developer Platform — DeveloperApp/WebhookEndpoint/WebhookEventLog models, DeveloperService (app CRUD/client secret regeneration/webhook CRUD/event delivery with timeout/retries/webhook logs/rate limit status)"
+    },
+    {
+      "id": "57",
+      "date": "2026-07-06T12:00:00+01:00",
+      "type": "feat",
+      "description": "Phase 4.15 Marketplace & Plugin System — MarketplaceListing/PluginInstallation models, MarketplaceService (listing CRUD/install/uninstall/toggle/config/pluginStats)"
+    },
+    {
+      "id": "58",
+      "date": "2026-07-06T12:00:00+01:00",
+      "type": "feat",
+      "description": "Phase 4.16 Asset Platform Enhanced — AssetCollection/AssetCollectionItem/AssetShare/StorageProvider models, AssetsEnhancedService (collection CRUD/addRemoveMedia/share token CRUD/resolve with download tracking/storage provider CRUD/stats/transformation presets)"
+    },
+    {
+      "id": "59",
+      "date": "2026-07-06T22:30:00+01:00",
+      "type": "feat",
+      "description": "Gap fixes — EmailAdapter (SendGrid/Resend/SES/SMTP/log), PushAdapter (Expo/FCM/APNS/log), StripeAdapter (Checkout Sessions/refunds/health), Anthropic AI provider, SendGrid & Google Calendar integration connectors, campaign segmentation engine, click tracking analytics, docs update with all Phase 3-4 modules"
     }
   ]
 }

@@ -938,9 +938,706 @@ model DeliveryResult {
   providerMessageId String?
   error            String?
   deliveredAt      DateTime?
+  clickedAt        DateTime?
+  openedAt         DateTime?
 
   @@index([eventId])
   @@map("delivery_results")
+}
+
+// ─── Phase 3b: Integration Platform ──────────────────────────
+
+model IntegrationConnector {
+  id          String   @id @default(uuid())
+  tenantId    String
+  name        String
+  provider    String
+  config      Json?
+  credentials Json?
+  status      String   @default("disconnected")
+  enabled     Boolean  @default(true)
+  lastSyncAt  DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant    Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  oauthTokens OAuthToken[]
+  syncJobs    SyncJob[]
+
+  @@unique([tenantId, provider])
+  @@map("integration_connectors")
+}
+
+model OAuthToken {
+  id            String   @id @default(uuid())
+  connectorId   String
+  accessToken   String
+  refreshToken  String?
+  scope         String?
+  expiresAt     DateTime?
+  tokenType     String   @default("Bearer")
+  raw           Json?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  connector IntegrationConnector @relation(fields: [connectorId], references: [id], onDelete: Cascade)
+
+  @@index([connectorId])
+  @@map("oauth_tokens")
+}
+
+model WebhookOutbox {
+  id            String   @id @default(uuid())
+  tenantId      String
+  eventType     String
+  payload       Json?
+  url           String
+  method        String   @default("POST")
+  headers       Json?
+  status        String   @default("pending")
+  attempts      Int      @default(0)
+  maxAttempts   Int      @default(3)
+  lastError     String?
+  nextRetryAt   DateTime?
+  acknowledged  Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  completedAt   DateTime?
+
+  @@index([tenantId, status])
+  @@index([status, nextRetryAt])
+  @@map("webhook_outbox")
+}
+
+model SyncJob {
+  id          String   @id @default(uuid())
+  connectorId String
+  type        String   @default("full")
+  status      String   @default("pending")
+  config      Json?
+  result      Json?
+  startedAt   DateTime?
+  completedAt DateTime?
+  error       String?
+  createdAt   DateTime @default(now())
+
+  connector IntegrationConnector @relation(fields: [connectorId], references: [id], onDelete: Cascade)
+
+  @@index([connectorId])
+  @@index([status])
+  @@map("sync_jobs")
+}
+
+// ─── Phase 3b: Analytics & BI ──────────────────────────────────
+
+model AnalyticsEvent {
+  id         String   @id @default(uuid())
+  tenantId   String
+  userId     String?
+  event      String
+  category   String   @default("general")
+  label      String?
+  value      Float?
+  properties Json?
+  sessionId  String?
+  source     String?
+  timestamp  DateTime @default(now())
+
+  @@index([tenantId, event])
+  @@index([tenantId, timestamp])
+  @@index([tenantId, category])
+  @@map("analytics_events")
+}
+
+model Dashboard {
+  id        String              @id @default(uuid())
+  tenantId  String
+  name      String
+  slug      String
+  description String?
+  layout    Json?
+  isDefault Boolean             @default(false)
+  createdAt DateTime            @default(now())
+  updatedAt DateTime            @updatedAt
+
+  widgets DashboardWidget[]
+
+  @@unique([tenantId, slug])
+  @@map("dashboards")
+}
+
+model DashboardWidget {
+  id          String   @id @default(uuid())
+  dashboardId String
+  type        String   @default("metric")
+  title       String
+  subtitle    String?
+  config      Json?
+  position    Int      @default(0)
+  width       Int      @default(4)
+  height      Int      @default(2)
+  metric      String?
+  dataset     String?
+  query       Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  dashboard Dashboard @relation(fields: [dashboardId], references: [id], onDelete: Cascade)
+
+  @@index([dashboardId])
+  @@map("dashboard_widgets")
+}
+
+model SavedReport {
+  id         String   @id @default(uuid())
+  tenantId   String
+  name       String
+  type       String   @default("custom")
+  metric     String
+  filters    Json?
+  groupBy    String?
+  period     String   @default("last_30_days")
+  schedule   String?
+  recipients String[]
+  format     String   @default("json")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([tenantId])
+  @@map("saved_reports")
+}
+
+// ─── Phase 3b: Search & Discovery ─────────────────────────────
+
+model SearchIndex {
+  id         String   @id @default(uuid())
+  tenantId   String
+  entityType String
+  entityId   String
+  title      String?
+  content    String?
+  tags       String[]
+  metadata   Json?
+  locale     String   @default("en")
+  published  Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([tenantId, entityType, entityId])
+  @@index([tenantId, entityType])
+  @@index([tenantId, published])
+  @@map("search_index")
+}
+
+model SearchQuery {
+  id            String   @id @default(uuid())
+  tenantId      String
+  query         String
+  filters       Json?
+  resultsCount  Int      @default(0)
+  totalHits     Int      @default(0)
+  clickedItem   String?
+  clickPosition Int?
+  sessionId     String?
+  userId        String?
+  durationMs    Int?
+  createdAt     DateTime @default(now())
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, query])
+  @@map("search_queries")
+}
+
+model SearchSynonym {
+  id    String   @id @default(uuid())
+  tenantId String
+  terms String[]
+  type  String   @default("one_way")
+
+  @@index([tenantId])
+  @@map("search_synonyms")
+}
+
+// ─── Phase 3b: AI Platform ────────────────────────────────────
+
+model AIProvider {
+  id         String   @id @default(uuid())
+  tenantId   String?
+  name       String
+  provider   String   @default("openai")
+  apiKeyEnc  String?
+  baseUrl    String?
+  models     String[]
+  config     Json?
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([tenantId])
+  @@map("ai_providers")
+}
+
+model AIPrompt {
+  id         String   @id @default(uuid())
+  tenantId   String?
+  name       String
+  slug       String
+  prompt     String
+  variables  String[]
+  model      String?
+  config     Json?
+  version    Int      @default(1)
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([tenantId, slug])
+  @@index([tenantId])
+  @@map("ai_prompts")
+}
+
+model AICompletion {
+  id         String   @id @default(uuid())
+  tenantId   String?
+  userId     String?
+  promptId   String?
+  provider   String
+  model      String
+  input      String
+  output     String?
+  inputTokens Int     @default(0)
+  outputTokens Int    @default(0)
+  totalTokens Int     @default(0)
+  cost       Decimal  @default(0)
+  durationMs Int?
+  status     String   @default("completed")
+  error      String?
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  @@index([tenantId])
+  @@index([userId])
+  @@map("ai_completions")
+}
+
+model AIEmbedding {
+  id         String   @id @default(uuid())
+  tenantId   String?
+  entityType String
+  entityId   String
+  provider   String   @default("openai")
+  model      String
+  vector     Float[]
+  dimensions Int      @default(1536)
+  content    String?
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  @@unique([entityType, entityId])
+  @@index([tenantId, entityType])
+  @@map("ai_embeddings")
+}
+
+// ─── Phase 3b: Platform Administration ────────────────────────
+
+model PlatformSetting {
+  id        String   @id @default(uuid())
+  key       String   @unique
+  value     Json?
+  type      String   @default("string")
+  category  String   @default("general")
+  description String?
+  isEncrypted Boolean @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("platform_settings")
+}
+
+model SystemAnnouncement {
+  id        String   @id @default(uuid())
+  title     String
+  body      String
+  type      String   @default("info")
+  priority  String   @default("normal")
+  audiences String[]
+  startsAt  DateTime?
+  expiresAt DateTime?
+  isActive  Boolean  @default(true)
+  createdBy String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isActive])
+  @@index([type])
+  @@map("system_announcements")
+}
+
+model FeatureFlag {
+  id          String   @id @default(uuid())
+  key         String   @unique
+  name        String
+  description String?
+  enabled     Boolean  @default(false)
+  rules       Json?
+  tenants     String[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("feature_flags")
+}
+
+model ApiQuota {
+  id          String   @id @default(uuid())
+  tenantId    String   @unique
+  requestsPerMin  Int  @default(60)
+  requestsPerHour Int  @default(1000)
+  requestsPerDay  Int  @default(10000)
+  burstLimit  Int      @default(100)
+  concurrentLimit Int @default(10)
+  currentMin  Int      @default(0)
+  currentHour Int      @default(0)
+  currentDay  Int      @default(0)
+  resetMinAt  DateTime?
+  resetHourAt DateTime?
+  resetDayAt  DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("api_quotas")
+}
+
+// ─── Phase 3c: Infrastructure & DevOps ────────────────────────
+
+model Deployment {
+  id           String   @id @default(uuid())
+  tenantId     String
+  version      String
+  branch       String   @default("main")
+  commitHash   String?
+  status       String   @default("pending")
+  buildLog     String?
+  artifactUrl  String?
+  startedAt    DateTime?
+  completedAt  DateTime?
+  triggeredBy  String?
+  metadata     Json?
+  createdAt    DateTime @default(now())
+
+  @@index([tenantId])
+  @@index([status])
+  @@map("deployments")
+}
+
+model Environment {
+  id        String   @id @default(uuid())
+  tenantId  String?
+  name      String   @default("production")
+  slug      String
+  variables Json?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([tenantId, slug])
+  @@map("environments")
+}
+
+model HealthCheck {
+  id        String   @id @default(uuid())
+  tenantId  String?
+  service   String
+  status    String   @default("up")
+  latencyMs Int?
+  message   String?
+  checkedAt DateTime @default(now())
+
+  @@index([tenantId, service])
+  @@index([checkedAt])
+  @@map("health_checks")
+}
+
+model Backup {
+  id         String   @id @default(uuid())
+  tenantId   String
+  type       String   @default("full")
+  status     String   @default("pending")
+  sizeBytes  Int?
+  fileUrl    String?
+  includes   String[]
+  excludes   String[]
+  startedAt  DateTime?
+  completedAt DateTime?
+  createdAt  DateTime @default(now())
+
+  @@index([tenantId])
+  @@map("backups")
+}
+
+// ─── Phase 3c: Security & Compliance ──────────────────────────
+
+model SecurityPolicy {
+  id        String   @id @default(uuid())
+  tenantId  String   @unique
+  passwordMinLength Int    @default(8)
+  passwordRequireUpper Boolean @default(true)
+  passwordRequireLower Boolean @default(true)
+  passwordRequireNumber Boolean @default(true)
+  passwordRequireSymbol Boolean @default(true)
+  passwordHistoryCount Int @default(5)
+  passwordExpiryDays Int?
+  sessionTimeoutMin Int @default(60)
+  maxLoginAttempts Int @default(5)
+  lockoutDurationMin Int @default(15)
+  mfaRequired  Boolean @default(false)
+  mfaMethods   String[] @default(["totp"])
+  ipWhitelist  String[]
+  ipBlacklist  String[]
+  allowedDomains String[]
+  blockTor     Boolean @default(false)
+  maxSessionsPerUser Int @default(5)
+  dataRetentionDays Int @default(365)
+  auditRetentionDays Int @default(730)
+  updatedBy    String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("security_policies")
+}
+
+model ApiKey {
+  id         String   @id @default(uuid())
+  tenantId   String?
+  userId     String?
+  name       String
+  keyPrefix  String
+  keyHash    String
+  scopes     String[]
+  expiresAt  DateTime?
+  lastUsedAt DateTime?
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+
+  @@index([tenantId])
+  @@index([userId])
+  @@index([keyHash])
+  @@map("api_keys")
+}
+
+model SecurityEvent {
+  id          String   @id @default(uuid())
+  tenantId    String?
+  userId      String?
+  type        String
+  severity    String   @default("info")
+  source      String?
+  ipAddress   String?
+  userAgent   String?
+  location    String?
+  details     Json?
+  metadata    Json?
+  timestamp   DateTime @default(now())
+
+  @@index([tenantId, type])
+  @@index([userId])
+  @@index([timestamp])
+  @@map("security_events")
+}
+
+model ConsentAudit {
+  id         String   @id @default(uuid())
+  tenantId   String?
+  userId     String
+  action     String
+  consentType String
+  granted    Boolean
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
+  @@map("consent_audits")
+}
+
+// ─── Phase 3c: Developer Platform ─────────────────────────────
+
+model DeveloperApp {
+  id          String   @id @default(uuid())
+  tenantId    String
+  name        String
+  description String?
+  website     String?
+  callbackUrls String[]
+  scopes      String[]
+  clientId    String   @unique
+  clientSecret String
+  isActive    Boolean  @default(true)
+  logoUrl     String?
+  createdBy   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([tenantId])
+  @@map("developer_apps")
+}
+
+model WebhookEndpoint {
+  id          String   @id @default(uuid())
+  tenantId    String
+  appId       String?
+  name        String
+  url         String
+  events      String[]
+  secret      String?
+  isActive    Boolean  @default(true)
+  retryCount  Int      @default(3)
+  timeoutMs   Int      @default(5000)
+  headers     Json?
+  lastStatus  String?
+  lastTriggeredAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([tenantId])
+  @@map("webhook_endpoints")
+}
+
+model WebhookEventLog {
+  id           String   @id @default(uuid())
+  endpointId   String?
+  tenantId     String?
+  event        String
+  payload      Json?
+  status       String   @default("pending")
+  statusCode   Int?
+  responseBody String?
+  durationMs   Int?
+  error        String?
+  createdAt    DateTime @default(now())
+
+  @@index([endpointId])
+  @@index([tenantId])
+  @@map("webhook_event_logs")
+}
+
+// ─── Phase 4: Marketplace & Plugin System ─────────────────────
+
+model MarketplaceListing {
+  id          String   @id @default(uuid())
+  name        String
+  slug        String   @unique
+  type        String   @default("plugin")
+  description String?
+  version     String   @default("1.0.0")
+  author      String?
+  price       Decimal  @default(0)
+  currency    String   @default("USD")
+  categories  String[]
+  tags        String[]
+  screenshots String[]
+  iconUrl     String?
+  readme      String?
+  configSchema Json?
+  permissions String[]
+  dependencies Json?
+  isPublished Boolean  @default(false)
+  isFree      Boolean  @default(true)
+  downloads   Int      @default(0)
+  rating      Float    @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  installations PluginInstallation[]
+
+  @@index([type])
+  @@index([isPublished])
+  @@map("marketplace_listings")
+}
+
+model PluginInstallation {
+  id             String   @id @default(uuid())
+  tenantId       String
+  listingId      String
+  version        String   @default("1.0.0")
+  isActive       Boolean  @default(true)
+  config         Json?
+  status         String   @default("installed")
+  installedAt    DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  lastCheckedAt  DateTime?
+
+  listing MarketplaceListing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, listingId])
+  @@index([tenantId])
+  @@map("plugin_installations")
+}
+
+// ─── Phase 4: Asset Platform Enhanced ─────────────────────────
+
+model AssetCollection {
+  id          String   @id @default(uuid())
+  tenantId    String
+  name        String
+  slug        String
+  description String?
+  coverUrl    String?
+  isPublic    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  items AssetCollectionItem[]
+
+  @@unique([tenantId, slug])
+  @@map("asset_collections")
+}
+
+model AssetCollectionItem {
+  id           String         @id @default(uuid())
+  collectionId String
+  mediaId      String
+  order        Int            @default(0)
+  addedAt      DateTime       @default(now())
+
+  collection AssetCollection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  media      Media           @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+
+  @@unique([collectionId, mediaId])
+  @@map("asset_collection_items")
+}
+
+model AssetShare {
+  id         String   @id @default(uuid())
+  tenantId   String
+  mediaId    String
+  token      String   @unique
+  expiresAt  DateTime?
+  maxDownloads Int?
+  downloadCount Int  @default(0)
+  password   String?
+  isActive   Boolean  @default(true)
+  createdBy  String?
+  createdAt  DateTime @default(now())
+
+  media Media @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("asset_shares")
+}
+
+model StorageProvider {
+  id         String   @id @default(uuid())
+  tenantId   String?
+  name       String
+  provider   String   @default("local")
+  config     Json?
+  isDefault  Boolean  @default(false)
+  isActive   Boolean  @default(true)
+  usedBytes  BigInt   @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([tenantId])
+  @@map("storage_providers")
 }
 
 // ─── Existing Models (preserved) ───────────────────────────────
@@ -1040,6 +1737,7 @@ model Tenant {
   schedules           Schedule[]
   bookingLocations    BookingLocation[]
   cancellationPolicies CancellationPolicy[]
+  integrationConnectors IntegrationConnector[]
   forms               Form[]
   paymentAccounts     TenantPaymentAccount[]
 
@@ -1326,6 +2024,8 @@ model Media {
   tenant   Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   folder   AssetFolder?  @relation(fields: [folderId], references: [id])
   versions AssetVersion[]
+  collectionItems AssetCollectionItem[]
+  shares         AssetShare[]
 
   @@index([tenantId])
   @@map("media")

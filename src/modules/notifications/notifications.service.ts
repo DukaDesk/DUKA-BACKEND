@@ -2,6 +2,8 @@ import { Injectable, Logger, NotFoundException, BadRequestException } from '@nes
 import { PrismaService } from '../../common/prisma.service';
 import { EventBusService } from '../../shared/events/event-bus.service';
 import { SmsAdapter } from './adapters/sms.adapter';
+import { EmailAdapter } from './adapters/email.adapter';
+import { PushAdapter } from './adapters/push.adapter';
 
 @Injectable()
 export class NotificationsService {
@@ -11,6 +13,8 @@ export class NotificationsService {
     private prisma: PrismaService,
     private eventBus: EventBusService,
     private smsAdapter: SmsAdapter,
+    private emailAdapter: EmailAdapter,
+    private pushAdapter: PushAdapter,
   ) {}
 
   // ─── In-App Notifications ────────────────────
@@ -48,9 +52,38 @@ export class NotificationsService {
     return { count };
   }
 
+  // ─── Click Tracking ──────────────────────────
+
   async clickTrack(notificationId: string) {
+    const notification = await this.prisma.notification.findUnique({ where: { id: notificationId } });
+    if (!notification) throw new NotFoundException('Notification not found');
+
     await this.prisma.notification.update({ where: { id: notificationId }, data: { isRead: true } });
+
+    await this.prisma.deliveryResult.updateMany({
+      where: { eventId: notificationId },
+      data: { clickedAt: new Date() },
+    });
+
     return { message: 'Click tracked' };
+  }
+
+  async getClickAnalytics(userId?: string, tenantId?: string) {
+    const where: any = {};
+    if (userId) where.userId = userId;
+    if (tenantId) where.tenantId = tenantId;
+
+    const notifications = await this.prisma.notification.findMany({ where });
+    const total = notifications.length;
+    const read = notifications.filter((n) => n.isRead).length;
+    const unread = total - read;
+
+    return {
+      total,
+      read,
+      unread,
+      readRate: total > 0 ? ((read / total) * 100).toFixed(1) + '%' : '0%',
+    };
   }
 
   // ─── Dispatch Engine ─────────────────────────
@@ -64,23 +97,71 @@ export class NotificationsService {
       where: { userId, isActive: true },
     });
 
-    for (const token of tokens) {
-      this.logger.log(`[Push] To ${token.platform}:${token.token} — ${title}`);
+    if (tokens.length === 0) {
+      await this.prisma.deliveryResult.create({
+        data: { eventId: notification.id, channel: 'push', provider: 'push', status: 'skipped', error: 'No device tokens' },
+      });
+      return notification;
     }
 
-    await this.prisma.deliveryResult.create({
-      data: { eventId: notification.id, channel: 'push', provider: 'fcm', status: tokens.length > 0 ? 'sent' : 'skipped' },
+    const results = await this.pushAdapter.sendBulk({
+      to: tokens.map((t) => t.token),
+      title,
+      body,
+      data: { ...data, notificationId: notification.id },
     });
 
+    const succeeded = results.filter((r) => r.success).length;
+    const failed = results.filter((r) => !r.success).length;
+
+    for (const result of results) {
+      await this.prisma.deliveryResult.create({
+        data: {
+          eventId: notification.id,
+          channel: 'push',
+          provider: 'push',
+          status: result.success ? 'sent' : 'failed',
+          providerMessageId: result.providerMessageId,
+          error: result.error,
+        },
+      });
+    }
+
+    this.logger.log(`Push: ${succeeded} sent, ${failed} failed for user ${userId}`);
     return notification;
   }
 
-  async sendEmail(userId: string, subject: string, body: string) {
+  async sendEmail(userId: string, subject: string, body: string, html?: string) {
     const notification = await this.prisma.notification.create({
       data: { userId, type: 'email', title: subject, body },
     });
 
-    this.logger.log(`[Email] To ${userId} — ${subject}`);
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user?.email) {
+      await this.prisma.deliveryResult.create({
+        data: { eventId: notification.id, channel: 'email', provider: 'email', status: 'skipped', error: 'No email address' },
+      });
+      return notification;
+    }
+
+    const result = await this.emailAdapter.send({
+      to: user.email,
+      subject,
+      body,
+      html,
+    });
+
+    await this.prisma.deliveryResult.create({
+      data: {
+        eventId: notification.id,
+        channel: 'email',
+        provider: 'email',
+        status: result.success ? 'sent' : 'failed',
+        providerMessageId: result.providerMessageId,
+        error: result.error,
+      },
+    });
+
     return notification;
   }
 
@@ -122,7 +203,7 @@ export class NotificationsService {
 
     switch (template.channel) {
       case 'email':
-        return this.sendEmail(userId, renderedSubject || '', renderedBody);
+        return this.sendEmail(userId, renderedSubject || '', renderedBody, `<p>${renderedBody.replace(/\n/g, '<br>')}</p>`);
       case 'sms':
         return this.sendSms(userId, renderedBody, userId);
       default:
@@ -135,29 +216,58 @@ export class NotificationsService {
   async sendCampaign(data: {
     tenantId?: string;
     templateId: string;
+    channel?: string;
     userIds: string[];
     variables?: Record<string, string>;
     scheduledAt?: string;
+    segment?: { field: string; operator: string; value: any };
   }) {
     const template = await this.prisma.notificationTemplate.findUnique({ where: { id: data.templateId } });
     if (!template) throw new NotFoundException('Template not found');
-
     if (data.userIds.length === 0) throw new BadRequestException('No recipients specified');
 
+    let recipients = data.userIds;
+
+    if (data.segment) {
+      const userWhere: any = { id: { in: data.userIds } };
+      if (data.segment.field === 'emailVerified') {
+        userWhere.emailVerified = data.segment.value === true;
+      } else if (data.segment.field === 'status') {
+        userWhere.status = data.segment.value;
+      }
+      const filtered = await this.prisma.user.findMany({ where: userWhere, select: { id: true } });
+      recipients = filtered.map((u) => u.id);
+
+      if (recipients.length === 0) {
+        return { message: 'No recipients matched segment criteria', stats: { total: 0, succeeded: 0, failed: 0 } };
+      }
+    }
+
+    const channel = data.channel || template.channel;
+
     const results = await Promise.allSettled(
-      data.userIds.map((userId) =>
-        this.sendFromTemplate(data.templateId, userId, data.variables || {}),
-      ),
+      recipients.map((userId) => {
+        switch (channel) {
+          case 'email':
+            return this.sendFromTemplate(data.templateId, userId, data.variables || {});
+          case 'sms': {
+            const user = this.prisma.user.findUnique({ where: { id: userId } });
+            return user.then((u) => this.sendSms(u?.phoneNumber || userId, this.renderTemplate(template.body, data.variables || {}), userId));
+          }
+          default:
+            return this.sendFromTemplate(data.templateId, userId, data.variables || {});
+        }
+      }),
     );
 
     const succeeded = results.filter((r) => r.status === 'fulfilled').length;
     const failed = results.filter((r) => r.status === 'rejected').length;
 
-    this.logger.log(`Campaign sent: ${succeeded} succeeded, ${failed} failed`);
+    this.logger.log(`Campaign: ${succeeded} succeeded, ${failed} failed`);
 
     return {
-      message: `Campaign sent to ${data.userIds.length} recipients`,
-      stats: { total: data.userIds.length, succeeded, failed },
+      message: `Campaign sent to ${recipients.length} recipients via ${channel}`,
+      stats: { total: recipients.length, succeeded, failed },
     };
   }
 
@@ -166,6 +276,7 @@ export class NotificationsService {
     message: string;
     recipients: { phoneNumber: string; userId?: string }[];
     scheduledAt?: string;
+    segment?: { field: string; operator: string; value: any };
   }) {
     if (data.recipients.length === 0) throw new BadRequestException('No recipients specified');
 

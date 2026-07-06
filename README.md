@@ -92,13 +92,27 @@ src/
     ├── commerce/                    # Products, categories, cart, orders, coupons, tax, fulfillment, variants
     ├── booking/                     # Services, staff, resources, schedules, availability, bookings
     ├── forms/                       # Forms, fields, submissions, validation, approval workflow
-    ├── payments/                    # PaymentAdapter interface, Paystack, Flutterwave, intents, webhooks
-    ├── notifications/               # Templates, push/email/in-app, preferences, device tokens
+    ├── payments/                    # PaymentAdapter interface, Paystack/Flutterwave/Stripe, intents, refunds, settlements, webhooks
+    ├── notifications/               # Templates, push/email/SMS/in-app, campaigns, click tracking, preferences, device tokens
     ├── templates/                   # Seed templates (Store, Restaurant, Clinic)
     ├── discovery/                   # Featured, search, categories
     ├── admin/                       # Tenant approval/suspension, stats
     ├── qr/                          # QR metadata generation & resolution
-    └── theme/                       # Theme management
+    ├── theme/                       # Theme management, compiler, caching
+    ├── bookings-enhanced/           # Locations, cancellation policies, reminders
+    ├── commerce-enhanced/           # Unified catalog, multi-currency, inventory reservations
+    ├── payments-enhanced/           # Refunds, settlements, provider health
+    ├── notifications-enhanced/      # Campaigns, segmentation, click analytics
+    ├── integrations/                # Connector framework, SendGrid, Google Calendar connectors
+    ├── analytics/                   # Event tracking, dashboards, reports
+    ├── search/                      # Search index, synonyms, autocomplete, facets
+    ├── ai/                          # OpenAI/Anthropic/Mock providers, prompts, embeddings
+    ├── platform-admin/              # Settings, announcements, feature flags, quotas
+    ├── infrastructure/              # Deployments, environments, health checks, backups
+    ├── security/                    # Policies, API keys, security events, consent audits
+    ├── developer/                   # Developer apps, webhook endpoints, event logs
+    ├── marketplace/                 # Listings, plugin installations
+    └── assets-enhanced/             # Collections, shares, storage providers, transformations
 ```
 
 ## Quick Start
@@ -461,6 +475,23 @@ API at `http://localhost:4000/api/v1` — Swagger docs at `http://localhost:4000
 | 2.1 | Commerce (cart, orders, coupons, tax, fulfillment, variants) | ✅ Complete |
 | 2.2 | Booking & Scheduling (availability engine, 7-state workflow) | ✅ Complete |
 | 2.3 | Forms & Workflow (validation engine, approval workflow) | ✅ Complete |
-| 2.4 | Payments (Paystack, Flutterwave, intents, webhooks) | ✅ Complete |
-| 2.5 | Notifications (templates, push/email, preferences, devices) | ✅ Complete |
-| 3 | Enhancement (discovery, QR, admin, analytics, search, theme) | 📋 Pending |
+| 2.4 | Payments (Paystack, Flutterwave, Stripe, intents, webhooks) | ✅ Complete |
+| 2.5 | Notifications (templates, push/email/SMS, campaigns, click tracking, preferences, devices) | ✅ Complete |
+| 3a | Theme Builder (compiler, caching, restore/reset) | ✅ Complete |
+| 3a | Builder Enhancement (component library, actions, conditions, data binding, live preview) | ✅ Complete |
+| 3a | Commerce Enhancement (unified catalog, multi-currency, inventory reservations) | ✅ Complete |
+| 3a | Booking Enhancement (locations, cancellation policies, reminders) | ✅ Complete |
+| 3a | Notifications Enhancement (Email adapter, Push adapter, campaigns, segmentation, click analytics) | ✅ Complete |
+| 3a | Payments Enhancement (Stripe adapter, refunds, settlements, provider health) | ✅ Complete |
+| 3b.7 | Integration Platform (connector framework, SendGrid, Google Calendar) | ✅ Complete |
+| 3b.8 | Analytics & BI (event tracking, dashboards, reports) | ✅ Complete |
+| 3b.9 | Search & Discovery (index, synonyms, autocomplete, facets) | ✅ Complete |
+| 3b.10 | AI Platform (OpenAI, Anthropic, prompts, embeddings) | ✅ Complete |
+| 3b.11 | Platform Administration (settings, announcements, feature flags, quotas) | ✅ Complete |
+| 3c.12 | Infrastructure & DevOps (deployments, environments, health checks, backups) | ✅ Complete |
+| 3c.13 | Security & Compliance (policies, API keys, security events, consent audits) | ✅ Complete |
+| 3c.14 | Developer Platform (apps, webhooks, event logs) | ✅ Complete |
+| 4.15 | Marketplace & Plugins (listings, installations) | ✅ Complete |
+| 4.16 | Asset Platform Enhanced (collections, shares, storage providers) | ✅ Complete |
+| 4.16 | Notifications Adapters (Email — SendGrid/Resend/SES/SMTP/log, Push — Expo/FCM/APNS/log) | ✅ Complete |
+| 4.16 | Campaign Segmentation & Click Tracking (segment filters, click analytics endpoint) | ✅ Complete |

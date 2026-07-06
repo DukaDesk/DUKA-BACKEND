@@ -23,6 +23,16 @@ import { BookingModule } from './modules/booking/booking.module';
 import { FormsModule } from './modules/forms/forms.module';
 import { PaymentsModule } from './modules/payments/payments.module';
 import { ThemeModule } from './modules/theme/theme.module';
+import { IntegrationsModule } from './modules/integrations/integrations.module';
+import { AnalyticsModule } from './modules/analytics/analytics.module';
+import { SearchModule } from './modules/search/search.module';
+import { AiModule } from './modules/ai/ai.module';
+import { PlatformAdminModule } from './modules/platform-admin/platform-admin.module';
+import { InfrastructureModule } from './modules/infrastructure/infrastructure.module';
+import { SecurityModule } from './modules/security/security.module';
+import { DeveloperModule } from './modules/developer/developer.module';
+import { MarketplaceModule } from './modules/marketplace/marketplace.module';
+import { AssetsEnhancedModule } from './modules/assets-enhanced/assets-enhanced.module';
 import { RbacModule } from './modules/rbac/rbac.module';
 import { EventBusModule } from './shared/events/event-bus.module';
 import { TenantContextModule } from './shared/context/tenant-context.module';
@@ -76,6 +86,16 @@ import { TenantResolverMiddleware } from './shared/context/tenant-resolver.middl
     FormsModule,
     PaymentsModule,
     ThemeModule,
+    IntegrationsModule,
+    AnalyticsModule,
+    SearchModule,
+    AiModule,
+    PlatformAdminModule,
+    InfrastructureModule,
+    SecurityModule,
+    DeveloperModule,
+    MarketplaceModule,
+    AssetsEnhancedModule,
   ],
   providers: [
     {
