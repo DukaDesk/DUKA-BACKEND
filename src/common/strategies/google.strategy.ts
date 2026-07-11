@@ -5,29 +5,29 @@ import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
-  private readonly logger = new Logger(GoogleStrategy.name);
+  private readonly logger: Logger;
   private readonly isEnabled: boolean;
 
   constructor(configService: ConfigService) {
     const clientID = configService.get<string>('GOOGLE_CLIENT_ID');
     const clientSecret = configService.get<string>('GOOGLE_CLIENT_SECRET');
+    const isActive = !!(clientID && clientSecret);
 
-    if (clientID && clientSecret) {
-      super({
-        clientID,
-        clientSecret,
-        callbackURL: configService.get<string>('GOOGLE_CALLBACK_URL') || 'http://localhost:4000/api/v1/auth/google/callback',
-        scope: ['email', 'profile'],
-      });
-      this.isEnabled = true;
-    } else {
-      super({
-        clientID: 'disabled',
-        clientSecret: 'disabled',
-        callbackURL: '',
-        scope: ['email', 'profile'],
-      });
-      this.isEnabled = false;
+    super(isActive ? {
+      clientID,
+      clientSecret,
+      callbackURL: configService.get<string>('GOOGLE_CALLBACK_URL') || 'http://localhost:4000/api/v1/auth/google/callback',
+      scope: ['email', 'profile'],
+    } : {
+      clientID: 'disabled',
+      clientSecret: 'disabled',
+      callbackURL: '',
+      scope: ['email', 'profile'],
+    });
+
+    this.isEnabled = isActive;
+    this.logger = new Logger(GoogleStrategy.name);
+    if (!isActive) {
       this.logger.warn('Google OAuth disabled — missing GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET');
     }
   }

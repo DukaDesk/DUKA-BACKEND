@@ -5,34 +5,34 @@ import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class AppleStrategy extends PassportStrategy(Strategy, 'apple') {
-  private readonly logger = new Logger(AppleStrategy.name);
+  private readonly logger: Logger;
   private readonly isEnabled: boolean;
 
   constructor(configService: ConfigService) {
     const clientID = configService.get<string>('APPLE_CLIENT_ID');
     const teamID = configService.get<string>('APPLE_TEAM_ID');
     const keyID = configService.get<string>('APPLE_KEY_ID');
+    const isActive = !!(clientID && teamID && keyID);
 
-    if (clientID && teamID && keyID) {
-      super({
-        clientID,
-        teamID,
-        keyID,
-        privateKeyLocation: configService.get<string>('APPLE_PRIVATE_KEY_PATH') || '',
-        callbackURL: configService.get<string>('APPLE_CALLBACK_URL') || 'http://localhost:4000/api/v1/auth/apple/callback',
-        scope: ['name', 'email'],
-      });
-      this.isEnabled = true;
-    } else {
-      super({
-        clientID: 'disabled',
-        teamID: 'disabled',
-        keyID: 'disabled',
-        privateKeyLocation: '',
-        callbackURL: '',
-        scope: ['name', 'email'],
-      });
-      this.isEnabled = false;
+    super(isActive ? {
+      clientID,
+      teamID,
+      keyID,
+      privateKeyLocation: configService.get<string>('APPLE_PRIVATE_KEY_PATH') || '',
+      callbackURL: configService.get<string>('APPLE_CALLBACK_URL') || 'http://localhost:4000/api/v1/auth/apple/callback',
+      scope: ['name', 'email'],
+    } : {
+      clientID: 'disabled',
+      teamID: 'disabled',
+      keyID: 'disabled',
+      privateKeyLocation: '',
+      callbackURL: '',
+      scope: ['name', 'email'],
+    });
+
+    this.isEnabled = isActive;
+    this.logger = new Logger(AppleStrategy.name);
+    if (!isActive) {
       this.logger.warn('Apple Sign-In disabled — missing APPLE_CLIENT_ID, APPLE_TEAM_ID, or APPLE_KEY_ID');
     }
   }
