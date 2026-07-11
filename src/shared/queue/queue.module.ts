@@ -11,12 +11,17 @@ import { QueueService } from './queue.service';
       inject: [ConfigService],
       useFactory: (config: ConfigService) => {
         const redisUrl = config.get<string>('REDIS_URL');
+        const connOpts = {
+          maxRetriesPerRequest: 3,
+          retryStrategy: (times: number) => {
+            if (times > 3) return null;
+            return Math.min(times * 200, 1000);
+          },
+          enableOfflineQueue: false,
+        };
         const redisConfig = redisUrl
-          ? redisUrl
-          : {
-              host: config.get<string>('REDIS_HOST', 'localhost'),
-              port: config.get<number>('REDIS_PORT', 6379),
-            };
+          ? { url: redisUrl, ...connOpts }
+          : { host: config.get<string>('REDIS_HOST', 'localhost'), port: config.get<number>('REDIS_PORT', 6379), ...connOpts };
         return {
           redis: redisConfig,
           defaultJobOptions: {
