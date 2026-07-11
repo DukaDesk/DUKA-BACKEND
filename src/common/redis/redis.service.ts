@@ -10,14 +10,19 @@ export class RedisService implements OnModuleDestroy {
   private mockStore = new Map<string, { value: string; expiresAt: number }>();
 
   constructor(private configService: ConfigService) {
+    const redisUrl = this.configService.get<string>('REDIS_URL');
     const host = this.configService.get<string>('REDIS_HOST', 'localhost');
     const port = this.configService.get<number>('REDIS_PORT', 6379);
 
-    if (host === 'localhost' && port === 6379) {
+    const isLocal = !redisUrl && host === 'localhost' && port === 6379;
+
+    if (isLocal) {
       this.isMock = true;
       this.logger.warn('Using in-memory mock Redis (no Redis server detected)');
     } else {
-      this.client = new Redis({ host, port, lazyConnect: true });
+      this.client = redisUrl
+        ? new Redis(redisUrl, { lazyConnect: true })
+        : new Redis({ host, port, lazyConnect: true });
       this.client.connect().catch((err) => {
         this.logger.warn(`Redis connection failed, using mock: ${err.message}`);
         this.isMock = true;
