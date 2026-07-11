@@ -9,18 +9,24 @@ import { QueueService } from './queue.service';
     BullModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
-      useFactory: (config: ConfigService) => ({
-        redis: {
-          host: config.get<string>('REDIS_HOST', 'localhost'),
-          port: config.get<number>('REDIS_PORT', 6379),
-        },
-        defaultJobOptions: {
-          attempts: 3,
-          backoff: { type: 'exponential', delay: 2000 },
-          removeOnComplete: 100,
-          removeOnFail: 50,
-        },
-      }),
+      useFactory: (config: ConfigService) => {
+        const redisUrl = config.get<string>('REDIS_URL');
+        const redisConfig = redisUrl
+          ? redisUrl
+          : {
+              host: config.get<string>('REDIS_HOST', 'localhost'),
+              port: config.get<number>('REDIS_PORT', 6379),
+            };
+        return {
+          redis: redisConfig,
+          defaultJobOptions: {
+            attempts: 3,
+            backoff: { type: 'exponential', delay: 2000 },
+            removeOnComplete: 100,
+            removeOnFail: 50,
+          },
+        };
+      },
     }),
     BullModule.registerQueue(
       { name: 'publishing' },

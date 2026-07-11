@@ -39,7 +39,8 @@ async function bootstrap() {
   SwaggerModule.setup('api/docs', app, document);
 
   const port = process.env.PORT || 4000;
-  await app.listen(port);
-  console.log(`DUKADESK API running on http://localhost:${port}/api/docs`);
+  const host = process.env.HOST || '0.0.0.0';
+  await app.listen(port, host);
+  console.log(`DUKADESK API running on http://${host}:${port}/api/docs`);
 }
 bootstrap();
