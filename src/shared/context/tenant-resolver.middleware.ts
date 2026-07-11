@@ -1,4 +1,5 @@
 import { Injectable, NestMiddleware } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Request, Response, NextFunction } from 'express';
 import { PrismaService } from '../../common/prisma.service';
 import { TenantContextService } from './tenant-context.service';
@@ -9,12 +10,14 @@ export class TenantResolverMiddleware implements NestMiddleware {
   constructor(
     private readonly prisma: PrismaService,
     private readonly tenantContext: TenantContextService,
+    private readonly configService: ConfigService,
   ) {}
 
   async use(req: Request, _res: Response, next: NextFunction): Promise<void> {
     const tenantId = (req.headers['x-tenant-id'] as string) || (req.params.tenantId as string);
     const slug = req.headers['x-tenant-slug'] as string;
     const host = req.hostname;
+    const platformDomain = this.configService.get<string>('PLATFORM_DOMAIN', 'dukadesk.app');
 
     let context: TenantContext | undefined;
 
@@ -34,7 +37,7 @@ export class TenantResolverMiddleware implements NestMiddleware {
       if (tenant) {
         context = { tenantId: tenant.id, slug: tenant.slug, name: tenant.name, status: tenant.status };
       }
-    } else if (host && host.includes('dukadesk')) {
+    } else if (host && host.includes(platformDomain)) {
       const subdomain = host.split('.')[0];
       if (subdomain && subdomain !== 'www' && subdomain !== 'app') {
         const tenant = await this.prisma.tenant.findUnique({

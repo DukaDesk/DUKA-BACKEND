@@ -6,16 +6,35 @@ import { ConfigService } from '@nestjs/config';
 @Injectable()
 export class AppleStrategy extends PassportStrategy(Strategy, 'apple') {
   private readonly logger = new Logger(AppleStrategy.name);
+  private readonly isEnabled: boolean;
 
   constructor(configService: ConfigService) {
-    super({
-      clientID: configService.get<string>('APPLE_CLIENT_ID') || '',
-      teamID: configService.get<string>('APPLE_TEAM_ID') || '',
-      keyID: configService.get<string>('APPLE_KEY_ID') || '',
-      privateKeyLocation: configService.get<string>('APPLE_PRIVATE_KEY_PATH') || '',
-      callbackURL: configService.get<string>('APPLE_CALLBACK_URL') || 'http://localhost:4000/api/v1/auth/apple/callback',
-      scope: ['name', 'email'],
-    });
+    const clientID = configService.get<string>('APPLE_CLIENT_ID');
+    const teamID = configService.get<string>('APPLE_TEAM_ID');
+    const keyID = configService.get<string>('APPLE_KEY_ID');
+
+    if (clientID && teamID && keyID) {
+      super({
+        clientID,
+        teamID,
+        keyID,
+        privateKeyLocation: configService.get<string>('APPLE_PRIVATE_KEY_PATH') || '',
+        callbackURL: configService.get<string>('APPLE_CALLBACK_URL') || 'http://localhost:4000/api/v1/auth/apple/callback',
+        scope: ['name', 'email'],
+      });
+      this.isEnabled = true;
+    } else {
+      super({
+        clientID: 'disabled',
+        teamID: 'disabled',
+        keyID: 'disabled',
+        privateKeyLocation: '',
+        callbackURL: '',
+        scope: ['name', 'email'],
+      });
+      this.isEnabled = false;
+      this.logger.warn('Apple Sign-In disabled — missing APPLE_CLIENT_ID, APPLE_TEAM_ID, or APPLE_KEY_ID');
+    }
   }
 
   async validate(
@@ -25,6 +44,10 @@ export class AppleStrategy extends PassportStrategy(Strategy, 'apple') {
     profile: any,
     done: (err: any, user?: any) => void,
   ): Promise<any> {
+    if (!this.isEnabled) {
+      return done(new UnauthorizedException('Apple Sign-In is not configured'), false);
+    }
+
     const { id, email, name } = profile;
     if (!email) {
       return done(new UnauthorizedException('Apple account has no email'), false);

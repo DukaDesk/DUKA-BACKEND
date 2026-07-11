@@ -6,14 +6,30 @@ import { ConfigService } from '@nestjs/config';
 @Injectable()
 export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
   private readonly logger = new Logger(GoogleStrategy.name);
+  private readonly isEnabled: boolean;
 
   constructor(configService: ConfigService) {
-    super({
-      clientID: configService.get<string>('GOOGLE_CLIENT_ID') || '',
-      clientSecret: configService.get<string>('GOOGLE_CLIENT_SECRET') || '',
-      callbackURL: configService.get<string>('GOOGLE_CALLBACK_URL') || 'http://localhost:4000/api/v1/auth/google/callback',
-      scope: ['email', 'profile'],
-    });
+    const clientID = configService.get<string>('GOOGLE_CLIENT_ID');
+    const clientSecret = configService.get<string>('GOOGLE_CLIENT_SECRET');
+
+    if (clientID && clientSecret) {
+      super({
+        clientID,
+        clientSecret,
+        callbackURL: configService.get<string>('GOOGLE_CALLBACK_URL') || 'http://localhost:4000/api/v1/auth/google/callback',
+        scope: ['email', 'profile'],
+      });
+      this.isEnabled = true;
+    } else {
+      super({
+        clientID: 'disabled',
+        clientSecret: 'disabled',
+        callbackURL: '',
+        scope: ['email', 'profile'],
+      });
+      this.isEnabled = false;
+      this.logger.warn('Google OAuth disabled — missing GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET');
+    }
   }
 
   async validate(
@@ -22,6 +38,10 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
     profile: any,
     done: VerifyCallback,
   ): Promise<any> {
+    if (!this.isEnabled) {
+      return done(new UnauthorizedException('Google OAuth is not configured'), false);
+    }
+
     const { id, emails, name, photos } = profile;
     const email = emails?.[0]?.value;
     if (!email) {

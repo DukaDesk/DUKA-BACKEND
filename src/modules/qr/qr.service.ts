@@ -1,18 +1,23 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../common/prisma.service';
 
 @Injectable()
 export class QrService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private configService: ConfigService,
+  ) {}
 
   async generate(tenantId: string) {
     const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId } });
     if (!tenant) throw new NotFoundException('Tenant not found');
 
+    const baseUrl = this.configService.get<string>('PLATFORM_URL', 'https://dukadesk.app');
     const qrData = {
       tenantId: tenant.id,
       slug: tenant.slug,
-      url: `https://dukadesk.com/t/${tenant.slug}`,
+      url: `${baseUrl}/t/${tenant.slug}`,
     };
 
     return qrData;
