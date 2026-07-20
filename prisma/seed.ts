@@ -360,7 +360,193 @@ async function main() {
     });
   }
 
-  console.log('Seed completed: 3 templates created');
+  // ─── Sample Tenant & User Data ─────────────────────────────
+
+  const sampleTenantSlug = 'acme-store';
+  const existingTenant = await prisma.tenant.findUnique({ where: { slug: sampleTenantSlug } });
+
+  if (!existingTenant) {
+    const sampleUser = await prisma.user.upsert({
+      where: { email: 'john@acme.com' },
+      update: {},
+      create: {
+        email: 'john@acme.com',
+        firstName: 'John',
+        lastName: 'Acme',
+        passwordHash: '$2a$12$LJ3m4ys3Lk0TSwHnbfOMiOXPm1QlqQ1y5e5y5e5y5e5y5e5y5e5y', // Password123!
+        emailVerified: true,
+      },
+    });
+
+    await prisma.profile.upsert({
+      where: { userId: sampleUser.id },
+      update: {},
+      create: {
+        userId: sampleUser.id,
+        gender: 'male',
+        country: 'NG',
+        state: 'Lagos',
+        city: 'Ikeja',
+      },
+    });
+
+    const starterPlan = await prisma.plan.findUnique({ where: { slug: 'starter' } });
+
+    const tenant = await prisma.tenant.create({
+      data: {
+        name: 'Acme Store',
+        slug: sampleTenantSlug,
+        email: 'store@acme.com',
+        phone: '+2348012345678',
+        status: 'published',
+        publishedAt: new Date(),
+      },
+    });
+
+    await prisma.tenantUser.create({
+      data: {
+        tenantId: tenant.id,
+        userId: sampleUser.id,
+        role: 'owner',
+      },
+    });
+
+    await prisma.tenantConfig.create({
+      data: {
+        tenantId: tenant.id,
+        currency: 'NGN',
+        timezone: 'Africa/Lagos',
+        region: 'NG',
+      },
+    });
+
+    if (starterPlan) {
+      await prisma.subscription.create({
+        data: {
+          tenantId: tenant.id,
+          planId: starterPlan.id,
+          status: 'active',
+          startDate: new Date(),
+          autoRenew: true,
+        },
+      });
+    }
+
+    const modernTemplate = await prisma.template.findUnique({ where: { slug: 'modern-store' } });
+    if (modernTemplate) {
+      const config = modernTemplate.config as any;
+
+      const theme = await prisma.theme.create({
+        data: {
+          tenantId: tenant.id,
+          primaryColor: config.theme?.primaryColor || '#0066FF',
+          secondaryColor: config.theme?.secondaryColor || '#00CC66',
+          backgroundColor: config.theme?.backgroundColor || '#FFFFFF',
+          textColor: config.theme?.textColor || '#1A1A1A',
+          fontFamily: config.theme?.fontFamily || 'Inter',
+          borderRadius: config.theme?.borderRadius || '8px',
+        },
+      });
+
+      if (config.navigation) {
+        await prisma.navigation.create({
+          data: {
+            tenantId: tenant.id,
+            items: config.navigation,
+          },
+        });
+      }
+
+      if (config.pages) {
+        for (const pageConfig of config.pages) {
+          const page = await prisma.page.create({
+            data: {
+              tenantId: tenant.id,
+              name: pageConfig.name,
+              slug: pageConfig.slug,
+              isHome: pageConfig.isHome || false,
+              sortOrder: pageConfig.sortOrder || 0,
+            },
+          });
+
+          if (pageConfig.sections) {
+            for (const sectionConfig of pageConfig.sections) {
+              const section = await prisma.section.create({
+                data: {
+                  pageId: page.id,
+                  type: sectionConfig.type,
+                  sortOrder: sectionConfig.sortOrder || 0,
+                  config: sectionConfig.config || {},
+                },
+              });
+
+              if (sectionConfig.components) {
+                for (const compConfig of sectionConfig.components) {
+                  await prisma.component.create({
+                    data: {
+                      sectionId: section.id,
+                      type: compConfig.type,
+                      sortOrder: compConfig.sortOrder || 0,
+                      props: compConfig.props || {},
+                    },
+                  });
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // Sample categories
+    const categories = [
+      { name: 'Electronics', slug: 'electronics', sortOrder: 0 },
+      { name: 'Clothing', slug: 'clothing', sortOrder: 1 },
+      { name: 'Accessories', slug: 'accessories', sortOrder: 2 },
+    ];
+
+    for (const cat of categories) {
+      await prisma.category.upsert({
+        where: { tenantId_slug: { tenantId: tenant.id, slug: cat.slug } },
+        update: {},
+        create: { tenantId: tenant.id, ...cat },
+      });
+    }
+
+    // Sample products
+    const products = [
+      { name: 'Wireless Headphones', slug: 'wireless-headphones', price: 29999, categorySlug: 'electronics', description: 'Premium wireless headphones with noise cancellation' },
+      { name: 'Cotton T-Shirt', slug: 'cotton-tshirt', price: 4999, categorySlug: 'clothing', description: 'Comfortable 100% cotton t-shirt' },
+      { name: 'Leather Watch', slug: 'leather-watch', price: 15999, categorySlug: 'accessories', description: 'Elegant leather strap watch' },
+    ];
+
+    for (const product of products) {
+      const category = await prisma.category.findUnique({
+        where: { tenantId_slug: { tenantId: tenant.id, slug: product.categorySlug } },
+      });
+
+      await prisma.product.upsert({
+        where: { tenantId_slug: { tenantId: tenant.id, slug: product.slug } },
+        update: {},
+        create: {
+          tenantId: tenant.id,
+          categoryId: category?.id,
+          name: product.name,
+          slug: product.slug,
+          description: product.description,
+          price: product.price,
+          currency: 'NGN',
+          stock: 100,
+        },
+      });
+    }
+
+    console.log(`Sample data created: tenant "${tenant.name}" with user john@acme.com`);
+  } else {
+    console.log('Sample data already exists, skipping...');
+  }
+
+  console.log('Seed completed successfully');
 }
 
 main()

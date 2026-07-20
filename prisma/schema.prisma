@@ -10,6 +10,7 @@ datasource db {
 enum UserStatus {
   active
   suspended
+  deactivated
   deleted
 }
 
@@ -1654,6 +1655,8 @@ model User {
   status        UserStatus @default(active)
   emailVerified Boolean    @default(false)
   phoneVerified Boolean    @default(false)
+  deactivatedAt      DateTime?
+  scheduledDeletionAt DateTime?
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
 

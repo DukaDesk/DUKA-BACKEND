@@ -7,8 +7,10 @@ import { BusinessDashboardBffController } from './business-dashboard/business-da
 import { BusinessDashboardBffService } from './business-dashboard/business-dashboard-bff.service';
 import { WebsiteBffController } from './website/website-bff.controller';
 import { WebsiteBffService } from './website/website-bff.service';
+import { UsersModule } from '../modules/users/users.module';
 
 @Module({
+  imports: [UsersModule],
   controllers: [
     MobileBffController,
     TenantDashboardBffController,
