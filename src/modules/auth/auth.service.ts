@@ -149,7 +149,7 @@ export class AuthService {
       this.configService.get<string>('GOOGLE_CLIENT_ID'),
       this.configService.get<string>('GOOGLE_IOS_CLIENT_ID'),
       this.configService.get<string>('GOOGLE_ANDROID_CLIENT_ID'),
-    ].filter(Boolean);
+    ].filter((id): id is string => !!id);
 
     if (clientIds.length === 0) {
       throw new BadRequestException('Google auth not configured');
@@ -160,7 +160,7 @@ export class AuthService {
     try {
       const ticket = await client.verifyIdToken({ idToken: dto.idToken, audience: clientIds });
       payload = ticket.getPayload();
-    } catch {
+    } catch (e) {
       throw new UnauthorizedException('Invalid Google ID token');
     }
 
