@@ -145,13 +145,20 @@ export class AuthService {
   }
 
   async googleLogin(dto: GoogleLoginDto) {
-    const clientId = this.configService.get<string>('GOOGLE_CLIENT_ID');
-    if (!clientId) throw new BadRequestException('Google auth not configured');
+    const clientIds = [
+      this.configService.get<string>('GOOGLE_CLIENT_ID'),
+      this.configService.get<string>('GOOGLE_IOS_CLIENT_ID'),
+      this.configService.get<string>('GOOGLE_ANDROID_CLIENT_ID'),
+    ].filter(Boolean);
 
-    const client = new OAuth2Client(clientId);
+    if (clientIds.length === 0) {
+      throw new BadRequestException('Google auth not configured');
+    }
+
+    const client = new OAuth2Client(clientIds[0]);
     let payload: any;
     try {
-      const ticket = await client.verifyIdToken({ idToken: dto.idToken, audience: clientId });
+      const ticket = await client.verifyIdToken({ idToken: dto.idToken, audience: clientIds });
       payload = ticket.getPayload();
     } catch {
       throw new UnauthorizedException('Invalid Google ID token');
