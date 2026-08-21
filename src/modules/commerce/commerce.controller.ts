@@ -15,14 +15,14 @@ export class CommerceController {
   // ─── Categories ───────────────────────────────
 
   @UseGuards(JwtAuthGuard) @ApiBearerAuth()
-  @Post('tenants/:tenantId/categories')
+  @Post('merchants/:merchantId/categories')
   @ApiOperation({ summary: 'Create category' })
   createCategory(@Param('tenantId') tenantId: string, @Body() data: any) {
     return this.commerceService.createCategory(tenantId, data);
   }
 
   @Public()
-  @Get('tenants/:tenantId/categories')
+  @Get('merchants/:merchantId/categories')
   @ApiOperation({ summary: 'List categories' })
   getCategories(@Param('tenantId') tenantId: string) {
     return this.commerceService.getCategories(tenantId);
@@ -45,14 +45,14 @@ export class CommerceController {
   // ─── Products ─────────────────────────────────
 
   @UseGuards(JwtAuthGuard) @ApiBearerAuth()
-  @Post('tenants/:tenantId/products')
+  @Post('merchants/:merchantId/products')
   @ApiOperation({ summary: 'Create product with variants' })
   createProduct(@Param('tenantId') tenantId: string, @Body() data: any) {
     return this.commerceService.createProduct(tenantId, data);
   }
 
   @Public()
-  @Get('tenants/:tenantId/products')
+  @Get('merchants/:merchantId/products')
   @ApiOperation({ summary: 'List products with filter, sort, pagination' })
   @ApiQuery({ name: 'page', required: false })
   @ApiQuery({ name: 'limit', required: false })
@@ -94,7 +94,7 @@ export class CommerceController {
   }
 
   @Public()
-  @Get('tenants/:tenantId/products/type/:type')
+  @Get('merchants/:merchantId/products/type/:type')
   @ApiOperation({ summary: 'List products by type (physical/service/digital/donation/membership/event_ticket)' })
   getProductsByType(@Param('tenantId') tenantId: string, @Param('type') type: string, @Query() query: any) {
     return this.commerceService.getProductsByType(tenantId, type, query);
@@ -179,7 +179,7 @@ export class CommerceController {
   // ─── Cart ─────────────────────────────────────
 
   @UseGuards(JwtAuthGuard) @ApiBearerAuth()
-  @Post('tenants/:tenantId/cart')
+  @Post('merchants/:merchantId/cart')
   @ApiOperation({ summary: 'Get or create cart' })
   getOrCreateCart(@Param('tenantId') tenantId: string, @Body() data: { userId?: string; sessionId?: string }) {
     return this.commerceService.getOrCreateCart(tenantId, data.userId, data.sessionId);
@@ -239,7 +239,7 @@ export class CommerceController {
   // ─── Orders ───────────────────────────────────
 
   @UseGuards(JwtAuthGuard) @ApiBearerAuth()
-  @Get('tenants/:tenantId/orders')
+  @Get('merchants/:merchantId/orders')
   @ApiOperation({ summary: 'List orders' })
   @ApiQuery({ name: 'status', required: false })
   @ApiQuery({ name: 'page', required: false })
@@ -265,7 +265,7 @@ export class CommerceController {
   // ─── Coupons ──────────────────────────────────
 
   @UseGuards(JwtAuthGuard) @ApiBearerAuth()
-  @Post('tenants/:tenantId/coupons')
+  @Post('merchants/:merchantId/coupons')
   @ApiOperation({ summary: 'Create coupon' })
   createCoupon(@Param('tenantId') tenantId: string, @Body() data: any) {
     return this.commerceService.createCoupon(tenantId, data);
@@ -318,7 +318,7 @@ export class CommerceController {
   // ─── Tax Rules ────────────────────────────────
 
   @UseGuards(JwtAuthGuard) @ApiBearerAuth()
-  @Post('tenants/:tenantId/tax-rules')
+  @Post('merchants/:merchantId/tax-rules')
   @ApiOperation({ summary: 'Create tax rule' })
   createTaxRule(@Param('tenantId') tenantId: string, @Body() data: any) {
     return this.commerceService.createTaxRule(tenantId, data);
@@ -346,7 +346,7 @@ export class CommerceController {
   }
 
   @UseGuards(JwtAuthGuard) @ApiBearerAuth()
-  @Get('tenants/:tenantId/tax-calc')
+  @Get('merchants/:merchantId/tax-calc')
   @ApiOperation({ summary: 'Calculate tax for subtotal' })
   @ApiQuery({ name: 'subtotal', required: true })
   @ApiQuery({ name: 'region', required: false })

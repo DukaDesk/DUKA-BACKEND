@@ -4,7 +4,7 @@ import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
 import { PrismaModule } from './common/prisma.module';
 import { AuthModule } from './modules/auth/auth.module';
-import { TenantsModule } from './modules/tenants/tenants.module';
+import { MerchantsModule } from './modules/merchants/merchants.module';
 import { TemplatesModule } from './modules/templates/templates.module';
 import { BuilderModule } from './modules/builder/builder.module';
 import { RendererModule } from './modules/renderer/renderer.module';
@@ -68,7 +68,7 @@ import { TenantResolverMiddleware } from './shared/context/tenant-resolver.middl
     // Modules
     AuthModule,
     UsersModule,
-    TenantsModule,
+    MerchantsModule,
     TemplatesModule,
     BuilderModule,
     RendererModule,

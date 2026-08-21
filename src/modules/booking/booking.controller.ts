@@ -15,14 +15,14 @@ export class BookingController {
   // ─── Services ────────────────────────────────
 
   @UseGuards(JwtAuthGuard) @ApiBearerAuth()
-  @Post('tenants/:tenantId/booking/services')
+  @Post('merchants/:merchantId/booking/services')
   @ApiOperation({ summary: 'Create booking service' })
-  createService(@Param('tenantId') tenantId: string, @Body() data: any) {
-    return this.bookingService.createService(tenantId, data);
+  createService(@Param('merchantId') merchantId: string, @Body() data: any) {
+    return this.bookingService.createService(merchantId, data);
   }
 
   @Public()
-  @Get('tenants/:tenantId/booking/services')
+  @Get('merchants/:merchantId/booking/services')
   @ApiOperation({ summary: 'List booking services' })
   getServices(@Param('tenantId') tenantId: string) {
     return this.bookingService.getServices(tenantId);
@@ -52,7 +52,7 @@ export class BookingController {
   // ─── Locations ───────────────────────────────
 
   @UseGuards(JwtAuthGuard) @ApiBearerAuth()
-  @Post('tenants/:tenantId/booking/locations')
+  @Post('merchants/:merchantId/booking/locations')
   @ApiOperation({ summary: 'Create booking location' })
   createLocation(@Param('tenantId') tenantId: string, @Body() data: any) {
     return this.bookingService.createLocation(tenantId, data);
@@ -82,7 +82,7 @@ export class BookingController {
   // ─── Cancellation Policies ────────────────────
 
   @UseGuards(JwtAuthGuard) @ApiBearerAuth()
-  @Post('tenants/:tenantId/booking/cancellation-policies')
+  @Post('merchants/:merchantId/booking/cancellation-policies')
   @ApiOperation({ summary: 'Create cancellation policy with refund tiers' })
   createCancellationPolicy(@Param('tenantId') tenantId: string, @Body() data: any) {
     return this.bookingService.createCancellationPolicy(tenantId, data);
@@ -121,7 +121,7 @@ export class BookingController {
   // ─── Staff ───────────────────────────────────
 
   @UseGuards(JwtAuthGuard) @ApiBearerAuth()
-  @Post('tenants/:tenantId/booking/staff')
+  @Post('merchants/:merchantId/booking/staff')
   @ApiOperation({ summary: 'Create staff member with service assignments' })
   createStaff(@Param('tenantId') tenantId: string, @Body() data: any) {
     return this.bookingService.createStaff(tenantId, data);
@@ -158,7 +158,7 @@ export class BookingController {
   // ─── Resources ───────────────────────────────
 
   @UseGuards(JwtAuthGuard) @ApiBearerAuth()
-  @Post('tenants/:tenantId/booking/resources')
+  @Post('merchants/:merchantId/booking/resources')
   @ApiOperation({ summary: 'Create booking resource' })
   createResource(@Param('tenantId') tenantId: string, @Body() data: any) {
     return this.bookingService.createResource(tenantId, data);
@@ -188,7 +188,7 @@ export class BookingController {
   // ─── Schedules ───────────────────────────────
 
   @UseGuards(JwtAuthGuard) @ApiBearerAuth()
-  @Post('tenants/:tenantId/booking/schedules')
+  @Post('merchants/:merchantId/booking/schedules')
   @ApiOperation({ summary: 'Create schedule' })
   createSchedule(@Param('tenantId') tenantId: string, @Body() data: any) {
     return this.bookingService.createSchedule(tenantId, data);
@@ -224,7 +224,7 @@ export class BookingController {
   // ─── Availability ────────────────────────────
 
   @Public()
-  @Get('tenants/:tenantId/booking/availability')
+  @Get('merchants/:merchantId/booking/availability')
   @ApiOperation({ summary: 'Get available time slots' })
   @ApiQuery({ name: 'serviceId', required: true })
   @ApiQuery({ name: 'date', required: true, description: 'YYYY-MM-DD' })
@@ -240,14 +240,14 @@ export class BookingController {
 
   // ─── Bookings ────────────────────────────────
 
-  @Post('tenants/:tenantId/booking')
+  @Post('merchants/:merchantId/booking')
   @ApiOperation({ summary: 'Create booking (public)' })
   createBooking(@Param('tenantId') tenantId: string, @Body() data: any) {
     return this.bookingService.createBooking(tenantId, data);
   }
 
   @UseGuards(JwtAuthGuard) @ApiBearerAuth()
-  @Get('tenants/:tenantId/booking')
+  @Get('merchants/:merchantId/booking')
   @ApiOperation({ summary: 'List bookings' })
   @ApiQuery({ name: 'status', required: false })
   @ApiQuery({ name: 'serviceId', required: false })
@@ -275,14 +275,14 @@ export class BookingController {
 
   // ─── Waiting List ────────────────────────────
 
-  @Post('tenants/:tenantId/booking/waiting-list')
+  @Post('merchants/:merchantId/booking/waiting-list')
   @ApiOperation({ summary: 'Add to waiting list' })
   addToWaitingList(@Param('tenantId') tenantId: string, @Body() data: any) {
     return this.bookingService.addToWaitingList(tenantId, data);
   }
 
   @UseGuards(JwtAuthGuard) @ApiBearerAuth()
-  @Get('tenants/:tenantId/booking/waiting-list')
+  @Get('merchants/:merchantId/booking/waiting-list')
   @ApiOperation({ summary: 'Get waiting list' })
   @ApiQuery({ name: 'serviceId', required: false })
   getWaitingList(@Param('tenantId') tenantId: string, @Query('serviceId') serviceId?: string) {
@@ -299,7 +299,7 @@ export class BookingController {
   // ─── Calendar / Timeline ─────────────────────
 
   @UseGuards(JwtAuthGuard) @ApiBearerAuth()
-  @Get('tenants/:tenantId/booking/calendar')
+  @Get('merchants/:merchantId/booking/calendar')
   @ApiOperation({ summary: 'Get booking timeline for a date range' })
   @ApiQuery({ name: 'from', required: true, description: 'YYYY-MM-DD' })
   @ApiQuery({ name: 'to', required: true, description: 'YYYY-MM-DD' })

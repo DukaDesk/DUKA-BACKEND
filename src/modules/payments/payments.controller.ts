@@ -14,7 +14,7 @@ export class PaymentsController {
   // ─── Payment Intents ─────────────────────────
 
   @UseGuards(JwtAuthGuard) @ApiBearerAuth()
-  @Post('tenants/:tenantId/payments/initialize')
+  @Post('merchants/:merchantId/payments/initialize')
   @ApiOperation({ summary: 'Initialize a payment with provider' })
   initializePayment(
     @Param('tenantId') tenantId: string,
@@ -31,7 +31,7 @@ export class PaymentsController {
   }
 
   @UseGuards(JwtAuthGuard) @ApiBearerAuth()
-  @Get('tenants/:tenantId/payments')
+  @Get('merchants/:merchantId/payments')
   @ApiOperation({ summary: 'List payment intents' })
   @ApiQuery({ name: 'status', required: false })
   @ApiQuery({ name: 'provider', required: false })
@@ -53,7 +53,7 @@ export class PaymentsController {
   // ─── Settlements ─────────────────────────────
 
   @UseGuards(JwtAuthGuard) @ApiBearerAuth()
-  @Post('tenants/:tenantId/payments/settlements')
+  @Post('merchants/:merchantId/payments/settlements')
   @ApiOperation({ summary: 'Record a settlement entry' })
   recordSettlement(@Param('tenantId') tenantId: string, @Body() data: { provider: string; reference: string; amount: number; fees?: number; currency?: string; periodStart?: string; periodEnd?: string }) {
     return this.paymentsService.recordSettlement({ tenantId, ...data });
@@ -67,7 +67,7 @@ export class PaymentsController {
   }
 
   @UseGuards(JwtAuthGuard) @ApiBearerAuth()
-  @Get('tenants/:tenantId/payments/settlements')
+  @Get('merchants/:merchantId/payments/settlements')
   @ApiOperation({ summary: 'List settlements' })
   @ApiQuery({ name: 'status', required: false })
   getSettlements(@Param('tenantId') tenantId: string, @Query('status') status?: string) {
@@ -77,7 +77,7 @@ export class PaymentsController {
   // ─── Transactions ────────────────────────────
 
   @UseGuards(JwtAuthGuard) @ApiBearerAuth()
-  @Get('tenants/:tenantId/payments/transactions')
+  @Get('merchants/:merchantId/payments/transactions')
   @ApiOperation({ summary: 'List payment transactions' })
   @ApiQuery({ name: 'type', required: false, description: 'charge | refund' })
   @ApiQuery({ name: 'status', required: false })
@@ -104,7 +104,7 @@ export class PaymentsController {
   // ─── Accounts ────────────────────────────────
 
   @UseGuards(JwtAuthGuard) @ApiBearerAuth()
-  @Get('tenants/:tenantId/payments/accounts')
+  @Get('merchants/:merchantId/payments/accounts')
   @ApiOperation({ summary: 'Get payment accounts for tenant' })
   getAccounts(@Param('tenantId') tenantId: string) {
     return this.paymentsService.getPaymentAccounts(tenantId);

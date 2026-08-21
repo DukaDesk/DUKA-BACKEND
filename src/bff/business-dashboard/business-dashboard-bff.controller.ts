@@ -16,7 +16,7 @@ export class BusinessDashboardBffController {
     return this.bff.getPlatformOverview();
   }
 
-  @Get('tenants')
+  @Get('merchants')
   @ApiOperation({ summary: 'Get paginated tenant list' })
   @ApiQuery({ name: 'status', required: false })
   @ApiQuery({ name: 'page', required: false })

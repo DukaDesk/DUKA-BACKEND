@@ -15,14 +15,14 @@ export class FormsController {
   // ─── Form CRUD ───────────────────────────────
 
   @UseGuards(JwtAuthGuard) @ApiBearerAuth()
-  @Post('tenants/:tenantId/forms')
+  @Post('merchants/:merchantId/forms')
   @ApiOperation({ summary: 'Create form with fields' })
   createForm(@Param('tenantId') tenantId: string, @Body() data: any) {
     return this.formsService.createForm(tenantId, data);
   }
 
   @UseGuards(JwtAuthGuard) @ApiBearerAuth()
-  @Get('tenants/:tenantId/forms')
+  @Get('merchants/:merchantId/forms')
   @ApiOperation({ summary: 'List forms' })
   getForms(@Param('tenantId') tenantId: string) {
     return this.formsService.getForms(tenantId);

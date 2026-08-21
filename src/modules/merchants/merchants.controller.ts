@@ -8,7 +8,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
-import { TenantsService } from './tenants.service';
+import { MerchantsService } from './merchants.service';
 import { TenantConfigService } from './tenant-config.service';
 import { SubscriptionService } from './subscription.service';
 import { CreateTenantDto } from './dto/create-tenant.dto';
@@ -17,11 +17,11 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { Public } from '../../common/decorators/public.decorator';
 
-@ApiTags('Tenants')
-@Controller({ path: 'tenants', version: '1' })
-export class TenantsController {
+@ApiTags('Merchants')
+@Controller({ path: 'merchants', version: '1' })
+export class MerchantsController {
   constructor(
-    private readonly tenantsService: TenantsService,
+    private readonly merchantsService: MerchantsService,
     private readonly tenantConfigService: TenantConfigService,
     private readonly subscriptionService: SubscriptionService,
   ) {}
@@ -31,7 +31,7 @@ export class TenantsController {
   @Post()
   @ApiOperation({ summary: 'Create a new tenant' })
   create(@CurrentUser('id') userId: string, @Body() dto: CreateTenantDto) {
-    return this.tenantsService.create(userId, dto);
+    return this.merchantsService.create(userId, dto);
   }
 
   @UseGuards(JwtAuthGuard)
@@ -39,14 +39,14 @@ export class TenantsController {
   @Get('my')
   @ApiOperation({ summary: 'Get my tenants' })
   getMyTenants(@CurrentUser('id') userId: string) {
-    return this.tenantsService.getMyTenants(userId);
+    return this.merchantsService.getMyTenants(userId);
   }
 
   @Public()
   @Get(':id')
   @ApiOperation({ summary: 'Get tenant by ID' })
   findById(@Param('id') id: string) {
-    return this.tenantsService.findById(id);
+    return this.merchantsService.findById(id);
   }
 
   @UseGuards(JwtAuthGuard)
@@ -58,7 +58,7 @@ export class TenantsController {
     @CurrentUser('id') userId: string,
     @Body() dto: UpdateTenantDto,
   ) {
-    return this.tenantsService.update(id, userId, dto);
+    return this.merchantsService.update(id, userId, dto);
   }
 
   @UseGuards(JwtAuthGuard)
@@ -66,7 +66,7 @@ export class TenantsController {
   @Post(':id/publish')
   @ApiOperation({ summary: 'Publish tenant' })
   publish(@Param('id') id: string, @CurrentUser('id') userId: string) {
-    return this.tenantsService.publish(id, userId);
+    return this.merchantsService.publish(id, userId);
   }
 
   @UseGuards(JwtAuthGuard)

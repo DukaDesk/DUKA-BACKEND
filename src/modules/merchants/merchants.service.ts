@@ -9,7 +9,7 @@ import { CreateTenantDto } from './dto/create-tenant.dto';
 import { UpdateTenantDto } from './dto/update-tenant.dto';
 
 @Injectable()
-export class TenantsService {
+export class MerchantsService {
   constructor(private prisma: PrismaService) {}
 
   async create(userId: string, dto: CreateTenantDto) {

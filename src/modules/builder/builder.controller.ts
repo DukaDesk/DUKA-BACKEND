@@ -7,7 +7,7 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 @ApiTags('Builder')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
-@Controller({ path: 'tenants/:tenantId', version: '1' })
+@Controller({ path: 'merchants/:tenantId', version: '1' })
 export class BuilderController {
   constructor(private readonly builderService: BuilderService) {}
 

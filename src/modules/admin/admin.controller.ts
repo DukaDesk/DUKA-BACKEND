@@ -15,19 +15,19 @@ export class AdminController {
     private readonly usersService: UsersService,
   ) {}
 
-  @Post('tenants/:id/approve')
+  @Post('merchants/:id/approve')
   @ApiOperation({ summary: 'Approve a tenant' })
   approveTenant(@Param('id') id: string, @CurrentUser('id') userId: string) {
     return this.adminService.approveTenant(id, userId);
   }
 
-  @Post('tenants/:id/suspend')
+  @Post('merchants/:id/suspend')
   @ApiOperation({ summary: 'Suspend a tenant' })
   suspendTenant(@Param('id') id: string, @CurrentUser('id') userId: string) {
     return this.adminService.suspendTenant(id, userId);
   }
 
-  @Get('tenants')
+  @Get('merchants')
   @ApiOperation({ summary: 'Get all tenants (admin)' })
   @ApiQuery({ name: 'status', required: false })
   getTenants(@CurrentUser('id') userId: string, @Query('status') status?: string) {

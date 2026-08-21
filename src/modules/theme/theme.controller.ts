@@ -8,7 +8,7 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 @ApiTags('Theme')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
-@Controller({ path: 'tenants/:tenantId/theme', version: '1' })
+@Controller({ path: 'merchants/:tenantId/theme', version: '1' })
 export class ThemeController {
   constructor(private readonly themeService: ThemeService) {}
 

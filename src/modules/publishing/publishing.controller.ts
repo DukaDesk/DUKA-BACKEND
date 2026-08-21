@@ -6,7 +6,7 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 @ApiTags('Publishing')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
-@Controller({ path: 'tenants/:id/publishing', version: '1' })
+@Controller({ path: 'merchants/:id/publishing', version: '1' })
 export class PublishingController {
   constructor(private readonly publishingService: PublishingService) {}
 

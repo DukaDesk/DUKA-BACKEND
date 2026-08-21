@@ -3,13 +3,13 @@
 This file tracks the current state of the backend implementation repository.
 
 **KB Version:** 0.1.0
-**Last Updated:** 2026-07-16
+**Last Updated:** 2026-07-20
 
 ## Active Work
 
 | Task | Specification | Status | Owner |
 |------|---------------|--------|-------|
-| API endpoint implementation (381 endpoints) | KB v0.1.0 | In Progress | Engineering |
+| API endpoint implementation (390 endpoints) | KB v0.1.0 | In Progress | Engineering |
 | Phase 3 gap-filling (Theme, Commerce, Booking, Notifications, Payments) | KB v0.1.0 | Complete | Engineering |
 
 ## Completed Milestones
@@ -21,13 +21,14 @@ This file tracks the current state of the backend implementation repository.
 | 2026-07 | Phase 3a — Gap Filling | Theme module, Commerce unified catalog + inventory, Booking locations/reminders/cancellation policies |
 | 2026-07 | Phase 3b — Adapters & Connectors | Email/Push/Stripe adapters, Anthropic provider, SendGrid & Google Calendar connectors |
 | 2026-07 | Deployment Readiness | Dockerfile, CI/CD pipeline, health checks, Railway config |
+| 2026-07 | Profile Deactivation & Deletion | 30-day soft deactivation flow, hard delete for GDPR/Apple/Google, admin cleanup endpoint, BFF mobile endpoints |
 
 ## Modules Implemented
 
 | # | Module | Status | Endpoints |
 |---|--------|--------|-----------|
 | 1 | Auth & IAM | Complete | 14 |
-| 2 | Profile & Users | Complete | 6 |
+| 2 | Profile & Users | Complete | 10 |
 | 3 | Tenants | Complete | 11 |
 | 4 | Templates | Complete | 3 |
 | 5 | Builder (SDUI) | Complete | 19 |
@@ -36,7 +37,7 @@ This file tracks the current state of the backend implementation repository.
 | 8 | Media / DAM | Complete | 10 |
 | 9 | QR Codes | Complete | 2 |
 | 10 | Discovery | Complete | 4 |
-| 11 | Admin | Complete | 4 |
+| 11 | Admin | Complete | 5 |
 | 12 | Notifications | Complete | 19 |
 | 13 | Publishing | Complete | 6 |
 | 14 | Booking & Scheduling | Complete | 35 |
@@ -55,10 +56,10 @@ This file tracks the current state of the backend implementation repository.
 | 27 | Asset Platform Enhanced | Complete | 17 |
 | 28 | BFF - Website | Complete | 3 |
 | 29 | BFF - Tenant Dashboard | Complete | 3 |
-| 30 | BFF - Mobile | Complete | 5 |
+| 30 | BFF - Mobile | Complete | 9 |
 | 31 | BFF - Business Dashboard | Complete | 3 |
 | 32 | Health | Complete | 1 |
-| | **TOTAL** | | **381** |
+| | **TOTAL** | | **390** |
 
 ## Blockers
 

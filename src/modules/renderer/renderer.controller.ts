@@ -9,7 +9,7 @@ import { Public } from '../../common/decorators/public.decorator';
 export class RendererController {
   constructor(private readonly rendererService: RendererService) {}
 
-  @Get('tenants/:id/definition')
+  @Get('merchants/:id/definition')
   @ApiOperation({ summary: 'Get application definition for a tenant' })
   getAppDefinition(@Param('id') id: string) {
     return this.rendererService.getAppDefinition(id);

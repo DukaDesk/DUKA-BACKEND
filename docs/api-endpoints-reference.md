@@ -2,7 +2,7 @@
 
 **Version:** 0.1.0
 **Knowledge Base Version:** KB v0.1.0
-**Last Updated:** 2026-07-16
+**Last Updated:** 2026-07-20
 **Repository:** [DUKA-BACKEND](https://github.com/DukaDesk/DUKA-BACKEND)
 
 ## Overview
@@ -97,6 +97,10 @@ This document catalogs all REST API endpoints exposed by the DUKA-BACKEND servic
 | GET | `/api/v1/profile/consents` | Get all consents |
 | POST | `/api/v1/profile/consents` | Grant consent to a tenant |
 | DELETE | `/api/v1/profile/consents/:tenantId` | Revoke consent for a tenant |
+| POST | `/api/v1/profile/deactivate` | Deactivate profile (30-day soft delete) |
+| POST | `/api/v1/profile/reactivate` | Reactivate within 30-day window |
+| DELETE | `/api/v1/profile` | Immediate permanent deletion |
+| GET | `/api/v1/profile/deactivation-status` | Check remaining days before permanent deletion |
 
 ---
 
@@ -296,6 +300,7 @@ This document catalogs all REST API endpoints exposed by the DUKA-BACKEND servic
 | POST | `/api/v1/admin/tenants/:id/suspend` | Suspend a tenant |
 | GET | `/api/v1/admin/tenants` | Get all tenants (admin) |
 | GET | `/api/v1/admin/stats` | Get platform stats |
+| POST | `/api/v1/admin/cleanup-deactivated` | Purge expired deactivated users |
 
 ---
 
@@ -835,6 +840,10 @@ This document catalogs all REST API endpoints exposed by the DUKA-BACKEND servic
 | GET | `/api/v1/bff/mobile/tenants/:tenantId/catalog` | Get tenant catalog with products |
 | GET | `/api/v1/bff/mobile/profile` | Get aggregated user profile |
 | GET | `/api/v1/bff/mobile/notifications` | Get notifications with unread count |
+| POST | `/api/v1/bff/mobile/profile/deactivate` | Deactivate profile via BFF |
+| POST | `/api/v1/bff/mobile/profile/reactivate` | Reactivate profile via BFF |
+| DELETE | `/api/v1/bff/mobile/profile` | Immediate permanent deletion via BFF |
+| GET | `/api/v1/bff/mobile/profile/deactivation-status` | Check deactivation status via BFF |
 
 ---
 
@@ -861,7 +870,7 @@ This document catalogs all REST API endpoints exposed by the DUKA-BACKEND servic
 | # | Module | Endpoints |
 |---|--------|-----------|
 | 1 | Auth & IAM | 14 |
-| 2 | Profile & Users | 6 |
+| 2 | Profile & Users | 10 |
 | 3 | Tenants | 11 |
 | 4 | Templates | 3 |
 | 5 | Builder (SDUI) | 19 |
@@ -870,7 +879,7 @@ This document catalogs all REST API endpoints exposed by the DUKA-BACKEND servic
 | 8 | Media / DAM | 10 |
 | 9 | QR Codes | 2 |
 | 10 | Discovery | 4 |
-| 11 | Admin | 4 |
+| 11 | Admin | 5 |
 | 12 | Notifications | 19 |
 | 13 | Publishing | 6 |
 | 14 | Booking & Scheduling | 35 |
@@ -889,7 +898,7 @@ This document catalogs all REST API endpoints exposed by the DUKA-BACKEND servic
 | 27 | Asset Platform Enhanced | 17 |
 | 28 | BFF - Website | 3 |
 | 29 | BFF - Tenant Dashboard | 3 |
-| 30 | BFF - Mobile | 5 |
+| 30 | BFF - Mobile | 9 |
 | 31 | BFF - Business Dashboard | 3 |
 | 32 | Health | 1 |
-| | **TOTAL** | **~381** |
+| | **TOTAL** | **~390** |

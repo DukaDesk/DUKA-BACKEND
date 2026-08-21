@@ -11,7 +11,7 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 @ApiTags('Media / DAM')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
-@Controller({ path: 'tenants/:tenantId/media', version: '1' })
+@Controller({ path: 'merchants/:tenantId/media', version: '1' })
 export class MediaController {
   constructor(private readonly mediaService: MediaService) {}
 

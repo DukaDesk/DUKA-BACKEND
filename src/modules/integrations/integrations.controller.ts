@@ -18,7 +18,7 @@ export class IntegrationsController {
     return this.integrationsService.getAvailableConnectors();
   }
 
-  @Post('tenants/:tenantId/integrations/connect')
+  @Post('merchants/:merchantId/integrations/connect')
   @ApiOperation({ summary: 'Connect an integration provider' })
   connect(
     @Param('tenantId') tenantId: string,
@@ -27,31 +27,31 @@ export class IntegrationsController {
     return this.integrationsService.connect(tenantId, data.provider, data.config);
   }
 
-  @Post('tenants/:tenantId/integrations/:provider/disconnect')
+  @Post('merchants/:merchantId/integrations/:provider/disconnect')
   @ApiOperation({ summary: 'Disconnect an integration' })
   disconnect(@Param('tenantId') tenantId: string, @Param('provider') provider: string) {
     return this.integrationsService.disconnect(tenantId, provider);
   }
 
-  @Get('tenants/:tenantId/integrations')
+  @Get('merchants/:merchantId/integrations')
   @ApiOperation({ summary: 'List connected integrations' })
   getConnectors(@Param('tenantId') tenantId: string) {
     return this.integrationsService.getConnectors(tenantId);
   }
 
-  @Get('tenants/:tenantId/integrations/:provider')
+  @Get('merchants/:merchantId/integrations/:provider')
   @ApiOperation({ summary: 'Get integration details' })
   getConnector(@Param('tenantId') tenantId: string, @Param('provider') provider: string) {
     return this.integrationsService.getConnector(tenantId, provider);
   }
 
-  @Post('tenants/:tenantId/integrations/:provider/test')
+  @Post('merchants/:merchantId/integrations/:provider/test')
   @ApiOperation({ summary: 'Test integration connection' })
   testConnection(@Param('tenantId') tenantId: string, @Param('provider') provider: string) {
     return this.integrationsService.testConnection(tenantId, provider);
   }
 
-  @Post('tenants/:tenantId/integrations/:provider/sync')
+  @Post('merchants/:merchantId/integrations/:provider/sync')
   @ApiOperation({ summary: 'Trigger a data sync' })
   @ApiQuery({ name: 'type', required: false, description: 'full | incremental' })
   sync(
@@ -62,13 +62,13 @@ export class IntegrationsController {
     return this.integrationsService.sync(tenantId, provider, type);
   }
 
-  @Get('tenants/:tenantId/integrations/:provider/sync-history')
+  @Get('merchants/:merchantId/integrations/:provider/sync-history')
   @ApiOperation({ summary: 'Get sync job history' })
   getSyncHistory(@Param('tenantId') tenantId: string, @Param('provider') provider: string) {
     return this.integrationsService.getSyncHistory(tenantId, provider);
   }
 
-  @Post('tenants/:tenantId/integrations/webhook')
+  @Post('merchants/:merchantId/integrations/webhook')
   @ApiOperation({ summary: 'Queue an outgoing webhook' })
   queueWebhook(
     @Param('tenantId') tenantId: string,

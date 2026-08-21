@@ -30,7 +30,7 @@ export class MobileBffController {
   }
 
   @Public()
-  @Get('tenants/:tenantId/catalog')
+  @Get('merchants/:tenantId/catalog')
   @ApiOperation({ summary: 'Get tenant catalog with products' })
   getCatalog(@Param('tenantId') tenantId: string, @Query() query: any) {
     return this.mobile.getTenantCatalog(tenantId, query);
