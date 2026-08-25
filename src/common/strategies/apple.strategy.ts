@@ -19,7 +19,7 @@ export class AppleStrategy extends PassportStrategy(Strategy, 'apple') {
       teamID,
       keyID,
       privateKeyLocation: configService.get<string>('APPLE_PRIVATE_KEY_PATH') || '',
-      callbackURL: configService.get<string>('APPLE_CALLBACK_URL') || 'http://localhost:4000/api/v1/auth/apple/callback',
+      callbackURL: configService.get<string>('APPLE_CALLBACK_URL') || 'https://duka-backend-production.up.railway.app/api/v1/auth/apple/callback',
       scope: ['name', 'email'],
     } : {
       clientID: 'disabled',

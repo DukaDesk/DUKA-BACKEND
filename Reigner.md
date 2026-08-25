@@ -141,7 +141,7 @@ npm run prisma:generate
 npm run prisma:migrate
 npm run prisma:seed
 
-# Dev server (hot reload) on http://localhost:4000
+# Dev server (hot reload) on https://duka-backend-production.up.railway.app
 npm run start:dev
 ```
 

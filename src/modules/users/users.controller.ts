@@ -1,76 +1,111 @@
-import { Controller, Get, Put, Post, Delete, Body, Param, UseGuards } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
-import { UsersService } from './users.service';
-import { UpdateProfileDto } from './dto/update-profile.dto';
-import { GrantConsentDto } from './dto/grant-consent.dto';
-import { DeactivateProfileDto } from './dto/deactivate-profile.dto';
+import {
+  Controller, Get, Post, Body, Param, UseGuards, Query,
+  Delete,
+} from '@nestjs/common';
+import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery, ApiParam } from '@nestjs/swagger';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { RbacGuard } from '../../common/guards/rbac.guard';
+import { UsersService } from './users.service';
 
-@ApiTags('Profile')
+@Controller('admin/users')
+@ApiTags('Admin - User Management')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
-@Controller({ path: 'profile', version: '1' })
-export class ProfileController {
+@UseGuards(JwtAuthGuard, RbacGuard)
+export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   @Get()
-  @ApiOperation({ summary: 'Get current user profile' })
-  getProfile(@CurrentUser('id') userId: string) {
-    return this.usersService.getProfile(userId);
+  @ApiOperation({ summary: 'List all users (paginated, filter: email, role, tenant, status)' })
+  @ApiQuery({ name: 'page', required: false, type: Number, default: 1 })
+  @ApiQuery({ name: 'limit', required: false, type: Number, default: 50 })
+  @ApiQuery({ name: 'email', required: false })
+  @ApiQuery({ name: 'role', required: false })
+  @ApiQuery({ name: 'tenantId', required: false })
+  @ApiQuery({ name: 'status', required: false })
+  async listUsers(
+    @Query() query: {
+      page?: number;
+      limit?: number;
+      email?: string;
+      role?: string;
+      tenantId?: string;
+      status?: string;
+    },
+    @CurrentUser('id') adminUserId: string,
+  ) {
+    return this.usersService.listUsers(
+      query.page,
+      query.limit,
+      {
+        email: query.email,
+        role: query.role,
+        tenantId: query.tenantId,
+        status: query.status,
+      },
+    );
   }
 
-  @Put()
-  @ApiOperation({ summary: 'Update user profile' })
-  updateProfile(@CurrentUser('id') userId: string, @Body() dto: UpdateProfileDto) {
-    return this.usersService.updateProfile(userId, dto);
+  @Get(':id')
+  @ApiOperation({ summary: 'Get user detail: profile, roles, tenant memberships, last login' })
+  @ApiParam({ name: 'id', description: 'User ID' })
+  async getUserById(@Param() param: { id: string }, @CurrentUser('id') adminUserId: string) {
+    return this.usersService.getUserById(param.id);
   }
 
-  @Get('memberships')
-  @ApiOperation({ summary: 'Get all tenant memberships' })
-  getMemberships(@CurrentUser('id') userId: string) {
-    return this.usersService.getMemberships(userId);
+  @Post(':id/invite')
+  @ApiOperation({ summary: 'Invite user to tenant (sends email with invite link)' })
+  @ApiParam({ name: 'id', description: 'Target user ID' })
+  @ApiQuery({ name: 'role', required: false, description: 'Role to assign' })
+  @ApiQuery({ name: 'tenantId', required: false, description: 'Tenant ID' })
+  async inviteUser(
+    @Param() param: { id: string },
+    @Body() body: { email: string; role?: string; tenantId?: string },
+    @CurrentUser('id') adminUserId: string,
+  ) {
+    return this.usersService.inviteUser({
+      email: body.email,
+      role: body.role || 'staff',
+      tenantId: body.tenantId || param.id,
+      inviterId: adminUserId,
+    });
   }
 
-  @Get('consents')
-  @ApiOperation({ summary: 'Get all consents' })
-  getConsents(@CurrentUser('id') userId: string) {
-    return this.usersService.getConsents(userId);
+  @Post(':id/roles')
+  @ApiOperation({ summary: 'Assign/update roles for user in tenant(s)' })
+  @ApiParam({ name: 'id', description: 'User ID' })
+  async assignUserRoles(
+    @Param() param: { id: string },
+    @Body() body: { role: string; tenantId: string },
+    @CurrentUser('id') adminUserId: string,
+  ) {
+    return this.usersService.assignUserRoles(param.id, {
+      role: body.role,
+      tenantId: body.tenantId,
+    });
   }
 
-  @Post('consents')
-  @ApiOperation({ summary: 'Grant consent to a tenant' })
-  grantConsent(@CurrentUser('id') userId: string, @Body() dto: GrantConsentDto) {
-    return this.usersService.grantConsent(userId, dto);
+  @Delete(':id')
+  @ApiOperation({ summary: 'Remove user from platform' })
+  @ApiParam({ name: 'id', description: 'User ID' })
+  async removeUser(
+    @Param() param: { id: string },
+    @CurrentUser('id') adminUserId: string,
+    @Query('tenantId') tenantId?: string,
+  ) {
+    return this.usersService.removeUser(param.id, tenantId);
   }
 
-  @Delete('consents/:tenantId')
-  @ApiOperation({ summary: 'Revoke consent for a tenant' })
-  revokeConsent(@CurrentUser('id') userId: string, @Param('tenantId') tenantId: string) {
-    return this.usersService.revokeConsent(userId, tenantId);
-  }
-
-  @Post('deactivate')
-  @ApiOperation({ summary: 'Deactivate profile (30-day soft delete before permanent deletion)' })
-  deactivate(@CurrentUser('id') userId: string, @Body() dto?: DeactivateProfileDto) {
-    return this.usersService.deactivate(userId, dto);
-  }
-
-  @Post('reactivate')
-  @ApiOperation({ summary: 'Reactivate a deactivated profile' })
-  reactivate(@CurrentUser('id') userId: string) {
-    return this.usersService.reactivate(userId);
-  }
-
-  @Delete()
-  @ApiOperation({ summary: 'Permanently delete profile immediately (GDPR/Apple/Google compliance)' })
-  permanentDelete(@CurrentUser('id') userId: string) {
-    return this.usersService.permanentDelete(userId);
-  }
-
-  @Get('deactivation-status')
-  @ApiOperation({ summary: 'Get deactivation status and days remaining' })
-  getDeactivationStatus(@CurrentUser('id') userId: string) {
-    return this.usersService.getDeactivationStatus(userId);
+  @Get('tenant/:tenantId')
+  @ApiOperation({ summary: 'Users scoped to a tenant (Tenant detail → Users tab)' })
+  @ApiParam({ name: 'tenantId', description: 'Tenant ID' })
+  @ApiQuery({ name: 'page', required: false, type: Number, default: 1 })
+  @ApiQuery({ name: 'limit', required: false, type: Number, default: 50 })
+  async getTenantUsers(
+    @Param() param: { tenantId: string },
+    @Query() query: { page?: number; limit?: number },
+    @CurrentUser('id') adminUserId: string,
+  ) {
+    return this.usersService.getTenantUsers(param.tenantId, query.page, query.limit);
   }
 }

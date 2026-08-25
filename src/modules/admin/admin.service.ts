@@ -65,4 +65,29 @@ export class AdminService {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new NotFoundException('User not found');
   }
+
+  async cleanupDeactivatedAccounts() {
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    const deactivatedUsers = await this.prisma.user.findMany({
+      where: {
+        status: 'deactivated',
+        scheduledDeletionAt: {
+          lte: thirtyDaysAgo,
+        },
+      },
+    });
+
+    await this.prisma.user.deleteMany({
+      where: {
+        status: 'deactivated',
+        scheduledDeletionAt: {
+          lte: thirtyDaysAgo,
+        },
+      },
+    });
+
+    return { deletedCount: deactivatedUsers.length };
+  }
 }
