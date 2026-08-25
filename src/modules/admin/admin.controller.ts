@@ -1,5 +1,5 @@
-import { Controller, Get, Post, Param, UseGuards, Query } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery } from '@nestjs/swagger';
+import { Controller, Get, Post, Put, Delete, Param, UseGuards, Query, Body } from '@nestjs/common';
+import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery, ApiBody } from '@nestjs/swagger';
 import { AdminService } from './admin.service';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -30,15 +30,46 @@ export class AdminController {
     return this.adminService.getTenants(userId, status);
   }
 
-  @Get('stats')
-  @ApiOperation({ summary: 'Get platform stats' })
-  getStats(@CurrentUser('id') userId: string) {
-    return this.adminService.getStats(userId);
+  @Get('merchants/:id')
+  @ApiOperation({ summary: 'Get tenant detail' })
+  getTenantDetail(@Param('id') id: string) {
+    return this.adminService.getTenantDetail(id);
+  }
+
+@Post('merchants')
+  @ApiOperation({ summary: 'Create a new tenant' })
+  @ApiBody({ type: 'object' })
+  createTenant(@CurrentUser('id') adminUserId: string, @Body() data: {
+    name: string; slug: string; description?: string; status?: 'draft' | 'published' | 'suspended'; config?: Record<string, any>;
+  }) {
+    return this.adminService.createTenant(adminUserId, data);
+  }
+
+  @Put('merchants/:id')
+  @ApiOperation({ summary: 'Update tenant' })
+  updateTenant(@CurrentUser('id') adminUserId: string, @Param('id') id: string, @Body() data: {
+    name?: string; slug?: string; description?: string; status?: 'draft' | 'published' | 'suspended'; config?: Record<string, any>;
+  }) {
+    return this.adminService.updateTenant(adminUserId, id, data);
   }
 
   @Post('cleanup-deactivated')
   @ApiOperation({ summary: 'Permanently delete accounts past 30-day deactivation period' })
   cleanupDeactivated(@CurrentUser('id') userId: string) {
     return this.adminService.cleanupDeactivatedAccounts();
+  }
+
+  // ─── Tenant Settings ──────────────────────────────────────────
+
+  @Get('merchants/:tenantId/settings')
+  @ApiOperation({ summary: 'Get tenant settings' })
+  getTenantSettings(@Param('tenantId') tenantId: string, @Query('category') category?: string) {
+    return this.adminService.getTenantSettings(tenantId, category);
+  }
+
+  @Put('merchants/:tenantId/settings/:key')
+  @ApiOperation({ summary: 'Update tenant setting' })
+  updateTenantSetting(@CurrentUser('id') adminUserId: string, @Param('tenantId') tenantId: string, @Param('key') key: string, @Body() data: any) {
+    return this.adminService.updateTenantSetting(tenantId, key, data, adminUserId);
   }
 }
