@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client';
+import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
 
@@ -63,6 +64,36 @@ async function main() {
         });
       }
     }
+  }
+
+  // Seed super admin user (idempotent: only sets the bootstrap password on first create)
+  const superAdminEmail = process.env.SUPER_ADMIN_EMAIL || 'superadmin@duka.dev';
+  const superAdminPassword = process.env.SUPER_ADMIN_PASSWORD || 'DukaAdmin#rG2HCNf3ycJ539';
+  const superAdminHash = await bcrypt.hash(superAdminPassword, 12);
+  const superAdminUser = await prisma.user.upsert({
+    where: { email: superAdminEmail },
+    update: {},
+    create: {
+      email: superAdminEmail,
+      passwordHash: superAdminHash,
+      firstName: 'Super',
+      lastName: 'Admin',
+      status: 'active',
+      emailVerified: true,
+    },
+  });
+  if (superAdminRole) {
+    await prisma.userRole.upsert({
+      where: {
+        userId_roleId_tenantId: {
+          userId: superAdminUser.id,
+          roleId: superAdminRole.id,
+          tenantId: null,
+        },
+      },
+      update: {},
+      create: { userId: superAdminUser.id, roleId: superAdminRole.id, tenantId: null },
+    });
   }
 
   // Seed starter subscription plans
