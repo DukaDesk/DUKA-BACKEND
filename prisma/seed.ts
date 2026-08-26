@@ -83,17 +83,14 @@ async function main() {
     },
   });
   if (superAdminRole) {
-    await prisma.userRole.upsert({
-      where: {
-        userId_roleId_tenantId: {
-          userId: superAdminUser.id,
-          roleId: superAdminRole.id,
-          tenantId: null,
-        },
-      },
-      update: {},
-      create: { userId: superAdminUser.id, roleId: superAdminRole.id, tenantId: null },
+    const existingRole = await prisma.userRole.findFirst({
+      where: { userId: superAdminUser.id, roleId: superAdminRole.id, tenantId: null },
     });
+    if (!existingRole) {
+      await prisma.userRole.create({
+        data: { userId: superAdminUser.id, roleId: superAdminRole.id, tenantId: null },
+      });
+    }
   }
 
   // Seed starter subscription plans
