@@ -41,6 +41,7 @@ import { QueueModule } from './shared/queue/queue.module';
 import { LoggerModule } from './common/logger/logger.module';
 import { CorrelationIdMiddleware } from './common/middleware/correlation-id.middleware';
 import { TenantResolverMiddleware } from './shared/context/tenant-resolver.middleware';
+import { SuperAdminBootstrap } from './common/bootstrap/super-admin.bootstrap';
 
 @Module({
   imports: [
@@ -102,6 +103,7 @@ import { TenantResolverMiddleware } from './shared/context/tenant-resolver.middl
       provide: APP_GUARD,
       useClass: ThrottlerGuard,
     },
+    SuperAdminBootstrap,
   ],
 })
 export class AppModule implements NestModule {
