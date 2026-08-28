@@ -67,41 +67,33 @@ async function main() {
   }
 
   // Seed super admin user.
-  // Credentials are env-driven — never hardcode secrets in source.
-  // A simple dev default is used only outside production.
-  const isProd = process.env.NODE_ENV === 'production';
-  const superAdminEmail =
-    process.env.SUPER_ADMIN_EMAIL || (isProd ? '' : 'superadmin@duka.dev');
-  const superAdminPassword =
-    process.env.SUPER_ADMIN_PASSWORD || (isProd ? '' : 'admin123');
-
-  if (!superAdminEmail || !superAdminPassword) {
-    console.warn(
-      '[seed] SUPER_ADMIN_EMAIL / SUPER_ADMIN_PASSWORD not set — skipping super admin seed.',
-    );
-  } else {
-    const superAdminHash = await bcrypt.hash(superAdminPassword, 12);
-    const superAdminUser = await prisma.user.upsert({
-      where: { email: superAdminEmail },
-      update: { passwordHash: superAdminHash },
-      create: {
-        email: superAdminEmail,
-        passwordHash: superAdminHash,
-        firstName: 'Super',
-        lastName: 'Admin',
-        status: 'active',
-        emailVerified: true,
-      },
+  // Normal /auth/login flow authenticates this account. The password is
+  // env-overridable but falls back to a simple bootstrap default so a fresh
+  // database always has a working admin account. The password is force-updated
+  // on every seed run so redeploys can recover from an unknown prior password.
+  const superAdminEmail = process.env.SUPER_ADMIN_EMAIL || 'superadmin@duka.dev';
+  const superAdminPassword = process.env.SUPER_ADMIN_PASSWORD || 'admin123';
+  const superAdminHash = await bcrypt.hash(superAdminPassword, 12);
+  const superAdminUser = await prisma.user.upsert({
+    where: { email: superAdminEmail },
+    update: { passwordHash: superAdminHash },
+    create: {
+      email: superAdminEmail,
+      passwordHash: superAdminHash,
+      firstName: 'Super',
+      lastName: 'Admin',
+      status: 'active',
+      emailVerified: true,
+    },
+  });
+  if (superAdminRole) {
+    const existingRole = await prisma.userRole.findFirst({
+      where: { userId: superAdminUser.id, roleId: superAdminRole.id, tenantId: null },
     });
-    if (superAdminRole) {
-      const existingRole = await prisma.userRole.findFirst({
-        where: { userId: superAdminUser.id, roleId: superAdminRole.id, tenantId: null },
+    if (!existingRole) {
+      await prisma.userRole.create({
+        data: { userId: superAdminUser.id, roleId: superAdminRole.id, tenantId: null },
       });
-      if (!existingRole) {
-        await prisma.userRole.create({
-          data: { userId: superAdminUser.id, roleId: superAdminRole.id, tenantId: null },
-        });
-      }
     }
   }
 
