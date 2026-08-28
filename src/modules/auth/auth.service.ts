@@ -13,6 +13,7 @@ import * as appleSignin from 'apple-signin-auth';
 import { PrismaService } from '../../common/prisma.service';
 import { PasswordService } from '../iam/password.service';
 import { RedisService } from '../../common/redis/redis.service';
+import { EmailAdapter } from '../notifications/adapters/email.adapter';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { RefreshDto } from './dto/refresh.dto';
@@ -22,12 +23,15 @@ import { randomUUID } from 'crypto';
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private prisma: PrismaService,
     private jwtService: JwtService,
     private configService: ConfigService,
     private passwordService: PasswordService,
     private redis: RedisService,
+    private emailAdapter: EmailAdapter,
   ) {}
 
   async register(dto: RegisterDto) {
@@ -121,7 +125,22 @@ export class AuthService {
   async sendOtp(email: string) {
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     await this.redis.set(`otp:${email}`, otp, 300);
-    console.log(`OTP for ${email}: ${otp}`);
+    this.logger.log(`OTP for ${email}: ${otp}`);
+
+    try {
+      const result = await this.emailAdapter.send({
+        to: email,
+        subject: 'Your DUKADESK login code',
+        body: `Your DUKADESK verification code is ${otp}. It expires in 5 minutes.`,
+        html: `<p>Your DUKADESK verification code is <strong>${otp}</strong>.</p><p>It expires in 5 minutes.</p>`,
+      });
+      if (!result.success) {
+        this.logger.warn(`OTP email delivery failed for ${email}: ${result.error ?? 'unknown error'}`);
+      }
+    } catch (err: any) {
+      this.logger.warn(`OTP email delivery error for ${email}: ${err?.message ?? err}`);
+    }
+
     return { message: 'OTP sent successfully' };
   }
 

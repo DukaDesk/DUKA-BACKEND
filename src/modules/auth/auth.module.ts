@@ -6,9 +6,11 @@ import { AuthService } from './auth.service';
 import { JwtStrategy } from '../../common/strategies/jwt.strategy';
 import { GoogleStrategy } from '../../common/strategies/google.strategy';
 import { AppleStrategy } from '../../common/strategies/apple.strategy';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
+    NotificationsModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
