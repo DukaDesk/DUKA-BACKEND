@@ -123,6 +123,10 @@ export class AuthService {
   }
 
   async sendOtp(email: string) {
+    if (!email || typeof email !== 'string') {
+      throw new BadRequestException('Email is required and must be a valid string');
+    }
+
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     await this.redis.set(`otp:${email}`, otp, 300);
     this.logger.log(`OTP for ${email}: ${otp}`);
@@ -131,14 +135,14 @@ export class AuthService {
       const result = await this.emailAdapter.send({
         to: email,
         subject: 'Your DUKADESK login code',
-        body: `Your DUKADESK verification code is ${otp}. It expires in 5 minutes.`,
-        html: `<p>Your DUKADESK verification code is <strong>${otp}</strong>.</p><p>It expires in 5 minutes.</p>`,
+        body: `Your verification code is ${otp}. It expires in 5 minutes.`,
+        html: `<p>Your verification code is <strong>${otp}</strong>. It expires in 5 minutes.</p>`,
       });
       if (!result.success) {
-        this.logger.warn(`OTP email delivery failed for ${email}: ${result.error ?? 'unknown error'}`);
+        this.logger.warn(`[OTP] Email delivery failed for ${email}. Resend response: ${result.error ?? 'unknown'}. Payload: to=${email}, subject=${'Your DUKADESK login code'}`,);
       }
     } catch (err: any) {
-      this.logger.warn(`OTP email delivery error for ${email}: ${err?.message ?? err}`);
+      this.logger.warn(`[OTP] Email delivery error for ${email}: ${err?.message ?? err}`);
     }
 
     return { message: 'OTP sent successfully' };
