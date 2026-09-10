@@ -1,9 +1,12 @@
 import { Module } from '@nestjs/common';
-import { FormsController } from './forms.controller';
+import { FormsAppController } from './forms-app.controller';
+import { FormsPublicController } from './forms-public.controller';
 import { FormsService } from './forms.service';
+import { TenantResolverModule } from '../../shared/tenant/tenant-resolver.module';
 
 @Module({
-  controllers: [FormsController],
+  imports: [TenantResolverModule],
+  controllers: [FormsAppController, FormsPublicController],
   providers: [FormsService],
   exports: [FormsService],
 })
