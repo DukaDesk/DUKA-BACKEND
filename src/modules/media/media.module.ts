@@ -1,10 +1,12 @@
 import { Module } from '@nestjs/common';
-import { MediaController } from './media.controller';
+import { MediaAppController } from './media-app.controller';
 import { MediaService } from './media.service';
 import { ImageOptimizer } from './image-optimizer.service';
+import { TenantResolverModule } from '../../shared/tenant/tenant-resolver.module';
 
 @Module({
-  controllers: [MediaController],
+  imports: [TenantResolverModule],
+  controllers: [MediaAppController],
   providers: [MediaService, ImageOptimizer],
   exports: [MediaService, ImageOptimizer],
 })

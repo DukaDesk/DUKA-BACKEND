@@ -153,16 +153,16 @@ export class PlatformAdminController {
 
   // ─── API Quotas ──────────────────────────────────────────────
 
-  @Get('admin/quotas/:tenantId')
-  @ApiOperation({ summary: 'Get tenant API quota' })
-  getQuota(@Param('tenantId') tenantId: string) {
-    return this.adminService.getApiQuota(tenantId);
+  @Get('admin/quotas/:merchantId')
+  @ApiOperation({ summary: 'Get merchant API quota' })
+  getQuota(@Param('merchantId') merchantId: string) {
+    return this.adminService.getApiQuota(merchantId);
   }
 
-  @Put('admin/quotas/:tenantId')
-  @ApiOperation({ summary: 'Update tenant API quota' })
-  updateQuota(@Param('tenantId') tenantId: string, @Body() data: any) {
-    return this.adminService.updateApiQuota(tenantId, data);
+  @Put('admin/quotas/:merchantId')
+  @ApiOperation({ summary: 'Update merchant API quota' })
+  updateQuota(@Param('merchantId') merchantId: string, @Body() data: any) {
+    return this.adminService.updateApiQuota(merchantId, data);
   }
 
   // ─── Subscriptions ───────────────────────────────────────────

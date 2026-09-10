@@ -1,5 +1,5 @@
 import { Controller, Post, Get, Put, Body, UseGuards } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
+import { ApiTags, ApiBearerAuth, ApiBody, ApiOperation } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
@@ -47,6 +47,18 @@ export class AuthController {
   @Public()
   @Post('send-otp')
   @ApiOperation({ summary: 'Send OTP to email' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        email: {
+          type: 'string',
+          format: 'email',
+          description: 'The email address to send the OTP to',
+        },
+      },
+    },
+  })
   sendOtp(@Body('email') email: string) {
     return this.authService.sendOtp(email);
   }

@@ -30,10 +30,10 @@ export class MobileBffController {
   }
 
   @Public()
-  @Get('merchants/:tenantId/catalog')
-  @ApiOperation({ summary: 'Get tenant catalog with products' })
-  getCatalog(@Param('tenantId') tenantId: string, @Query() query: any) {
-    return this.mobile.getTenantCatalog(tenantId, query);
+  @Get('merchants/:merchantId/catalog')
+  @ApiOperation({ summary: 'Get merchant catalog with products' })
+  getCatalog(@Param('merchantId') merchantId: string, @Query() query: any) {
+    return this.mobile.getTenantCatalog(merchantId, query);
   }
 
   @UseGuards(JwtAuthGuard)

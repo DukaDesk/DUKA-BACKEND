@@ -61,15 +61,15 @@ export class AdminController {
 
   // ─── Tenant Settings ──────────────────────────────────────────
 
-  @Get('merchants/:tenantId/settings')
-  @ApiOperation({ summary: 'Get tenant settings' })
-  getTenantSettings(@Param('tenantId') tenantId: string, @Query('category') category?: string) {
-    return this.adminService.getTenantSettings(tenantId, category);
+  @Get('merchants/:merchantId/settings')
+  @ApiOperation({ summary: 'Get merchant settings' })
+  getTenantSettings(@Param('merchantId') merchantId: string, @Query('category') category?: string) {
+    return this.adminService.getTenantSettings(merchantId, category);
   }
 
-  @Put('merchants/:tenantId/settings/:key')
-  @ApiOperation({ summary: 'Update tenant setting' })
-  updateTenantSetting(@CurrentUser('id') adminUserId: string, @Param('tenantId') tenantId: string, @Param('key') key: string, @Body() data: any) {
-    return this.adminService.updateTenantSetting(tenantId, key, data, adminUserId);
+  @Put('merchants/:merchantId/settings/:key')
+  @ApiOperation({ summary: 'Update merchant setting' })
+  updateTenantSetting(@CurrentUser('id') adminUserId: string, @Param('merchantId') merchantId: string, @Param('key') key: string, @Body() data: any) {
+    return this.adminService.updateTenantSetting(merchantId, key, data, adminUserId);
   }
 }

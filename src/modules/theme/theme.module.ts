@@ -1,10 +1,13 @@
 import { Module } from '@nestjs/common';
-import { ThemeController } from './theme.controller';
+import { ThemeAppController } from './theme-app.controller';
+import { ThemePublicController } from './theme-public.controller';
 import { ThemeService } from './theme.service';
 import { ThemeCompiler } from './theme-compiler.service';
+import { TenantResolverModule } from '../../shared/tenant/tenant-resolver.module';
 
 @Module({
-  controllers: [ThemeController],
+  imports: [TenantResolverModule],
+  controllers: [ThemeAppController, ThemePublicController],
   providers: [ThemeService, ThemeCompiler],
   exports: [ThemeService, ThemeCompiler],
 })

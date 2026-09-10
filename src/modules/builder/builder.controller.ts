@@ -3,18 +3,19 @@ import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { BuilderService } from './builder.service';
 import { PreviewOutput, RenderedPage } from './live-preview.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
 
 @ApiTags('Builder')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
-@Controller({ path: 'merchants/:tenantId', version: '1' })
+@Controller({ path: 'app', version: '1' })
 export class BuilderController {
   constructor(private readonly builderService: BuilderService) {}
 
   @Get('pages')
-  @ApiOperation({ summary: 'Get all pages for a tenant' })
-  getPages(@Param('tenantId') tenantId: string) {
-    return this.builderService.getPages(tenantId);
+  @ApiOperation({ summary: 'Get all pages for the current app' })
+  getPages(@CurrentUser('id') userId: string) {
+    return this.builderService.getPages(userId);
   }
 
   @Put('pages/:pageId')
@@ -48,15 +49,15 @@ export class BuilderController {
   }
 
   @Get('navigation')
-  @ApiOperation({ summary: 'Get navigation for a tenant' })
-  getNavigation(@Param('tenantId') tenantId: string) {
-    return this.builderService.getNavigation(tenantId);
+  @ApiOperation({ summary: 'Get navigation for the current app' })
+  getNavigation(@CurrentUser('id') userId: string) {
+    return this.builderService.getNavigation(userId);
   }
 
   @Put('navigation')
-  @ApiOperation({ summary: 'Update navigation for a tenant' })
-  updateNavigation(@Param('tenantId') tenantId: string, @Body() items: any) {
-    return this.builderService.updateNavigation(tenantId, items);
+  @ApiOperation({ summary: 'Update navigation for the current app' })
+  updateNavigation(@CurrentUser('id') userId: string, @Body() items: any) {
+    return this.builderService.updateNavigation(userId, items);
   }
 
   // ─── Component Registry ───────────────────────────────────
@@ -100,28 +101,28 @@ export class BuilderController {
   @Post('data-binding/resolve')
   @ApiOperation({ summary: 'Resolve a data binding against context' })
   resolveDataBinding(
-    @Param('tenantId') tenantId: string,
+    @CurrentUser('id') userId: string,
     @Body() body: { binding: any; context: Record<string, any> },
   ) {
-    return this.builderService.resolveDataBinding(body.binding, body.context, tenantId);
+    return this.builderService.resolveDataBinding(body.binding, body.context, userId);
   }
 
   // ─── Live Preview ──────────────────────────────────────────
 
   @Post('preview')
-  @ApiOperation({ summary: 'Preview the full tenant rendering with optional context overrides' })
-  previewTenant(@Param('tenantId') tenantId: string, @Body() context?: any): Promise<PreviewOutput> {
-    return this.builderService.previewTenant(tenantId, context);
+  @ApiOperation({ summary: 'Preview the full app rendering with optional context overrides' })
+  previewTenant(@CurrentUser('id') userId: string, @Body() context?: any): Promise<PreviewOutput> {
+    return this.builderService.previewTenant(userId, context);
   }
 
   @Post('pages/:pageId/preview')
   @ApiOperation({ summary: 'Preview a single page with optional context overrides' })
   previewPage(
-    @Param('tenantId') tenantId: string,
+    @CurrentUser('id') userId: string,
     @Param('pageId') pageId: string,
     @Body() context?: any,
   ): Promise<RenderedPage> {
-    return this.builderService.previewPage(tenantId, pageId, context);
+    return this.builderService.previewPage(userId, pageId, context);
   }
 
   // ─── Component Preview ─────────────────────────────────────
@@ -129,23 +130,23 @@ export class BuilderController {
   @Post('component-preview')
   @ApiOperation({ summary: 'Validate and preview a component configuration' })
   componentPreview(
-    @Param('tenantId') tenantId: string,
+    @CurrentUser('id') userId: string,
     @Body() data: { type: string; props: Record<string, any> },
   ) {
-    return this.builderService.componentPreview(tenantId, data);
+    return this.builderService.componentPreview(userId, data);
   }
 
   // ─── Legacy theme endpoints ────────────────────────────────
 
   @Get('theme')
-  @ApiOperation({ summary: 'Get theme for a tenant' })
-  getTheme(@Param('tenantId') tenantId: string) {
-    return this.builderService.getTheme(tenantId);
+  @ApiOperation({ summary: 'Get theme for the current app' })
+  getTheme(@CurrentUser('id') userId: string) {
+    return this.builderService.getTheme(userId);
   }
 
   @Put('theme')
-  @ApiOperation({ summary: 'Update theme for a tenant' })
-  updateTheme(@Param('tenantId') tenantId: string, @Body() data: any) {
-    return this.builderService.updateTheme(tenantId, data);
+  @ApiOperation({ summary: 'Update theme for the current app' })
+  updateTheme(@CurrentUser('id') userId: string, @Body() data: any) {
+    return this.builderService.updateTheme(userId, data);
   }
 }

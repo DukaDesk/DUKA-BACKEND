@@ -5,34 +5,44 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiConsumes } from '@nestjs/swagger';
 import { MediaService } from './media.service';
-import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { TenantResolverService } from '../../shared/tenant/tenant-resolver.service';
 
-@ApiTags('Media / DAM')
+@ApiTags('Media / DAM - App (Tenant Self-Service)')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
-@Controller({ path: 'merchants/:tenantId/media', version: '1' })
-export class MediaController {
-  constructor(private readonly mediaService: MediaService) {}
+@Controller({ path: 'app/media', version: '1' })
+export class MediaAppController {
+  constructor(
+    private readonly mediaService: MediaService,
+    private readonly tenantResolver: TenantResolverService,
+  ) {}
+
+  private async getTenantId(userId: string): Promise<string> {
+    return this.tenantResolver.resolveTenantId(userId);
+  }
 
   @Post('upload')
   @ApiOperation({ summary: 'Upload file with auto-optimization and variant generation' })
   @ApiConsumes('multipart/form-data')
   @UseInterceptors(FileInterceptor('file'))
-  upload(
-    @Param('tenantId') tenantId: string,
+  async upload(
+    @CurrentUser('id') userId: string,
     @UploadedFile() file: any,
     @Query('folderId') folderId?: string,
   ) {
+    const tenantId = await this.getTenantId(userId);
     return this.mediaService.upload(tenantId, file, folderId);
   }
 
   @Get()
   @ApiOperation({ summary: 'List media files, optionally filtered by folder' })
-  findAll(
-    @Param('tenantId') tenantId: string,
+  async findAll(
+    @CurrentUser('id') userId: string,
     @Query('folderId') folderId?: string,
   ) {
+    const tenantId = await this.getTenantId(userId);
     return this.mediaService.findAll(tenantId, folderId);
   }
 
@@ -64,19 +74,21 @@ export class MediaController {
 
   @Post('folders')
   @ApiOperation({ summary: 'Create asset folder' })
-  createFolder(
-    @Param('tenantId') tenantId: string,
+  async createFolder(
+    @CurrentUser('id') userId: string,
     @Body() data: { name: string; parentId?: string },
   ) {
+    const tenantId = await this.getTenantId(userId);
     return this.mediaService.createFolder(tenantId, data.name, data.parentId);
   }
 
   @Get('folders')
   @ApiOperation({ summary: 'List asset folders' })
-  getFolders(
-    @Param('tenantId') tenantId: string,
+  async getFolders(
+    @CurrentUser('id') userId: string,
     @Query('parentId') parentId?: string,
   ) {
+    const tenantId = await this.getTenantId(userId);
     return this.mediaService.getFolders(tenantId, parentId);
   }
 

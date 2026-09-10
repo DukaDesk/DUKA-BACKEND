@@ -96,16 +96,16 @@ export class UsersController {
     return this.usersService.removeUser(param.id, tenantId);
   }
 
-  @Get('tenant/:tenantId')
-  @ApiOperation({ summary: 'Users scoped to a tenant (Tenant detail → Users tab)' })
-  @ApiParam({ name: 'tenantId', description: 'Tenant ID' })
+  @Get('merchant/:merchantId')
+  @ApiOperation({ summary: 'Users scoped to a merchant (Merchant detail → Users tab)' })
+  @ApiParam({ name: 'merchantId', description: 'Merchant ID' })
   @ApiQuery({ name: 'page', required: false, type: Number, default: 1 })
   @ApiQuery({ name: 'limit', required: false, type: Number, default: 50 })
-  async getTenantUsers(
-    @Param() param: { tenantId: string },
+  async getMerchantUsers(
+    @Param() param: { merchantId: string },
     @Query() query: { page?: number; limit?: number },
     @CurrentUser('id') adminUserId: string,
   ) {
-    return this.usersService.getTenantUsers(param.tenantId, query.page, query.limit);
+    return this.usersService.getTenantUsers(param.merchantId, query.page, query.limit);
   }
 }

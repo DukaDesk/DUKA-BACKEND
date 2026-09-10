@@ -11,10 +11,10 @@ export class QrController {
 
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @Post('generate/:tenantId')
-  @ApiOperation({ summary: 'Generate QR code data for a tenant' })
-  generate(@Param('tenantId') tenantId: string) {
-    return this.qrService.generate(tenantId);
+  @Post('generate/:merchantId')
+  @ApiOperation({ summary: 'Generate QR code data for a merchant' })
+  generate(@Param('merchantId') merchantId: string) {
+    return this.qrService.generate(merchantId);
   }
 
   @Public()

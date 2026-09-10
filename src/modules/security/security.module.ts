@@ -1,9 +1,12 @@
 import { Module } from '@nestjs/common';
-import { SecurityController } from './security.controller';
+import { SecurityAppController } from './security-app.controller';
+import { SecurityPublicController } from './security-public.controller';
 import { SecurityService } from './security.service';
+import { TenantResolverModule } from '../../shared/tenant/tenant-resolver.module';
 
 @Module({
-  controllers: [SecurityController],
+  imports: [TenantResolverModule],
+  controllers: [SecurityAppController, SecurityPublicController],
   providers: [SecurityService],
   exports: [SecurityService],
 })

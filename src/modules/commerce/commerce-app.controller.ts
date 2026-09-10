@@ -5,27 +5,30 @@ import {
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery } from '@nestjs/swagger';
 import { CommerceService } from './commerce.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
-import { Public } from '../../common/decorators/public.decorator';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { TenantResolverService } from '../../shared/tenant/tenant-resolver.service';
 
-@ApiTags('Commerce')
-@Controller({ version: '1' })
-export class CommerceController {
-  constructor(private readonly commerceService: CommerceService) {}
+@ApiTags('Commerce - App (Tenant Self-Service)')
+@ApiBearerAuth()
+@UseGuards(JwtAuthGuard)
+@Controller({ path: 'app/commerce', version: '1' })
+export class CommerceAppController {
+  constructor(
+    private readonly commerceService: CommerceService,
+    private readonly tenantResolver: TenantResolverService,
+  ) {}
+
+  private async getTenantId(userId: string): Promise<string> {
+    return this.tenantResolver.resolveTenantId(userId);
+  }
 
   // ─── Categories ───────────────────────────────
 
-  @UseGuards(JwtAuthGuard) @ApiBearerAuth()
-  @Post('merchants/:merchantId/categories')
+  @Post('categories')
   @ApiOperation({ summary: 'Create category' })
-  createCategory(@Param('tenantId') tenantId: string, @Body() data: any) {
+  async createCategory(@CurrentUser('id') userId: string, @Body() data: any) {
+    const tenantId = await this.getTenantId(userId);
     return this.commerceService.createCategory(tenantId, data);
-  }
-
-  @Public()
-  @Get('merchants/:merchantId/categories')
-  @ApiOperation({ summary: 'List categories' })
-  getCategories(@Param('tenantId') tenantId: string) {
-    return this.commerceService.getCategories(tenantId);
   }
 
   @UseGuards(JwtAuthGuard) @ApiBearerAuth()
@@ -44,32 +47,11 @@ export class CommerceController {
 
   // ─── Products ─────────────────────────────────
 
-  @UseGuards(JwtAuthGuard) @ApiBearerAuth()
-  @Post('merchants/:merchantId/products')
+  @Post('products')
   @ApiOperation({ summary: 'Create product with variants' })
-  createProduct(@Param('tenantId') tenantId: string, @Body() data: any) {
+  async createProduct(@CurrentUser('id') userId: string, @Body() data: any) {
+    const tenantId = await this.getTenantId(userId);
     return this.commerceService.createProduct(tenantId, data);
-  }
-
-  @Public()
-  @Get('merchants/:merchantId/products')
-  @ApiOperation({ summary: 'List products with filter, sort, pagination' })
-  @ApiQuery({ name: 'page', required: false })
-  @ApiQuery({ name: 'limit', required: false })
-  @ApiQuery({ name: 'categoryId', required: false })
-  @ApiQuery({ name: 'search', required: false })
-  @ApiQuery({ name: 'minPrice', required: false })
-  @ApiQuery({ name: 'maxPrice', required: false })
-  @ApiQuery({ name: 'sort', required: false, description: 'price_asc | price_desc | name' })
-  getProducts(@Param('tenantId') tenantId: string, @Query() query: any) {
-    return this.commerceService.getProducts(tenantId, query);
-  }
-
-  @Public()
-  @Get('products/:id')
-  @ApiOperation({ summary: 'Get product with variants' })
-  getProduct(@Param('id') id: string) {
-    return this.commerceService.getProduct(id);
   }
 
   @UseGuards(JwtAuthGuard) @ApiBearerAuth()
@@ -86,20 +68,6 @@ export class CommerceController {
     return this.commerceService.deleteProduct(id);
   }
 
-  @Public()
-  @Get('product-types')
-  @ApiOperation({ summary: 'List valid product types' })
-  getProductTypes() {
-    return this.commerceService.getProductTypes();
-  }
-
-  @Public()
-  @Get('merchants/:merchantId/products/type/:type')
-  @ApiOperation({ summary: 'List products by type (physical/service/digital/donation/membership/event_ticket)' })
-  getProductsByType(@Param('tenantId') tenantId: string, @Param('type') type: string, @Query() query: any) {
-    return this.commerceService.getProductsByType(tenantId, type, query);
-  }
-
   @UseGuards(JwtAuthGuard) @ApiBearerAuth()
   @Put('products/:id/extended-pricing')
   @ApiOperation({ summary: 'Set multi-currency pricing for product' })
@@ -107,28 +75,15 @@ export class CommerceController {
     return this.commerceService.setExtendedPricing(id, pricing);
   }
 
-  @Public()
-  @Get('products/:id/price')
-  @ApiOperation({ summary: 'Get product price in specific currency' })
-  @ApiQuery({ name: 'currency', required: false })
-  getPriceInCurrency(@Param('id') id: string, @Query('currency') currency?: string) {
-    return this.commerceService.getPriceInCurrency(id, currency || 'NGN');
-  }
-
   // ─── Inventory ────────────────────────────────
-
-  @Public()
-  @Get('products/:id/stock')
-  @ApiOperation({ summary: 'Get available stock for product/variant' })
-  @ApiQuery({ name: 'variantId', required: false })
-  getAvailableStock(@Param('id') id: string, @Query('variantId') variantId?: string) {
-    return this.commerceService.getAvailableStock(id, variantId);
-  }
 
   @UseGuards(JwtAuthGuard) @ApiBearerAuth()
   @Post('products/:id/reserve')
   @ApiOperation({ summary: 'Reserve inventory' })
-  reserveInventory(@Param('id') id: string, @Body() data: { quantity: number; variantId?: string; sessionId?: string; userId?: string; ttlMinutes?: number }) {
+  reserveInventory(
+    @Param('id') id: string,
+    @Body() data: { quantity: number; variantId?: string; sessionId?: string; userId?: string; ttlMinutes?: number },
+  ) {
     return this.commerceService.reserveInventory(id, data.quantity, data.variantId, data.sessionId, data.userId, data.ttlMinutes);
   }
 
@@ -179,9 +134,10 @@ export class CommerceController {
   // ─── Cart ─────────────────────────────────────
 
   @UseGuards(JwtAuthGuard) @ApiBearerAuth()
-  @Post('merchants/:merchantId/cart')
+  @Post('cart')
   @ApiOperation({ summary: 'Get or create cart' })
-  getOrCreateCart(@Param('tenantId') tenantId: string, @Body() data: { userId?: string; sessionId?: string }) {
+  async getOrCreateCart(@CurrentUser('id') userId: string, @Body() data: { userId?: string; sessionId?: string }) {
+    const tenantId = await this.getTenantId(userId);
     return this.commerceService.getOrCreateCart(tenantId, data.userId, data.sessionId);
   }
 
@@ -239,12 +195,13 @@ export class CommerceController {
   // ─── Orders ───────────────────────────────────
 
   @UseGuards(JwtAuthGuard) @ApiBearerAuth()
-  @Get('merchants/:merchantId/orders')
+  @Get('orders')
   @ApiOperation({ summary: 'List orders' })
   @ApiQuery({ name: 'status', required: false })
   @ApiQuery({ name: 'page', required: false })
   @ApiQuery({ name: 'limit', required: false })
-  getOrders(@Param('tenantId') tenantId: string, @Query() query: any) {
+  async getOrders(@CurrentUser('id') userId: string, @Query() query: any) {
+    const tenantId = await this.getTenantId(userId);
     return this.commerceService.getOrders(tenantId, query);
   }
 
@@ -265,16 +222,18 @@ export class CommerceController {
   // ─── Coupons ──────────────────────────────────
 
   @UseGuards(JwtAuthGuard) @ApiBearerAuth()
-  @Post('merchants/:merchantId/coupons')
+  @Post('coupons')
   @ApiOperation({ summary: 'Create coupon' })
-  createCoupon(@Param('tenantId') tenantId: string, @Body() data: any) {
+  async createCoupon(@CurrentUser('id') userId: string, @Body() data: any) {
+    const tenantId = await this.getTenantId(userId);
     return this.commerceService.createCoupon(tenantId, data);
   }
 
   @UseGuards(JwtAuthGuard) @ApiBearerAuth()
-  @Get('tenants/:tenantId/coupons')
+  @Get('coupons')
   @ApiOperation({ summary: 'List coupons' })
-  getCoupons(@Param('tenantId') tenantId: string) {
+  async getCoupons(@CurrentUser('id') userId: string) {
+    const tenantId = await this.getTenantId(userId);
     return this.commerceService.getCoupons(tenantId);
   }
 
@@ -315,19 +274,21 @@ export class CommerceController {
     return this.commerceService.updateFulfillment(id, data);
   }
 
-  // ─── Tax Rules ────────────────────────────────
+  // ─── Tax Rules ─────────────────────────────────
 
   @UseGuards(JwtAuthGuard) @ApiBearerAuth()
-  @Post('merchants/:merchantId/tax-rules')
+  @Post('tax-rules')
   @ApiOperation({ summary: 'Create tax rule' })
-  createTaxRule(@Param('tenantId') tenantId: string, @Body() data: any) {
+  async createTaxRule(@CurrentUser('id') userId: string, @Body() data: any) {
+    const tenantId = await this.getTenantId(userId);
     return this.commerceService.createTaxRule(tenantId, data);
   }
 
   @UseGuards(JwtAuthGuard) @ApiBearerAuth()
-  @Get('tenants/:tenantId/tax-rules')
+  @Get('tax-rules')
   @ApiOperation({ summary: 'List tax rules' })
-  getTaxRules(@Param('tenantId') tenantId: string) {
+  async getTaxRules(@CurrentUser('id') userId: string) {
+    const tenantId = await this.getTenantId(userId);
     return this.commerceService.getTaxRules(tenantId);
   }
 
@@ -346,11 +307,12 @@ export class CommerceController {
   }
 
   @UseGuards(JwtAuthGuard) @ApiBearerAuth()
-  @Get('merchants/:merchantId/tax-calc')
+  @Get('tax-calc')
   @ApiOperation({ summary: 'Calculate tax for subtotal' })
   @ApiQuery({ name: 'subtotal', required: true })
   @ApiQuery({ name: 'region', required: false })
-  calculateTax(@Param('tenantId') tenantId: string, @Query('subtotal') subtotal: string, @Query('region') region?: string) {
+  async calculateTax(@CurrentUser('id') userId: string, @Query('subtotal') subtotal: string, @Query('region') region?: string) {
+    const tenantId = await this.getTenantId(userId);
     return this.commerceService.calculateTax(tenantId, parseFloat(subtotal || '0'), region);
   }
 }

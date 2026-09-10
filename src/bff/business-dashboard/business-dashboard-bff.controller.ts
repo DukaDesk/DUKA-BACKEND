@@ -68,15 +68,15 @@ export class BusinessDashboardBffController {
     };
   }
 
-  @Get('tenants/:tenantId/analytics')
-  @ApiOperation({ summary: 'Per-tenant analytics (for drill-down)' })
-  @ApiParam({ name: 'tenantId', description: 'Tenant ID' })
+  @Get('merchants/:merchantId/analytics')
+  @ApiOperation({ summary: 'Per-merchant analytics (for drill-down)' })
+  @ApiParam({ name: 'merchantId', description: 'Merchant ID' })
   @ApiQuery({ name: 'dateFrom', required: false, type: String, description: 'Start date (ISO format)' })
   @ApiQuery({ name: 'dateTo', required: false, type: String, description: 'End date (ISO format)' })
   @ApiQuery({ name: 'groupBy', required: false, type: String, enum: ['day', 'week', 'month'], default: 'day' })
-  getTenantAnalytics(@Param() param: { tenantId: string }, @Query('dateFrom') dateFrom?: string, @Query('dateTo') dateTo?: string, @Query('groupBy') groupBy?: string) {
+  getMerchantAnalytics(@Param() param: { merchantId: string }, @Query('dateFrom') dateFrom?: string, @Query('dateTo') dateTo?: string, @Query('groupBy') groupBy?: string) {
     return {
-      tenantId: param.tenantId,
+      merchantId: param.merchantId,
       revenue: 0,
       orderCount: 0,
       activeUsers: 0,

@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma.service';
 import { ComponentRegistryService } from './component-registry.service';
 import { ActionBuilderService, ActionConfig, ActionExecutionResult } from './action-builder.service';
@@ -17,7 +17,26 @@ export class BuilderService {
     private livePreview: LivePreviewService,
   ) {}
 
-  async getPages(tenantId: string) {
+  private async resolveTenantId(userId: string): Promise<string> {
+    const tenantUser = await this.prisma.tenantUser.findFirst({
+      where: {
+        userId,
+        role: { in: ['owner', 'manager'] },
+        status: 'active',
+      },
+      select: { tenantId: true },
+      orderBy: { role: 'asc' },
+    });
+
+    if (!tenantUser) {
+      throw new ForbiddenException('User does not have access to any tenant as owner or manager');
+    }
+
+    return tenantUser.tenantId;
+  }
+
+  async getPages(userId: string) {
+    const tenantId = await this.resolveTenantId(userId);
     return this.prisma.page.findMany({
       where: { tenantId, isActive: true },
       include: {
@@ -104,11 +123,13 @@ export class BuilderService {
     });
   }
 
-  async getNavigation(tenantId: string) {
+  async getNavigation(userId: string) {
+    const tenantId = await this.resolveTenantId(userId);
     return this.prisma.navigation.findUnique({ where: { tenantId } });
   }
 
-  async updateNavigation(tenantId: string, items: any) {
+  async updateNavigation(userId: string, items: any) {
+    const tenantId = await this.resolveTenantId(userId);
     return this.prisma.navigation.upsert({
       where: { tenantId },
       create: { tenantId, items },
@@ -116,11 +137,13 @@ export class BuilderService {
     });
   }
 
-  async getTheme(tenantId: string) {
+  async getTheme(userId: string) {
+    const tenantId = await this.resolveTenantId(userId);
     return this.prisma.theme.findUnique({ where: { tenantId } });
   }
 
-  async updateTheme(tenantId: string, data: any) {
+  async updateTheme(userId: string, data: any) {
+    const tenantId = await this.resolveTenantId(userId);
     return this.prisma.theme.upsert({
       where: { tenantId },
       create: { tenantId, ...data },
@@ -142,7 +165,7 @@ export class BuilderService {
     return this.actionBuilder.getAll();
   }
 
-  async componentPreview(tenantId: string, data: { type: string; props: Record<string, any> }) {
+  async componentPreview(userId: string, data: { type: string; props: Record<string, any> }) {
     const valid = this.componentRegistry.validate(data.type, data.props);
     if (!valid.valid) {
       return { valid: false, errors: valid.errors };
@@ -167,15 +190,18 @@ export class BuilderService {
     return this.conditionalEngine.evaluate(conditions, context);
   }
 
-  async resolveDataBinding(binding: any, context: Record<string, any>, tenantId: string) {
+  async resolveDataBinding(binding: any, context: Record<string, any>, userId: string) {
+    const tenantId = await this.resolveTenantId(userId);
     return this.dataBinding.resolve(binding, context, tenantId);
   }
 
-  async previewTenant(tenantId: string, context?: any): Promise<PreviewOutput> {
+  async previewTenant(userId: string, context?: any): Promise<PreviewOutput> {
+    const tenantId = await this.resolveTenantId(userId);
     return this.livePreview.previewTenant(tenantId, context);
   }
 
-  async previewPage(tenantId: string, pageId: string, context?: any): Promise<RenderedPage> {
+  async previewPage(userId: string, pageId: string, context?: any): Promise<RenderedPage> {
+    const tenantId = await this.resolveTenantId(userId);
     return this.livePreview.previewPage(tenantId, pageId, context);
   }
 }
