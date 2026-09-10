@@ -2,6 +2,7 @@ import { Controller, Get, Post, Param, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { PublishingService } from './publishing.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
 
 @ApiTags('Publishing')
 @ApiBearerAuth()
@@ -18,8 +19,8 @@ export class PublishingController {
 
   @Post('publish')
   @ApiOperation({ summary: 'Validate, compile, and publish' })
-  publish(@Param('id') id: string) {
-    return this.publishingService.publish(id);
+  publish(@Param('id') id: string, @CurrentUser('id') userId: string) {
+    return this.publishingService.publish(id, userId);
   }
 
   @Get('releases')

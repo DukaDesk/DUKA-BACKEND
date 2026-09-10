@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Logger, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma.service';
 import { RedisService } from '../../common/redis/redis.service';
 import { ValidationEngine } from './validation/validation-engine.service';
@@ -21,7 +21,9 @@ export class PublishingService {
     return this.validationEngine.validateDraft(tenantId);
   }
 
-  async publish(tenantId: string) {
+  async publish(tenantId: string, userId: string) {
+    await this.verifyPublishingPermission(tenantId, userId);
+
     const validation = await this.validationEngine.validateDraft(tenantId);
     if (!validation.passed) {
       throw new BadRequestException({
@@ -48,6 +50,15 @@ export class PublishingService {
     this.logger.log(`Published v${version} for tenant ${tenantId}`);
 
     return { message: 'Published successfully', version, checksum };
+  }
+
+  private async verifyPublishingPermission(tenantId: string, userId: string) {
+    const membership = await this.prisma.tenantUser.findUnique({
+      where: { tenantId_userId: { tenantId, userId } },
+    });
+    if (!membership || !['owner', 'manager'].includes(membership.role)) {
+      throw new ForbiddenException({ code: 'NOT_OWNER', message: 'Only tenant owners and managers can publish' });
+    }
   }
 
   async getReleaseHistory(tenantId: string) {

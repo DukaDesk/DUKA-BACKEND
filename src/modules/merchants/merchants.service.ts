@@ -136,8 +136,8 @@ export class MerchantsService {
     const membership = await this.prisma.tenantUser.findUnique({
       where: { tenantId_userId: { tenantId, userId } },
     });
-    if (!membership || membership.role !== 'owner') {
-      throw new ForbiddenException('Only the tenant owner can perform this action');
+    if (!membership || !['owner', 'manager'].includes(membership.role)) {
+      throw new ForbiddenException({ code: 'NOT_OWNER', message: 'Only tenant owners and managers can perform this action' });
     }
   }
 }
