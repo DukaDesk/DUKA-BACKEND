@@ -1,52 +1,25 @@
 import {
-  Controller, Get, Post, Delete, Body, Param, Query, UseGuards,
+  Controller, Get, Query, UseGuards,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery } from '@nestjs/swagger';
 import { SearchService } from './search.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 
-@ApiTags('Search & Discovery')
-@ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
-@Controller({ version: '1' })
-export class SearchController {
+@ApiTags('Search - Public (Read-Only)')
+@Controller({ path: 'search', version: '1' })
+export class SearchPublicController {
   constructor(private readonly searchService: SearchService) {}
 
-  @Post('search/index')
-  @ApiOperation({ summary: 'Index a document' })
-  index(@Body() data: {
-    tenantId: string; entityType: string; entityId: string;
-    title?: string; content?: string; tags?: string[];
-    metadata?: Record<string, any>; locale?: string;
-  }) {
-    return this.searchService.index(data);
-  }
-
-  @Delete('search/index/:entityType/:entityId')
-  @ApiOperation({ summary: 'Remove from index' })
-  @ApiQuery({ name: 'tenantId', required: true })
-  remove(
-    @Query('tenantId') tenantId: string,
-    @Param('entityType') entityType: string,
-    @Param('entityId') entityId: string,
-  ) {
-    return this.searchService.remove(tenantId, entityType, entityId);
-  }
-
-  @Post('search/index/bulk')
-  @ApiOperation({ summary: 'Bulk index documents' })
-  bulkIndex(@Body() data: { entries: Array<{
-    tenantId: string; entityType: string; entityId: string;
-    title?: string; content?: string; tags?: string[];
-    metadata?: Record<string, any>;
-  }> }) {
-    return this.searchService.bulkIndex(data.entries);
-  }
-
-  @Get('search')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @Get()
   @ApiOperation({ summary: 'Full-text search' })
   @ApiQuery({ name: 'tenantId', required: true })
   @ApiQuery({ name: 'query', required: true })
+  @ApiQuery({ name: 'entityTypes', required: false })
+  @ApiQuery({ name: 'tags', required: false })
+  @ApiQuery({ name: 'page', required: false })
+  @ApiQuery({ name: 'limit', required: false })
   search(
     @Query('tenantId') tenantId: string,
     @Query('query') query: string,
@@ -65,10 +38,14 @@ export class SearchController {
     });
   }
 
-  @Get('search/autocomplete')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @Get('autocomplete')
   @ApiOperation({ summary: 'Autocomplete suggestions' })
   @ApiQuery({ name: 'tenantId', required: true })
   @ApiQuery({ name: 'prefix', required: true })
+  @ApiQuery({ name: 'entityTypes', required: false })
+  @ApiQuery({ name: 'limit', required: false })
   autocomplete(
     @Query('tenantId') tenantId: string,
     @Query('prefix') prefix: string,
@@ -82,19 +59,23 @@ export class SearchController {
     );
   }
 
-  @Get('search/facets')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @Get('facets')
   @ApiOperation({ summary: 'Get search facets' })
   @ApiQuery({ name: 'tenantId', required: true })
-  getFacets(
-    @Query('tenantId') tenantId: string,
-    @Query('query') query?: string,
-  ) {
+  @ApiQuery({ name: 'query', required: false })
+  getFacets(@Query('tenantId') tenantId: string, @Query('query') query?: string) {
     return this.searchService.getFacets(tenantId, query);
   }
 
-  @Get('search/analytics/popular')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @Get('analytics/popular')
   @ApiOperation({ summary: 'Popular search terms' })
   @ApiQuery({ name: 'tenantId', required: true })
+  @ApiQuery({ name: 'days', required: false })
+  @ApiQuery({ name: 'limit', required: false })
   getPopularSearches(
     @Query('tenantId') tenantId: string,
     @Query('days') days?: string,
@@ -107,9 +88,13 @@ export class SearchController {
     );
   }
 
-  @Get('search/analytics/no-results')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @Get('analytics/no-results')
   @ApiOperation({ summary: 'Queries with no results' })
   @ApiQuery({ name: 'tenantId', required: true })
+  @ApiQuery({ name: 'days', required: false })
+  @ApiQuery({ name: 'limit', required: false })
   getNoResultQueries(
     @Query('tenantId') tenantId: string,
     @Query('days') days?: string,
@@ -122,25 +107,12 @@ export class SearchController {
     );
   }
 
-  @Post('search/synonyms')
-  @ApiOperation({ summary: 'Create search synonym' })
-  createSynonym(
-    @Query('tenantId') tenantId: string,
-    @Body() data: { terms: string[]; type?: string },
-  ) {
-    return this.searchService.createSynonym(tenantId, data);
-  }
-
-  @Get('search/synonyms')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @Get('synonyms')
   @ApiOperation({ summary: 'List search synonyms' })
   @ApiQuery({ name: 'tenantId', required: true })
   getSynonyms(@Query('tenantId') tenantId: string) {
     return this.searchService.getSynonyms(tenantId);
-  }
-
-  @Delete('search/synonyms/:id')
-  @ApiOperation({ summary: 'Delete search synonym' })
-  deleteSynonym(@Param('id') id: string) {
-    return this.searchService.deleteSynonym(id);
   }
 }
