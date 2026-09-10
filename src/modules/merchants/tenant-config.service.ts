@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma.service';
 
 @Injectable()
@@ -23,6 +23,10 @@ export class TenantConfigService {
   }
 
   async updateConfig(tenantId: string, data: any) {
+    const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId } });
+    if (!tenant) {
+      throw new NotFoundException(`Tenant with id ${tenantId} not found`);
+    }
     return this.prisma.tenantConfig.upsert({
       where: { tenantId },
       create: { tenantId, ...data },
