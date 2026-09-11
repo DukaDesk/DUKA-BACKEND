@@ -119,9 +119,22 @@ ThrottlerGuard
 ## 6. API Surface
 
 - **Global prefix:** `/api` with URI versioning → `/api/v1/...`
-- **Surface:** ~390 endpoints across 32 modules
+- **Surface:** ~428 endpoints across 32 modules
+- **Architecture:** Three-tier (Website / App / Mobile)
 - **Docs:** Swagger at `/api/docs`
 - **Health:** `GET /api/v1/health` (public)
+
+### Three-Tier Endpoint Model
+
+| Tier | Path Prefix | Audience | Auth |
+|------|-------------|----------|------|
+| **Website (Platform)** | `/admin/*`, `/auth/*`, `/discovery/*`, `/templates/*`, `/bff/website/*` | Platform operators | JWT / Public |
+| **App (Tenant Self-Service)** | `/app/*` | Tenant owners/managers | JWT + `@CurrentUser` (auto-resolves tenant) |
+| **Mobile/Consumer** | `/merchants/:merchantId/*` | End users (public) | `@Public()` or JWT |
+
+**Controller Pattern:**
+- `*AppController` — JWT + `@CurrentUser`, auto-resolves tenantId via `TenantResolverService`
+- `*PublicController` — `@Public()` with explicit `:merchantId` param
 
 The full endpoint catalog is maintained in `docs/api-endpoints-reference.md`.
 
@@ -161,6 +174,10 @@ Other scripts: `npm run build`, `npm run start:prod`, `npm run lint`, `npm test`
 | 3a | Enhancement (Theme, Builder, Commerce, Booking, Notifications, Payments) | Complete |
 | 3b/3c | Integrations, Analytics, Search, AI, Platform Admin, Infra, Security, Developer | Complete |
 | 4 | Marketplace, Asset Platform, Notification Adapters, Campaign Segmentation | Complete |
+| v0.2 | Three-tier API architecture (Website/App/Mobile split) | Complete |
+| v0.2 | App/Public controller split for all 13 tenant modules | Complete |
+| v0.2 | TASK-0024: Publish permission fix (owner/manager roles) | Complete |
+| v0.2.1 | TASK-0025: Customizable Dashboard (widget data resolution, DTOs, registry) | Complete |
 
 ---
 
@@ -171,8 +188,16 @@ Kept here so this file stays accurate:
 - **No tests yet** — Jest/Supertest are configured but there are zero spec/e2e files written. Coverage is the biggest open gap.
 - **Provider adapters are simulated** — payments use placeholder keys, notification adapters default to `log`, SendGrid/GoogleCalendar connectors are stubs, AI Mock is manually wired. Real integrations are scaffolded but not production-tested.
 - **Secret handling is casual** — `.env` is committed in the repo, `JWT_SECRET` has a `'super-secret'` fallback, and the seed hash's plaintext password (`Password123!`) is documented. Needs hardening before real deployment.
+- **Rate limiting not wired** — `ApiQuota` model and `PlatformAdminService.checkQuota()` exist but are not integrated into a NestJS guard/middleware.
+- **SMS adapters are log-only** — Twilio, Termii, Africa's Talking just log and return success (no real HTTP calls).
+- **Email SES/SMTP adapters are log-only** — `sendViaSes()` and `sendViaSmtp()` just log and return success.
+- **APNS push is a stub** — Logs and returns success without actual Apple Push delivery.
+- **Discovery nearby is simplified** — `getNearby()` accepts lat/lng but does not perform actual geospatial queries.
+- **No RBAC guard middleware** — `RbacService` exists but only used in `UsersService`; no global guard enforced.
+- **No audit logging middleware** — `AuditLog` model exists but no auto-recording.
 - **Docs drift** — README references `*-enhanced/` module folders that don't exist (functionality was folded into parent modules); schema uses `Plan` where docs say `SubscriptionPlan`; `dist/` is committed.
-- **Minor bugs** — booking availability buffer is never applied (`duration + (staffId ? 0 : 0)`), draft lookup uses a composite-key assumption, `console.log` prints OTPs to stdout in auth.
+
+**Completion: ~84/100** — All 32 modules implemented with real business logic and Prisma queries. 85+ models. Three-tier architecture complete. TASK-0025 dashboard done. Main gaps: 0% test coverage, rate limiting not wired, adapter stubs.
 
 ---
 
@@ -188,41 +213,38 @@ Kept here so this file stays accurate:
 
 ## 11. API Analysis (Condensed)
 
-**Framework & Structure** — NestJS 11 modular monolith, 33 controllers, ~390 endpoints across 32+ domains. Global prefix `/api` + URI versioning `v1`. Swagger UI at `https://duka-backend-production.up.railway.app/api/docs`, raw JSON at `https://duka-backend-production.up.railway.app/api/docs/swagger.json`.
+**Framework & Structure** — NestJS 11 modular monolith, 33 controllers, ~428 endpoints across 32+ domains. Three-tier architecture: Website (platform), App (tenant self-service), Mobile (consumer). Global prefix `/api` + URI versioning `v1`. Swagger UI at `/api/docs`.
 
 **Endpoint Statistics**
-- Total endpoints: ~390
-- GET: 121 | POST: 112 | PUT: 95 | DELETE: 85 | PATCH: 12
-- Public (no auth): 23 | Authenticated (JWT): 367 | Admin-only: 14
-- Tenant-scoped: 210+ (all `/tenants/:id/...`)
+- Total endpoints: ~428
+- Public (no auth): ~35 | Authenticated (JWT): ~380 | Admin-only: ~13
+- App (self-service): ~120 | Mobile/Consumer: ~80 | Platform/Admin: ~50 | BFF: ~20
 - Involving payments: 12 | Background jobs: 27 | External services: 18
 
 **Major API Flows**
 
-*Authentication*: `POST /auth/login` → access/refresh tokens → `JwtAuthGuard` on subsequent requests. Device management via `/devices/...`. Refresh rotation 7d/15m.
+*Authentication*: `POST /auth/login` → access/refresh tokens → `JwtAuthGuard` on subsequent requests. Device management via `/devices/...`. Refresh rotation 7d/15m. Google/Apple OAuth supported.
 
-*Tenant onboarding*: `POST /tenants` → config via `PUT /tenants/:id/config` → BFF manifest `GET /bff/mobile/tenant/:slug/manifest` → publish `POST /tenants/:id/publishing/publish` → ReleasePublished event.
+*Three-Tier Flow*: Mobile user hits `GET /merchants/:merchantId/products` (public). Tenant owner hits `POST /app/commerce/products` (auto-resolves tenant from JWT membership). Admin hits `POST /admin/merchants` (platform-level).
 
 *SDUI*: Mobile app fetches manifest (cached 5 min in Redis). Contains theme, navigation, plan features, and full SDUI hierarchy (pages→sections→components). Public endpoint; cache TTL hard-coded 300s.
 
-*Commerce*: Product catalogue `GET /tenants/:tid/products` (public, filtered) → add to cart `POST /cart/items` → checkout `POST /cart/:id/checkout` → order creation with status transitions → payment `POST /payments/initialize` → provider verify `POST /payments/:intentId/verify` → order status updates `POST /orders/:id/status`.
+*Commerce*: Product catalogue `GET /merchants/:merchantId/products` (public) → add to cart `POST /cart/items` → checkout `POST /cart/:id/checkout` → order creation with status transitions → payment `POST /app/payments/initialize` → provider verify → order status updates.
 
-*Booking*: Availability `GET /booking/availability` → public booking `POST /tenants/:tid/booking` → status updates `POST /booking/:id/status` (7-state workflow) → reminders via background job → permanent delete guards against owner-tenants.
+*Booking*: Availability `GET /merchants/:merchantId/booking/availability` → public booking `POST /merchants/:merchantId/booking` → status updates → reminders via background job.
 
-*Notifications*: Template creation `POST /notifications/templates` → send `POST /notifications/send` / `send-from-template` → adapters (SMS/email/push, default `log` fallback) → click tracking `POST /notifications/:id/click` → unread count `GET /notifications/unread-count`.
-
-*Media/DAM*: Upload `POST /media/upload` (sharp WebP variants) → list `GET /media` → detail `GET /media/:id` → CDN URL `GET /media/:id/cdn-url` → folders and shares.
+*Dashboard (TASK-0025)*: `POST /app/analytics/dashboards` → `POST /app/analytics/dashboards/:id/widgets` (10 metric types) → `GET /app/analytics/dashboards/:id/data` (resolves all widget data live). Widget types: metric, chart, table, list.
 
 **API Findings (Key Points)**
-- ⚠️ `permanentDelete` blocks tenant owners but `deactivate` does not → inconsistent authz
-- ⚠️ `GET /profile/consents` returns all consents including revoked → may confuse clients
-- ⚠️ `JWT_SECRET` fallback `'super-secret'` in code → rotate before production
-- ⚠️ `console.log` OTP printed to stdout in auth service → use structured logger
-- ⚠️ Manifest cache TTL 300s hard-coded → make env-configurable
-- ⚠️ Rate limiting global only → per-endpoint overrides recommended
+- ✅ Three-tier architecture (Website/App/Mobile) fully implemented
 - ✅ Uniform envelope via TransformInterceptor, consistent guard/decorator patterns
 - ✅ Provider adapter pattern (payments/notifications/AI) enables swapping implementations
 - ✅ Redis with in-memory mock fallback for dev-friendliness
+- ✅ BFF business dashboard wired to real service (was returning zeros)
+- ✅ Dashboard widget data resolution with 10 supported metrics
+- ⚠️ `JWT_SECRET` fallback `'super-secret'` in code → rotate before production
+- ⚠️ Rate limiting global only → per-endpoint overrides recommended
+- ⚠️ Provider adapters are simulated (log-only SMS, SES, SMTP, APNS)
 
 **Quick Command** — Retrieve OpenAPI JSON from running backend:
 ```bash

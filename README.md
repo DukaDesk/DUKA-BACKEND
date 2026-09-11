@@ -5,55 +5,61 @@ Multi-tenant Backend-as-a-Platform (BaaP) powering the DUKADESK ecosystem. Busin
 ## Architecture
 
 ```
-                        ┌──────────────────────────────────────┐
-                        │          API Gateway / BFF            │
-                        │  Rate Limiter → Mobile/Tenant/Biz/WWW │
-                        └──────────┬───────────────────────────┘
-                                   │
-        ┌──────────────────────────┼──────────────────────────────┐
-        │                          │                              │
-   ┌────┴─────┐            ┌───────┴───────┐           ┌─────────┴─────────┐
-   │  Phase 0 │            │   Phase 1     │           │    Phase 2        │
-   │  Infra   │            │   Platform    │           │    Domain         │
-   │──────────│            │───────────────│           │───────────────────│
-   │ EventBus │            │ IAM (identity)│           │ Commerce (cart,   │
-   │ RBAC     │            │ Tenants       │           │ orders, coupons)  │
-   │ Redis    │            │ BFF Layer     │           │ Booking & Sched.  │
-   │ Queue    │            │ Publishing    │           │ Forms & Workflow  │
-   │ Logger   │            │ DAM (media)   │           │ Payments (FW, PS) │
-   │ Health   │            │               │           │ Notifications     │
-   └────┬─────┘            └───────┬───────┘           └─────────┬─────────┘
-        │                          │                             │
-        └──────────────────────────┼─────────────────────────────┘
-                                   │
-                        ┌──────────┴──────────┐
-                        │    PostgreSQL 16     │
-                        │    + Redis 7         │
-                        └─────────────────────┘
+┌─────────────────────────────────────────────────────────┐
+│              Three-Tier API Architecture                  │
+├─────────────┬─────────────────┬─────────────────────────┤
+│   Website   │       App       │         Mobile          │
+│  (Platform) │ (Tenant Self-Service) │  (Consumer)        │
+├─────────────┼─────────────────┼─────────────────────────┤
+│ /admin/*    │ /app/*          │ /merchants/:id/*        │
+│ /auth/*     │ (auto-resolved) │ (public read)           │
+│ /discovery/*│                 │                         │
+│ /bff/website│                 │                         │
+├─────────────┴─────────────────┴─────────────────────────┤
+│                  Feature Modules (32)                     │
+│  Auth │ Commerce │ Booking │ Forms │ Payments │ Builder  │
+│  Notifications │ Theme │ Integrations │ Analytics │ ...  │
+├─────────────────────────────────────────────────────────┤
+│              Infrastructure Layer                         │
+│  EventBus │ Redis │ Queue (Bull) │ RBAC │ Logging        │
+├─────────────────────────────────────────────────────────┤
+│         PostgreSQL 16  +  Redis 7  +  Prisma 6           │
+└─────────────────────────────────────────────────────────┘
 ```
 
 ## Tech Stack
 
 | Layer | Technology |
 |-------|-----------|
-| Framework | NestJS 11 (Node.js + TypeScript) |
+| Framework | NestJS 11 (Node.js + TypeScript 6, SWC builder) |
 | ORM | Prisma 6.19 |
 | Database | PostgreSQL 16 |
 | Cache & Pub/Sub | Redis 7 (ioredis, with in-memory mock fallback) |
-| Auth | JWT (access + refresh tokens), bcrypt |
-| Queue | Bull/BullMQ (5 queues: publishing, notifications, assets, webhooks, analytics) |
+| Auth | JWT (access + refresh rotation), bcrypt, Google OAuth, Apple Sign-In |
+| Queue | Bull (5 queues: publishing, notifications, assets, webhooks, analytics) |
 | Image Processing | Sharp (webp conversion, 5 variant presets) |
 | Validation | class-validator + class-transformer |
 | API Docs | Swagger (OpenAPI) |
 | Logging | nestjs-pino + pino-pretty (structured, correlation IDs) |
-| File Storage | Local (S3/R2 adapter-ready) |
+| Testing | Jest + ts-jest + Supertest (configured, 0 tests written) |
+| Deployment | Docker (2-stage build) + Railway |
+
+## Three-Tier Endpoint Architecture
+
+| Tier | Path Prefix | Audience | Auth | Purpose |
+|------|-------------|----------|------|---------|
+| **Website (Platform)** | `/admin/*`, `/auth/*`, `/discovery/*`, `/templates/*`, `/bff/website/*` | Platform operators | JWT / Public | Registration, tenant creation, admin |
+| **App (Tenant Self-Service)** | `/app/*` | Tenant owners/managers | JWT + `@CurrentUser` | Write + config for own tenant |
+| **Mobile/Consumer** | `/merchants/:merchantId/*` | End users (public) | `@Public()` or JWT | Read-only catalog, booking, checkout |
+
+**Tenant Resolution:** `TenantResolverService` resolves `tenantId` from authenticated user's `TenantUser` membership (`owner` or `manager` role, `active` status).
 
 ## Project Structure
 
 ```
 src/
 ├── main.ts
-├── app.module.ts                    # Root module (25+ feature modules)
+├── app.module.ts                    # Root module (32+ feature modules)
 ├── common/                          # Shared infrastructure
 │   ├── decorators/                  # @Public(), @CurrentUser(), @Permissions()
 │   ├── guards/                      # JwtAuthGuard, RbacGuard
@@ -62,57 +68,47 @@ src/
 │   ├── middleware/                   # Correlation ID middleware
 │   ├── strategies/                  # JwtStrategy (Passport)
 │   ├── pipes/                       # Validation pipe
-│   ├── dto/                         # Shared DTOs
 │   ├── redis/                       # RedisService (ioredis + mock fallback)
 │   ├── logger/                      # LoggerService (structured, contextual)
 │   ├── prisma.service.ts / .module.ts
 ├── shared/                          # Cross-module features
 │   ├── events/                      # EventBusService (in-process pub/sub)
-│   ├── context/                     # TenantContextService (AsyncLocalStorage)
+│   ├── tenant/                      # TenantResolverService (owner/manager resolution)
 │   ├── queue/                       # QueueService, QueueModule (Bull)
-│   ├── interfaces/                  # DomainEvent interface
-│   └── types/
+│   └── interfaces/                  # DomainEvent interface
 ├── gateway/                         # GatewayRateLimiter (Redis sliding window)
 ├── bff/                             # Backend-for-Frontend layer
 │   ├── mobile/                      # Manifest, discovery, profile, notifications, catalog
 │   ├── tenant-dashboard/            # Summary, analytics, integration status
-│   ├── business-dashboard/          # Platform overview, tenant list, audit logs
+│   ├── business-dashboard/          # Platform overview, tenant list, analytics, revenue
 │   └── website/                     # Categories, featured tenants, pricing
-└── modules/                         # 22 feature modules
-    ├── auth/                        # Register, login, OTP (Redis-backed), refresh
-    ├── users/                       # Profile, consents, memberships
+└── modules/                         # 32 feature modules
+    ├── auth/                        # Register, login, OTP, Google/Apple OAuth, refresh
+    ├── users/                       # Profile, consents, memberships, deactivation
+    ├── merchants/                   # CRUD, config, subscription, publish (App + Public)
     ├── iam/                         # Devices, password policies, recovery
     ├── rbac/                        # Roles, permissions, role-permission mapping
-    ├── health/                      # Health check endpoint
-    ├── tenants/                     # CRUD, config, subscriptions, feature flags
-    ├── builder/                     # Pages, sections, components, nav, theme
+    ├── templates/                   # Seed templates (Store, Restaurant, Clinic)
+    ├── builder/                     # Pages, sections, components, nav, actions, conditions
     ├── renderer/                    # App definition JSON (SDUI contract)
     ├── publishing/                  # Validation, manifest compiler, releases, rollback
     ├── media/                       # Upload, ImageOptimizer, variants, folders, CDN
-    ├── commerce/                    # Products, categories, cart, orders, coupons, tax, fulfillment, variants
-    ├── booking/                     # Services, staff, resources, schedules, availability, bookings
-    ├── forms/                       # Forms, fields, submissions, validation, approval workflow
-    ├── payments/                    # PaymentAdapter interface, Paystack/Flutterwave/Stripe, intents, refunds, settlements, webhooks
-    ├── notifications/               # Templates, push/email/SMS/in-app, campaigns, click tracking, preferences, device tokens
-    ├── templates/                   # Seed templates (Store, Restaurant, Clinic)
-    ├── discovery/                   # Featured, search, categories
-    ├── admin/                       # Tenant approval/suspension, stats
-    ├── qr/                          # QR metadata generation & resolution
+    ├── commerce/                    # Products, cart, orders, coupons, tax, fulfillment
+    ├── booking/                     # Services, staff, resources, schedules, availability
+    ├── forms/                       # Forms, fields, submissions, approval workflow
+    ├── payments/                    # Paystack/Flutterwave/Stripe, intents, refunds
+    ├── notifications/               # Templates, push/email/SMS, campaigns, preferences
     ├── theme/                       # Theme management, compiler, caching
-    ├── bookings-enhanced/           # Locations, cancellation policies, reminders
-    ├── commerce-enhanced/           # Unified catalog, multi-currency, inventory reservations
-    ├── payments-enhanced/           # Refunds, settlements, provider health
-    ├── notifications-enhanced/      # Campaigns, segmentation, click analytics
-    ├── integrations/                # Connector framework, SendGrid, Google Calendar connectors
-    ├── analytics/                   # Event tracking, dashboards, reports
-    ├── search/                      # Search index, synonyms, autocomplete, facets
+    ├── integrations/                # Connector framework, SendGrid, Google Calendar
+    ├── analytics/                   # Event tracking, dashboards with widget data resolution
+    ├── search/                      # Full-text index, synonyms, autocomplete, facets
     ├── ai/                          # OpenAI/Anthropic/Mock providers, prompts, embeddings
     ├── platform-admin/              # Settings, announcements, feature flags, quotas
     ├── infrastructure/              # Deployments, environments, health checks, backups
     ├── security/                    # Policies, API keys, security events, consent audits
     ├── developer/                   # Developer apps, webhook endpoints, event logs
     ├── marketplace/                 # Listings, plugin installations
-    └── assets-enhanced/             # Collections, shares, storage providers, transformations
+    └── assets-enhanced/             # Collections, shares, storage providers
 ```
 
 ## Quick Start
@@ -143,7 +139,7 @@ npx prisma db seed
 npm run start:dev
 ```
 
-API at `http://localhost:4000/api/v1` — Swagger docs at `http://localhost:4000/api/docs`
+API at `https://duka-backend-production.up.railway.app/api/v1` — Swagger docs at `/api/docs`
 
 ## Scripts
 
@@ -152,23 +148,28 @@ API at `http://localhost:4000/api/v1` — Swagger docs at `http://localhost:4000
 | `npm run start:dev` | Start with hot reload |
 | `npm run build` | Compile to dist/ |
 | `npm run start:prod` | Run compiled build |
+| `npm run lint` | Lint + auto-fix |
 | `npm run prisma:generate` | Generate Prisma client |
 | `npm run prisma:migrate` | Run dev migrations |
 | `npm run prisma:seed` | Seed data |
 | `npm run prisma:studio` | Open Prisma Studio |
 | `npm run docker:up` | Start PostgreSQL + Redis |
 
-## API Reference
+## API Reference (~428 Endpoints)
 
 ### Authentication `/api/v1/auth`
-| Method | Endpoint | Auth | Description |
-|--------|----------|------|-------------|
-| POST | `/register` | No | Create account |
-| POST | `/login` | No | Login (returns JWT + refresh) |
-| POST | `/refresh` | No | Rotate refresh token |
-| POST | `/logout` | JWT | Revoke all refresh tokens |
-| POST | `/send-otp` | No | Send OTP (Redis-backed, 5min TTL) |
-| POST | `/verify-otp` | No | Verify OTP, mark email verified |
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/register` | Create account |
+| POST | `/login` | Login (returns JWT + refresh) |
+| POST | `/refresh` | Rotate refresh token |
+| POST | `/logout` | Revoke all refresh tokens |
+| POST | `/send-otp` | Send OTP (Redis-backed, 5min TTL) |
+| POST | `/verify-otp` | Verify OTP, mark email verified |
+| POST | `/google` | Sign in with Google ID token |
+| POST | `/apple` | Sign in with Apple identity token |
+| POST | `/forgot-password` | Send reset link |
+| POST | `/reset-password` | Reset password (validates strength + history) |
 
 ### Profile `/api/v1/profile`
 | Method | Endpoint | Description |
@@ -179,278 +180,209 @@ API at `http://localhost:4000/api/v1` — Swagger docs at `http://localhost:4000
 | GET | `/consents` | List consents with scopes |
 | POST | `/consents` | Grant/update consent |
 | DELETE | `/consents/:tenantId` | Revoke consent |
+| POST | `/deactivate` | Soft deactivation (30-day) |
+| POST | `/reactivate` | Reactivate within 30 days |
+| DELETE | `/` | Immediate permanent deletion |
+| GET | `/deactivation-status` | Days remaining before permanent delete |
 
-### IAM `{JWT} /api/v1`
+### Merchants — App (Self-Service) `{JWT} /api/v1/app`
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/devices` | Register device (token, platform) |
-| GET | `/devices` | List devices |
-| PUT | `/devices/:id` | Update device |
-| DELETE | `/devices/:id` | Revoke device |
-| POST | `/auth/forgot-password` | Send reset link (Redis token, 1hr TTL) |
-| POST | `/auth/reset-password` | Reset password (validates strength + history) |
+| GET | `/merchants` | Get my merchants |
+| PUT | `/merchants` | Update current merchant |
+| POST | `/merchants/publish` | Publish (owner/manager only) |
+| GET | `/merchants/config` | Get runtime config |
+| PUT | `/merchants/config` | Update config |
+| GET | `/merchants/subscription` | Get subscription |
+| POST | `/merchants/subscribe` | Subscribe to plan |
+| POST | `/merchants/subscription/cancel` | Cancel subscription |
 
-### Tenants `/api/v1`
-| Method | Endpoint | Auth | Description |
-|--------|----------|------|-------------|
-| POST | `/tenants` | JWT | Create tenant + join as owner |
-| GET | `/tenants/my` | JWT | My tenants |
-| GET | `/tenants/:id` | Public | Get tenant details |
-| PUT | `/tenants/:id` | JWT | Update tenant (owner) |
-| POST | `/tenants/:id/publish` | JWT | Publish tenant |
-
-### Tenant Config & Subscriptions `{JWT} /api/v1/tenants/:id`
+### Commerce — App `{JWT} /api/v1/app/commerce`
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/config` | Get runtime config |
-| PUT | `/config` | Update config (languages, currency, timezone, region, offlinePolicy) |
-| POST | `/subscribe` | Subscribe to plan |
-| GET | `/subscription` | Current subscription status |
-| POST | `/cancel` | Cancel subscription |
-| GET | `/features` | Resolved feature flags from plan |
-
-### Publishing `{JWT} /api/v1/tenants/:id/publishing`
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/validate` | Validate draft (pages, slugs, sections, theme, nav) |
-| POST | `/publish` | Compile manifest + publish release |
-| GET | `/releases` | Release history |
-| GET | `/releases/:version` | Get specific release |
-| POST | `/rollback/:version` | Rollback to previous version |
-| GET | `/draft` | Current draft state |
-
-### Media / DAM `{JWT} /api/v1/tenants/:tenantId/media`
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/upload` | Upload (auto-optimizes images, generates variants) |
-| GET | `/` | List media (filter by folderId) |
-| GET | `/:id` | Get media details |
-| PATCH | `/:id` | Update metadata (fileName, alt, folderId, visibility) |
-| DELETE | `/:id` | Delete + all variants |
-| GET | `/:id/cdn-url` | Get CDN URL (optional ?variant=) |
-| POST | `/folders` | Create folder |
-| GET | `/folders` | List folders |
-| PATCH | `/folders/:id` | Update folder |
-| DELETE | `/folders/:id` | Delete empty folder |
-
-### Commerce `{JWT} /api/v1`
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/tenants/:tid/categories` | Create category |
-| GET | `/tenants/:tid/categories` | List categories (public) |
-| PUT | `/categories/:id` | Update category |
-| DELETE | `/categories/:id` | Soft-delete category |
-| POST | `/tenants/:tid/products` | Create product (with variants) |
-| GET | `/tenants/:tid/products` | List products (paginated, filterable, sortable) |
-| GET | `/products/:id` | Get product (public) |
+| POST | `/categories` | Create category |
+| GET | `/categories` | List categories |
+| POST | `/products` | Create product with variants |
+| GET | `/products` | List products (filtered, paginated) |
 | PUT | `/products/:id` | Update product |
-| DELETE | `/products/:id` | Soft-delete |
-| POST | `/products/:pid/variants` | Create variant |
-| PUT | `/variants/:id` | Update variant |
-| DELETE | `/variants/:id` | Delete variant |
+| DELETE | `/products/:id` | Delete product |
+| POST | `/products/:id/reserve` | Reserve inventory |
+| POST | `/products/:id/adjust-stock` | Adjust stock level |
+| POST | `/coupons` | Create coupon |
+| POST | `/tax-rules` | Create tax rule |
+| GET | `/orders` | List orders |
+| POST | `/orders/:id/status` | Update order status |
 
-### Cart & Checkout `{JWT} /api/v1`
+### Commerce — Public `/api/v1/merchants/:merchantId`
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/tenants/:tid/cart` | Get or create cart |
-| GET | `/cart/:id` | Get cart with items |
-| POST | `/cart/:id/items` | Add item |
-| PATCH | `/cart/items/:itemId` | Update quantity |
-| DELETE | `/cart/items/:itemId` | Remove item |
-| POST | `/cart/:id/coupon` | Apply coupon |
-| DELETE | `/cart/:id/coupon` | Remove coupon |
+| GET | `/categories` | List categories |
+| GET | `/products` | List products |
+| POST | `/cart` | Get or create cart |
+| POST | `/cart/:id/items` | Add item to cart |
 | POST | `/cart/:id/checkout` | Convert cart to order |
-
-### Orders `{JWT} /api/v1`
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/tenants/:tid/orders` | List orders (filter by status) |
+| GET | `/orders` | List orders |
 | GET | `/orders/:id` | Get order detail |
-| POST | `/orders/:id/status` | Update status (validated transitions) |
-| POST | `/orders/:oid/fulfillments` | Create fulfillment |
-| GET | `/orders/:oid/fulfillments` | List fulfillments |
-| PATCH | `/fulfillments/:id` | Update fulfillment |
+| POST | `/tax-calc` | Calculate tax |
 
-### Coupons & Tax `{JWT} /api/v1`
+### Booking — App `{JWT} /api/v1/app/booking`
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/tenants/:tid/coupons` | Create coupon |
-| GET | `/tenants/:tid/coupons` | List coupons |
-| PUT | `/coupons/:id` | Update |
-| DELETE | `/coupons/:id` | Soft-delete |
-| POST | `/tenants/:tid/tax-rules` | Create tax rule |
-| GET | `/tenants/:tid/tax-rules` | List |
-| PUT | `/tax-rules/:id` | Update |
-| DELETE | `/tax-rules/:id` | Delete |
-| GET | `/tenants/:tid/tax-calc` | Calculate tax (?subtotal=&region=) |
+| POST | `/services` | Create service |
+| GET | `/services` | List services |
+| POST | `/staff` | Create staff |
+| POST | `/resources` | Create resource |
+| POST | `/schedules` | Create schedule |
+| GET | `/availability` | Get available slots |
+| GET | `/` | List bookings |
+| POST | `/:id/status` | Update booking status |
 
-### Booking `{JWT} /api/v1`
-| Method | Endpoint | Auth | Description |
-|--------|----------|------|-------------|
-| POST | `/tenants/:tid/booking/services` | JWT | Create service |
-| GET | `/tenants/:tid/booking/services` | Public | List services |
-| GET | `/booking/services/:id` | Public | Get service |
-| PUT | `/booking/services/:id` | JWT | Update |
-| DELETE | `/booking/services/:id` | JWT | Soft-delete |
-| POST | `/tenants/:tid/booking/staff` | JWT | Create staff with service assignments |
-| GET | `/tenants/:tid/booking/staff` | Public | List staff |
-| GET | `/booking/staff/:id` | Public | Get staff member |
-| PUT | `/booking/staff/:id` | JWT | Update |
-| DELETE | `/booking/staff/:id` | JWT | Soft-delete |
-| POST | `/tenants/:tid/booking/resources` | JWT | Create resource |
-| GET | `/tenants/:tid/booking/resources` | Public | List |
-| PUT | `/booking/resources/:id` | JWT | Update |
-| DELETE | `/booking/resources/:id` | JWT | Delete |
-| POST | `/tenants/:tid/booking/schedules` | JWT | Create schedule |
-| GET | `/tenants/:tid/booking/schedules` | Public | List (filter by staffId, resourceId) |
-| PUT | `/booking/schedules/:id` | JWT | Update |
-| DELETE | `/booking/schedules/:id` | JWT | Delete |
-| GET | `/tenants/:tid/booking/availability` | Public | Get slots (?serviceId=&date=) |
-| POST | `/tenants/:tid/booking` | Public | Create booking |
-| GET | `/tenants/:tid/booking` | JWT | List bookings |
-| GET | `/booking/:id` | JWT | Get booking with history |
-| POST | `/booking/:id/status` | JWT | Update status (validated transitions) |
-| POST | `/tenants/:tid/booking/waiting-list` | Public | Add to waiting list |
-| GET | `/tenants/:tid/booking/waiting-list` | JWT | Get waiting list |
-| POST | `/booking/waiting-list/:id/notify` | JWT | Mark notified |
-
-### Forms & Workflow `{JWT} /api/v1`
-| Method | Endpoint | Auth | Description |
-|--------|----------|------|-------------|
-| POST | `/tenants/:tid/forms` | JWT | Create form with fields |
-| GET | `/tenants/:tid/forms` | JWT | List forms |
-| GET | `/forms/:id` | Public | Get form with fields + workflow |
-| PUT | `/forms/:id` | JWT | Update (auto-increments version) |
-| DELETE | `/forms/:id` | JWT | Delete |
-| POST | `/forms/:id/submit` | Public | Submit answers |
-| GET | `/forms/:id/submissions` | JWT | List submissions |
-| GET | `/submissions/:id` | JWT | Get submission |
-| POST | `/forms/:id/workflow` | JWT | Set approval workflow |
-| POST | `/submissions/:id/approve` | JWT | Approve/reject |
-
-### Payments `{JWT} /api/v1`
-| Method | Endpoint | Auth | Description |
-|--------|----------|------|-------------|
-| POST | `/tenants/:tid/payments/initialize` | JWT | Initialize payment (select provider) |
-| POST | `/payments/:intentId/verify` | JWT | Verify with provider |
-| GET | `/tenants/:tid/payments` | JWT | List payment intents |
-| GET | `/tenants/:tid/payments/accounts` | JWT | Get payment accounts |
-| POST | `/payments/webhook/:provider` | Public | Provider webhook |
-
-### Notifications `{JWT} /api/v1`
+### Booking — Public `/api/v1/merchants/:merchantId/booking`
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/notifications` | List (filter by unreadOnly, type) |
-| GET | `/notifications/unread-count` | Unread count |
-| PUT | `/notifications/:id/read` | Mark read |
-| POST | `/notifications/mark-all-read` | Mark all read |
-| POST | `/notifications/send` | Send directly |
-| POST | `/notifications/templates` | Create template |
-| GET | `/notifications/templates` | List templates |
-| PUT | `/notifications/templates/:id` | Update |
-| DELETE | `/notifications/templates/:id` | Delete |
-| POST | `/notifications/send-from-template` | Send from template |
-| GET | `/notifications/preferences` | Get preferences |
-| POST | `/notifications/preferences` | Set preference |
-| POST | `/notifications/devices` | Register device |
-| DELETE | `/notifications/devices/:token` | Unregister device |
+| GET | `/services` | List services |
+| GET | `/locations` | List locations |
+| GET | `/cancellation-policies` | List policies |
+| GET | `/availability` | Get slots |
+| POST | `/` | Create booking |
 
-### Builder & Renderer `/api/v1`
-| Method | Endpoint | Auth | Description |
-|--------|----------|------|-------------|
-| GET | `/tenants/:tid/pages` | Public | List pages with sections + components |
-| PUT | `/pages/:id` | JWT | Update page |
-| POST | `/pages/:pid/sections` | JWT | Add section |
-| PUT | `/sections/:id` | JWT | Update section |
-| POST | `/sections/:sid/components` | JWT | Add component |
-| PUT | `/components/:id` | JWT | Update component |
-| GET | `/tenants/:tid/navigation` | Public | Get navigation |
-| PUT | `/tenants/:tid/navigation` | JWT | Upsert navigation |
-| GET | `/tenants/:tid/theme` | Public | Get theme |
-| PUT | `/tenants/:tid/theme` | JWT | Upsert theme |
-| GET | `/tenants/:id/definition` | Public | SDUI app definition JSON |
-| GET | `/resolve/:slug` | Public | Resolve slug to tenant |
-
-### Discovery, QR, Admin `/api/v1`
-| Method | Endpoint | Auth | Description |
-|--------|----------|------|-------------|
-| GET | `/discovery/featured` | Public | Featured tenants |
-| GET | `/discovery/search` | Public | Search (?q=) |
-| GET | `/discovery/categories` | Public | Static categories |
-| GET | `/discovery/nearby` | Public | Nearby (stub) |
-| POST | `/qr/generate/:tid` | JWT | Generate QR metadata |
-| GET | `/qr/resolve/:slug` | Public | Resolve deep link |
-| POST | `/admin/tenants/:id/approve` | JWT | Approve tenant |
-| POST | `/admin/tenants/:id/suspend` | JWT | Suspend |
-| GET | `/admin/tenants` | JWT | List all tenants |
-| GET | `/admin/stats` | JWT | Platform stats |
-
-### API Gateway `{JWT} /api/v1`
+### Forms — App `{JWT} /api/v1/app/forms`
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/health` | Health check (no auth) |
+| POST | `/` | Create form with fields |
+| GET | `/` | List forms |
+| PUT | `/:id` | Update form |
+| DELETE | `/:id` | Delete form |
+| POST | `/:id/workflow` | Set approval workflow |
+| POST | `/submissions/:id/approve` | Approve/reject submission |
 
-### BFF Endpoints `{JWT} /api/v1/bff`
+### Payments — App `{JWT} /api/v1/app/payments`
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/mobile/manifest/:id` | Mobile app manifest (cached 5min) |
-| GET | `/mobile/discovery` | Discovery feed |
-| GET | `/mobile/profile` | Aggregated user profile |
-| GET | `/mobile/notifications` | Notifications + unread count |
-| GET | `/mobile/catalog` | Tenant catalog (paginated, searchable) |
-| GET | `/tenant-dashboard/summary` | Dashboard counts |
-| GET | `/tenant-dashboard/analytics` | 30-day analytics |
-| GET | `/tenant-dashboard/integrations` | Payment account status |
-| GET | `/business-dashboard/overview` | Platform stats |
-| GET | `/business-dashboard/tenants` | Paginated tenant list |
-| GET | `/business-dashboard/audit-logs` | Recent audit logs |
+| POST | `/initialize` | Initialize payment |
+| POST | `/:intentId/verify` | Verify with provider |
+| POST | `/:intentId/refund` | Process refund |
+
+### Notifications — App `{JWT} /api/v1/app/notifications`
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/templates` | Create template |
+| POST | `/send-from-template` | Send from template |
+| POST | `/send` | Send directly |
+| POST | `/campaigns` | Send push/email campaign |
+
+### Analytics — App `{JWT} /api/v1/app/analytics`
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/events` | Track analytics event |
+| GET | `/widget-types` | Get widget types and metrics |
+| POST | `/dashboards` | Create dashboard |
+| GET | `/dashboards/:id/data` | Resolve all widget data |
+| POST | `/dashboards/:dashboardId/widgets` | Add widget |
+
+### Theme — App `{JWT} /api/v1/app/theme`
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/` | Get theme config |
+| PUT | `/` | Update theme |
+| GET | `/versions` | Version history |
+| POST | `/versions/:version/restore` | Restore version |
+
+### Search — App `{JWT} /api/v1/app/search`
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/index` | Index a document |
+| POST | `/synonyms` | Create synonym |
+
+### Integrations — App `{JWT} /api/v1/app/integrations`
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/connect` | Connect provider |
+| POST | `/:provider/test` | Test connection |
+| POST | `/:provider/sync` | Trigger sync |
+
+### Security — App `{JWT} /api/v1/app/security`
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/policy` | Get security policy |
+| PUT | `/policy` | Update policy |
+| POST | `/api-keys` | Create API key |
+
+### Admin `/api/v1/admin`
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/merchants` | Create merchant |
+| POST | `/merchants/:id/approve` | Approve merchant |
+| POST | `/merchants/:id/suspend` | Suspend merchant |
+| GET | `/merchants` | List all merchants |
+| GET | `/stats` | Platform stats |
+| GET | `/quotas/:merchantId` | Get API quota |
+| PUT | `/quotas/:merchantId` | Update quota |
+
+### Discovery `/api/v1/discovery`
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/featured` | Featured merchants |
+| GET | `/search` | Search merchants |
+| GET | `/categories` | Categories |
+| GET | `/nearby` | Nearby merchants |
+
+### BFF Endpoints `/api/v1/bff`
+| Method | Endpoint | Description |
+|--------|----------|-------------|
 | GET | `/website/categories` | Public categories |
 | GET | `/website/featured` | Featured tenants |
 | GET | `/website/pricing` | Subscription plans |
+| GET | `/tenant/:id/summary` | Dashboard summary |
+| GET | `/tenant/:id/analytics` | 30-day analytics |
+| GET | `/admin/overview` | Platform stats |
+| GET | `/admin/merchants` | Paginated merchant list |
+| GET | `/admin/analytics` | Revenue trend, user growth, order volume |
+| GET | `/admin/revenue` | Revenue report |
+| GET | `/admin/merchants/:merchantId/analytics` | Per-merchant analytics |
+| GET | `/mobile/tenant/:slug/manifest` | SDUI manifest |
+| GET | `/mobile/discovery` | Discovery feed |
+| GET | `/mobile/merchants/:merchantId/catalog` | Merchant catalog |
+| GET | `/mobile/profile` | User profile |
+| GET | `/mobile/notifications` | Notifications |
+
+### Other Endpoints
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/health` | Health check |
+| POST | `/qr/generate/:merchantId` | Generate QR code |
+| GET | `/qr/resolve/:slug` | Resolve QR deep link |
+| POST | `/templates/:id/use` | Apply template |
+| GET | `/:id/definition` | SDUI app definition |
+| GET | `/resolve/:slug` | Resolve slug to tenant |
 
 ## Database Schema
 
-30+ models across 12 domains. Key model groups:
+85+ models across 32 domains. Key model groups:
 
 | Domain | Models |
 |--------|--------|
 | **IAM** | User, Profile, RefreshToken, Device, PasswordHistory, Consent, ConsentScope |
 | **RBAC** | Role, Permission, RolePermission, UserRole |
-| **Tenant** | Tenant, TenantUser, TenantConfig, SubscriptionPlan, Subscription, TenantDomain |
-| **Builder** | Page, Section, Component, Navigation, Theme, Template |
+| **Tenant** | Tenant, TenantUser, TenantConfig, Plan, Subscription, TenantDomain |
+| **Builder** | Page, Section, Component, Navigation, Theme, ThemeVersion, Template |
 | **Publishing** | Draft, Release, ValidationReport |
 | **DAM** | Media, AssetFolder, AssetVersion |
-| **Commerce** | Category, Product, ProductImage, ProductVariant, Cart, CartItem, Order, OrderItem, OrderStatusHistory, Coupon, Fulfillment, TaxRule |
-| **Booking** | BookingService, StaffMember, BookingResource, Schedule, Booking, BookingHistory, WaitingListEntry |
+| **Commerce** | Category, Product, ProductVariant, ProductImage, Cart, CartItem, Order, OrderItem, Coupon, Fulfillment, TaxRule, InventoryReservation |
+| **Booking** | BookingService, StaffMember, BookingResource, Schedule, BookingLocation, CancellationPolicy, Booking, BookingHistory, BookingReminder, WaitingListEntry |
 | **Forms** | Form, FormField, FormSubmission, FormApproval, FormWorkflow |
-| **Payments** | PaymentProvider, TenantPaymentAccount, PaymentIntent, PaymentTransaction, WebhookEvent, FinancialEvent |
-| **Notifications** | Notification, NotificationTemplate, NotificationEvent, NotificationPreference, DeviceToken, DeliveryResult |
-| **Admin** | AuditLog |
-
-## Infrastructure Modules (Phase 0)
-
-| Module | Description |
-|--------|-------------|
-| **EventBus** | In-process pub/sub with sync/async dispatch. Modules emit DomainEvent objects; subscribers are registered via `@OnEvent()`. |
-| **TenantContext** | AsyncLocalStorage-based context propagation. TenantResolverMiddleware extracts tenant from header/slug/domain and makes it available via TenantContextService. |
-| **Redis** | ioredis wrapper with automatic in-memory mock fallback when `localhost:6379` is unreachable. Used for OTP, rate limiting, cache, pub/sub. |
-| **Queue (Bull)** | 5 job queues: publishing, notifications, assets, webhooks, analytics. QueueService provides a typed interface. |
-| **Structured Logging** | nestjs-pino with pino-pretty. LoggerService auto-attaches correlationId, tenantId, userId to every log entry. |
-| **Health** | `GET /health` endpoint returning DB connectivity, uptime, and dependency status. |
-| **RBAC** | Role/permission model with 4 seed roles (super_admin, support, operations, finance), 20 permissions. RbacGuard validates using `@RequireRole()` or `@RequirePermission()` decorators. |
-
-## Response Format
-
-```json
-// Success
-{ "success": true, "message": "OK", "data": { } }
-
-// Error
-{ "success": false, "errors": ["Error message"] }
-
-// Paginated
-{ "success": true, "message": "OK", "data": [...], "meta": { "page": 1, "limit": 20, "total": 100, "pages": 5 } }
-```
+| **Payments** | PaymentProvider, TenantPaymentAccount, PaymentIntent, PaymentTransaction, WebhookEvent, Settlement, FinancialEvent |
+| **Notifications** | NotificationTemplate, NotificationEvent, NotificationPreference, DeviceToken, DeliveryResult, Notification |
+| **Analytics** | AnalyticsEvent, Dashboard, DashboardWidget, SavedReport |
+| **Search** | SearchIndex, SearchQuery, SearchSynonym |
+| **AI** | AIProvider, AIPrompt, AICompletion, AIEmbedding |
+| **Admin** | PlatformSetting, SystemAnnouncement, FeatureFlag, ApiQuota |
+| **Infra** | Deployment, Environment, HealthCheck, Backup |
+| **Security** | SecurityPolicy, ApiKey, SecurityEvent, ConsentAudit |
+| **Developer** | DeveloperApp, WebhookEndpoint, WebhookEventLog |
+| **Marketplace** | MarketplaceListing, PluginInstallation |
+| **Assets** | AssetCollection, AssetShare, StorageProvider |
+| **Audit** | AuditLog |
 
 ## Seed Data
 
@@ -466,32 +398,28 @@ API at `http://localhost:4000/api/v1` — Swagger docs at `http://localhost:4000
 
 | Phase | Focus | Status |
 |-------|-------|--------|
-| 0 | Infrastructure (EventBus, Redis, Queue, RBAC, Logging, Health) | ✅ Complete |
-| 1.1 | IAM Platform (devices, passwords, recovery) | ✅ Complete |
-| 1.2 | Tenant Platform (config, subscriptions, features) | ✅ Complete |
-| 1.3 | API Gateway & BFF (rate limiter, 4 backends) | ✅ Complete |
-| 1.4 | Publishing Pipeline (validation, manifest, versions, rollback) | ✅ Complete |
-| 1.5 | DAM (Sharp optimization, variants, folders, CDN) | ✅ Complete |
-| 2.1 | Commerce (cart, orders, coupons, tax, fulfillment, variants) | ✅ Complete |
-| 2.2 | Booking & Scheduling (availability engine, 7-state workflow) | ✅ Complete |
-| 2.3 | Forms & Workflow (validation engine, approval workflow) | ✅ Complete |
-| 2.4 | Payments (Paystack, Flutterwave, Stripe, intents, webhooks) | ✅ Complete |
-| 2.5 | Notifications (templates, push/email/SMS, campaigns, click tracking, preferences, devices) | ✅ Complete |
-| 3a | Theme Builder (compiler, caching, restore/reset) | ✅ Complete |
-| 3a | Builder Enhancement (component library, actions, conditions, data binding, live preview) | ✅ Complete |
-| 3a | Commerce Enhancement (unified catalog, multi-currency, inventory reservations) | ✅ Complete |
-| 3a | Booking Enhancement (locations, cancellation policies, reminders) | ✅ Complete |
-| 3a | Notifications Enhancement (Email adapter, Push adapter, campaigns, segmentation, click analytics) | ✅ Complete |
-| 3a | Payments Enhancement (Stripe adapter, refunds, settlements, provider health) | ✅ Complete |
-| 3b.7 | Integration Platform (connector framework, SendGrid, Google Calendar) | ✅ Complete |
-| 3b.8 | Analytics & BI (event tracking, dashboards, reports) | ✅ Complete |
-| 3b.9 | Search & Discovery (index, synonyms, autocomplete, facets) | ✅ Complete |
-| 3b.10 | AI Platform (OpenAI, Anthropic, prompts, embeddings) | ✅ Complete |
-| 3b.11 | Platform Administration (settings, announcements, feature flags, quotas) | ✅ Complete |
-| 3c.12 | Infrastructure & DevOps (deployments, environments, health checks, backups) | ✅ Complete |
-| 3c.13 | Security & Compliance (policies, API keys, security events, consent audits) | ✅ Complete |
-| 3c.14 | Developer Platform (apps, webhooks, event logs) | ✅ Complete |
-| 4.15 | Marketplace & Plugins (listings, installations) | ✅ Complete |
-| 4.16 | Asset Platform Enhanced (collections, shares, storage providers) | ✅ Complete |
-| 4.16 | Notifications Adapters (Email — SendGrid/Resend/SES/SMTP/log, Push — Expo/FCM/APNS/log) | ✅ Complete |
-| 4.16 | Campaign Segmentation & Click Tracking (segment filters, click analytics endpoint) | ✅ Complete |
+| 0 | Infrastructure (EventBus, Redis, Queue, RBAC, Logging, Health) | Complete |
+| 1 | Platform (IAM, Tenants, Gateway/BFF, Publishing, DAM) | Complete |
+| 2 | Domain engines (Commerce, Booking, Forms, Payments, Notifications) | Complete |
+| 3a | Enhancement (Theme, Builder, Commerce, Booking, Notifications, Payments) | Complete |
+| 3b/3c | Integrations, Analytics, Search, AI, Platform Admin, Infra, Security, Developer | Complete |
+| 4 | Marketplace, Asset Platform, Notification Adapters, Campaign Segmentation | Complete |
+| v0.2 | Three-tier API architecture (Website/App/Mobile split) | Complete |
+| v0.2 | TASK-0025: Customizable Dashboard (widget data resolution, DTOs, widget registry) | Complete |
+
+## Completion Rate
+
+**~84/100** — See `Reigner.md` for detailed breakdown.
+
+## Response Format
+
+```json
+// Success
+{ "success": true, "message": "OK", "data": { } }
+
+// Error
+{ "success": false, "errors": ["Error message"] }
+
+// Paginated
+{ "success": true, "message": "OK", "data": [...], "meta": { "page": 1, "limit": 20, "total": 100, "pages": 5 } }
+```
