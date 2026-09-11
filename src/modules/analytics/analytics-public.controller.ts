@@ -130,6 +130,17 @@ export class AnalyticsPublicController {
     return this.reportsService.findOne(tenantId, id);
   }
 
+  // ─── Dashboard Data Resolution ──────────────────────────────
+
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @Get('dashboards/:id/data')
+  @ApiOperation({ summary: 'Resolve all widget data for a dashboard (public)' })
+  @ApiQuery({ name: 'tenantId', required: true })
+  getDashboardData(@Query('tenantId') tenantId: string, @Param('id') id: string) {
+    return this.dashboardsService.resolveDashboardData(tenantId, id);
+  }
+
   // ─── Dashboards ──────────────────────────────────────────────
 
   @UseGuards(JwtAuthGuard)

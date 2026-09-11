@@ -10,6 +10,6 @@ import { TenantResolverModule } from '../../shared/tenant/tenant-resolver.module
   imports: [TenantResolverModule],
   controllers: [AnalyticsAppController, AnalyticsPublicController],
   providers: [AnalyticsService, ReportsService, DashboardsService],
-  exports: [AnalyticsService],
+  exports: [AnalyticsService, DashboardsService],
 })
 export class AnalyticsModule {}
