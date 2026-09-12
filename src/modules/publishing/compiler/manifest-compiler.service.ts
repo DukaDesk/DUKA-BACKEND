@@ -105,6 +105,18 @@ export class ManifestCompiler {
 
     const checksum = crypto.createHash('sha256').update(JSON.stringify(manifest)).digest('hex');
 
+    const uniqueAssetIds = [...new Set(assetReferences.filter((ref) => ref && !ref.startsWith('/')))];
+
+    const invalidAssets: string[] = [];
+    if (uniqueAssetIds.length > 0) {
+      const existingMedia = await this.prisma.media.findMany({
+        where: { tenantId, id: { in: uniqueAssetIds } },
+        select: { id: true },
+      });
+      const existingIds = new Set(existingMedia.map((m) => m.id));
+      invalidAssets.push(...uniqueAssetIds.filter((id) => !existingIds.has(id)));
+    }
+
     await this.prisma.draft.upsert({
       where: { id: `${tenantId}-draft` },
       create: { id: `${tenantId}-draft`, tenantId, version: buildNumber, manifest: manifest as any, status: 'compiled' },
@@ -122,6 +134,7 @@ export class ManifestCompiler {
       references: [...new Set(assetReferences)],
       logo: tenant.theme?.logo || tenant.logo,
       generatedAt: new Date().toISOString(),
+      invalidAssets: invalidAssets.length > 0 ? invalidAssets : undefined,
     };
 
     const release = await this.prisma.release.create({

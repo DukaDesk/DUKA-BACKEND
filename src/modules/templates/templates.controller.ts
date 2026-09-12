@@ -12,10 +12,16 @@ export class TemplatesController {
 
   @Public()
   @Get()
-  @ApiOperation({ summary: 'List all templates' })
+  @ApiOperation({ summary: 'List all templates with pagination' })
   @ApiQuery({ name: 'category', required: false })
-  findAll(@Query('category') category?: string) {
-    return this.templatesService.findAll(category);
+  @ApiQuery({ name: 'page', required: false })
+  @ApiQuery({ name: 'limit', required: false })
+  findAll(
+    @Query('category') category?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.templatesService.findAll(category, parseInt(page || '1'), parseInt(limit || '20'));
   }
 
   @Public()
@@ -28,7 +34,7 @@ export class TemplatesController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @Post(':id/use')
-  @ApiOperation({ summary: 'Apply template to a tenant' })
+  @ApiOperation({ summary: 'Apply template to a tenant (preserves existing branding)' })
   useTemplate(
     @Param('id') templateId: string,
     @CurrentUser('id') userId: string,

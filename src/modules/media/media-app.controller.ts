@@ -3,11 +3,12 @@ import {
   UseGuards, UseInterceptors, UploadedFile,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { ApiTags, ApiBearerAuth, ApiOperation, ApiConsumes } from '@nestjs/swagger';
+import { ApiTags, ApiBearerAuth, ApiOperation, ApiConsumes, ApiBody, ApiQuery } from '@nestjs/swagger';
 import { MediaService } from './media.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { TenantResolverService } from '../../shared/tenant/tenant-resolver.service';
+import { UpdateMediaDto, CreateFolderDto, UpdateFolderDto } from './dto/media.dto';
 
 @ApiTags('Media / DAM - App (Tenant Self-Service)')
 @ApiBearerAuth()
@@ -26,7 +27,16 @@ export class MediaAppController {
   @Post('upload')
   @ApiOperation({ summary: 'Upload file with auto-optimization and variant generation' })
   @ApiConsumes('multipart/form-data')
-  @UseInterceptors(FileInterceptor('file'))
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['file'],
+      properties: {
+        file: { type: 'string', format: 'binary', description: 'File to upload (max 10MB)' },
+      },
+    },
+  })
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 10 * 1024 * 1024 } }))
   async upload(
     @CurrentUser('id') userId: string,
     @UploadedFile() file: any,
@@ -38,6 +48,7 @@ export class MediaAppController {
 
   @Get()
   @ApiOperation({ summary: 'List media files, optionally filtered by folder' })
+  @ApiQuery({ name: 'folderId', required: false })
   async findAll(
     @CurrentUser('id') userId: string,
     @Query('folderId') folderId?: string,
@@ -54,7 +65,7 @@ export class MediaAppController {
 
   @Patch(':id')
   @ApiOperation({ summary: 'Update media metadata (fileName, alt, folderId, visibility)' })
-  update(@Param('id') id: string, @Body() data: { fileName?: string; alt?: string; folderId?: string | null; visibility?: string }) {
+  update(@Param('id') id: string, @Body() data: UpdateMediaDto) {
     return this.mediaService.update(id, data);
   }
 
@@ -66,6 +77,7 @@ export class MediaAppController {
 
   @Get(':id/cdn-url')
   @ApiOperation({ summary: 'Get CDN delivery URL, optionally for a variant' })
+  @ApiQuery({ name: 'variant', required: false })
   getCdnUrl(@Param('id') id: string, @Query('variant') variant?: string) {
     return this.mediaService.getCdnUrl(id, variant);
   }
@@ -76,7 +88,7 @@ export class MediaAppController {
   @ApiOperation({ summary: 'Create asset folder' })
   async createFolder(
     @CurrentUser('id') userId: string,
-    @Body() data: { name: string; parentId?: string },
+    @Body() data: CreateFolderDto,
   ) {
     const tenantId = await this.getTenantId(userId);
     return this.mediaService.createFolder(tenantId, data.name, data.parentId);
@@ -84,6 +96,7 @@ export class MediaAppController {
 
   @Get('folders')
   @ApiOperation({ summary: 'List asset folders' })
+  @ApiQuery({ name: 'parentId', required: false })
   async getFolders(
     @CurrentUser('id') userId: string,
     @Query('parentId') parentId?: string,
@@ -94,7 +107,7 @@ export class MediaAppController {
 
   @Patch('folders/:id')
   @ApiOperation({ summary: 'Update folder' })
-  updateFolder(@Param('id') id: string, @Body() data: { name?: string; parentId?: string | null }) {
+  updateFolder(@Param('id') id: string, @Body() data: UpdateFolderDto) {
     return this.mediaService.updateFolder(id, data);
   }
 

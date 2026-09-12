@@ -6,6 +6,26 @@ import * as path from 'path';
 import * as fs from 'fs/promises';
 import { randomUUID } from 'crypto';
 
+const ALLOWED_MIME_TYPES = [
+  'image/jpeg',
+  'image/png',
+  'image/gif',
+  'image/webp',
+  'image/svg+xml',
+  'image/avif',
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'video/mp4',
+  'video/webm',
+  'audio/mpeg',
+  'audio/wav',
+];
+
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+
 @Injectable()
 export class MediaService {
   private readonly logger = new Logger(MediaService.name);
@@ -21,6 +41,14 @@ export class MediaService {
 
   async upload(tenantId: string, file: any, folderId?: string) {
     if (!file) throw new BadRequestException('No file provided');
+
+    if (!ALLOWED_MIME_TYPES.includes(file.mimetype)) {
+      throw new BadRequestException(`File type '${file.mimetype}' is not allowed. Accepted: images (JPEG, PNG, GIF, WebP, SVG, AVIF), documents (PDF, Word, Excel), video (MP4, WebM), audio (MP3, WAV)`);
+    }
+
+    if (file.size > MAX_FILE_SIZE) {
+      throw new BadRequestException(`File size ${Math.round(file.size / 1024 / 1024)}MB exceeds limit of 10MB`);
+    }
 
     const hash = randomUUID();
     const ext = path.extname(file.originalname) || '.bin';

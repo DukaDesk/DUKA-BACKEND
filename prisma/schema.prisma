@@ -1855,6 +1855,7 @@ model Template {
   description String?
   category    String?
   thumbnail   String?
+  version     String   @default("1.0.0")
   isActive    Boolean  @default(true)
   config      Json?
   createdAt   DateTime @default(now())
@@ -2063,20 +2064,21 @@ model ProductImage {
 }
 
 model Media {
-  id        String   @id @default(uuid())
-  tenantId  String
-  fileName  String
-  mimeType  String
-  size      Int
-  url       String
-  alt       String?
-  type      String   @default("image")
-  hash      String?
-  variants  Json?
-  folderId  String?
-  visibility String  @default("tenant")
-  tags      String[]
-  createdAt DateTime @default(now())
+  id         String   @id @default(uuid())
+  tenantId   String
+  templateId String?
+  fileName   String
+  mimeType   String
+  size       Int
+  url        String
+  alt        String?
+  type       String   @default("image")
+  hash       String?
+  variants   Json?
+  folderId   String?
+  visibility String   @default("tenant")
+  tags       String[]
+  createdAt  DateTime @default(now())
 
   tenant   Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   folder   AssetFolder?  @relation(fields: [folderId], references: [id])
@@ -2085,6 +2087,7 @@ model Media {
   shares         AssetShare[]
 
   @@index([tenantId])
+  @@index([templateId])
   @@map("media")
 }
 
