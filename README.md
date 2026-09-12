@@ -155,7 +155,7 @@ API at `https://duka-backend-production.up.railway.app/api/v1` — Swagger docs 
 | `npm run prisma:studio` | Open Prisma Studio |
 | `npm run docker:up` | Start PostgreSQL + Redis |
 
-## API Reference (~428 Endpoints)
+## API Reference (~434 Endpoints)
 
 ### Authentication `/api/v1/auth`
 | Method | Endpoint | Description |
@@ -288,6 +288,32 @@ API at `https://duka-backend-production.up.railway.app/api/v1` — Swagger docs 
 | GET | `/versions` | Version history |
 | POST | `/versions/:version/restore` | Restore version |
 
+### Builder (Draft/Published Split) — App `{JWT} /api/v1/app`
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/draft/initialize` | Initialize drafts from published state |
+| GET | `/draft/status` | Get draft workspace status |
+| POST | `/draft/discard` | Discard all drafts and reset |
+| GET | `/pages` | Get all draft pages |
+| PUT | `/pages/:pageId` | Update a draft page |
+| DELETE | `/pages/:pageId` | Delete a draft page |
+| POST | `/pages/:pageId/sections` | Add section to draft page |
+| PUT | `/sections/:sectionId` | Update a draft section |
+| DELETE | `/sections/:sectionId` | Delete a draft section |
+| POST | `/sections/:sectionId/components` | Add component to draft section |
+| PUT | `/components/:componentId` | Update a draft component |
+| DELETE | `/components/:componentId` | Delete a draft component |
+| GET | `/navigation` | Get navigation |
+| PUT | `/navigation` | Update navigation |
+| POST | `/preview` | Preview full app (from drafts) |
+| POST | `/pages/:pageId/preview` | Preview single draft page |
+
+### Renderer
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/:id/definition` | Get deployed published definition (`?version=X.Y.Z` optional) |
+| GET | `/resolve/:slug` | Resolve slug to tenant |
+
 ### Search — App `{JWT} /api/v1/app/search`
 | Method | Endpoint | Description |
 |--------|----------|-------------|
@@ -353,7 +379,7 @@ API at `https://duka-backend-production.up.railway.app/api/v1` — Swagger docs 
 | POST | `/qr/generate/:merchantId` | Generate QR code |
 | GET | `/qr/resolve/:slug` | Resolve QR deep link |
 | POST | `/templates/:id/use` | Apply template |
-| GET | `/:id/definition` | SDUI app definition |
+| GET | `/:id/definition` | SDUI app definition (from Release.manifest, `?version=` optional) |
 | GET | `/resolve/:slug` | Resolve slug to tenant |
 
 ## Database Schema
@@ -365,9 +391,9 @@ API at `https://duka-backend-production.up.railway.app/api/v1` — Swagger docs 
 | **IAM** | User, Profile, RefreshToken, Device, PasswordHistory, Consent, ConsentScope |
 | **RBAC** | Role, Permission, RolePermission, UserRole |
 | **Tenant** | Tenant, TenantUser, TenantConfig, Plan, Subscription, TenantDomain |
-| **Builder** | Page, Section, Component, Navigation, Theme, ThemeVersion, Template |
-| **Publishing** | Draft, Release, ValidationReport |
-| **DAM** | Media, AssetFolder, AssetVersion |
+| **Builder** | Page, Section, Component, Navigation, Theme, ThemeVersion, Template, DraftPage, DraftSection, DraftComponent |
+| **Publishing** | Draft, Release, ValidationReport (DraftPage/DraftSection/DraftComponent hold builder edits) |
+| **DAM** | Media (with templateId for shared asset pool), AssetFolder, AssetVersion |
 | **Commerce** | Category, Product, ProductVariant, ProductImage, Cart, CartItem, Order, OrderItem, Coupon, Fulfillment, TaxRule, InventoryReservation |
 | **Booking** | BookingService, StaffMember, BookingResource, Schedule, BookingLocation, CancellationPolicy, Booking, BookingHistory, BookingReminder, WaitingListEntry |
 | **Forms** | Form, FormField, FormSubmission, FormApproval, FormWorkflow |
@@ -409,7 +435,7 @@ API at `https://duka-backend-production.up.railway.app/api/v1` — Swagger docs 
 
 ## Completion Rate
 
-**~84/100** — See `Reigner.md` for detailed breakdown.
+**~90/100** — See `Reigner.md` for detailed breakdown.
 
 ## Response Format
 

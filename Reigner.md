@@ -102,9 +102,9 @@ ThrottlerGuard
 - **IAM** — User (with soft-delete fields), Profile, RefreshToken, Device, PasswordHistory, Consent, ConsentScope
 - **RBAC** — Role, Permission, RolePermission, UserRole
 - **Tenant** — Tenant, TenantUser, TenantConfig, Plan, Subscription, TenantDomain
-- **Builder/SDUI** — Template, Page → Section → Component, Navigation, Theme + ThemeVersion
+- **Builder/SDUI** — Template (with version), Page → Section → Component, Navigation, Theme + ThemeVersion, DraftPage → DraftSection → DraftComponent
 - **Publishing** — Draft, Release (versioned + checksummed), ValidationReport
-- **DAM** — Media, AssetFolder, AssetVersion
+- **DAM** — Media (with templateId for shared asset pool), AssetFolder, AssetVersion
 - **Commerce** — Category, Product, ProductVariant, ProductImage, Cart/CartItem, Order/OrderItem/OrderStatusHistory, Coupon, Fulfillment, TaxRule, InventoryReservation
 - **Booking** — BookingService, StaffMember, BookingResource, Schedule, BookingLocation, CancellationPolicy, BookingReminder, Booking, BookingHistory, WaitingListEntry
 - **Forms** — Form, FormField, FormSubmission, FormApproval, FormWorkflow
@@ -119,7 +119,7 @@ ThrottlerGuard
 ## 6. API Surface
 
 - **Global prefix:** `/api` with URI versioning → `/api/v1/...`
-- **Surface:** ~428 endpoints across 32 modules
+- **Surface:** ~434 endpoints across 32 modules
 - **Architecture:** Three-tier (Website / App / Mobile)
 - **Docs:** Swagger at `/api/docs`
 - **Health:** `GET /api/v1/health` (public)
@@ -178,6 +178,10 @@ Other scripts: `npm run build`, `npm run start:prod`, `npm run lint`, `npm test`
 | v0.2 | App/Public controller split for all 13 tenant modules | Complete |
 | v0.2 | TASK-0024: Publish permission fix (owner/manager roles) | Complete |
 | v0.2.1 | TASK-0025: Customizable Dashboard (widget data resolution, DTOs, registry) | Complete |
+| v0.3 | Draft/Published Split — Private drafts (DraftPage/DraftSection/DraftComponent), immutable releases, manifest-first reads | Complete |
+| v0.3 | Template Versioning + Shared Asset Pool — Template.version, Media.templateId, branding preservation, media copy on apply | Complete |
+| v0.3 | Media Hardening — MIME whitelist (15 types), 10MB limit, Swagger DTOs, asset validation on publish | Complete |
+| v0.3 | Data Contracts — Binding shapes per vertical documented | Complete |
 
 ---
 
@@ -195,9 +199,11 @@ Kept here so this file stays accurate:
 - **Discovery nearby is simplified** — `getNearby()` accepts lat/lng but does not perform actual geospatial queries.
 - **No RBAC guard middleware** — `RbacService` exists but only used in `UsersService`; no global guard enforced.
 - **No audit logging middleware** — `AuditLog` model exists but no auto-recording.
+- **Template manifest validation incomplete** — Validates pages exist, but component types are not validated against the component registry.
+- **Swagger incomplete for Builder/Publishing** — Media has full `@ApiProperty()` DTOs; Builder and Publishing have `@ApiOperation` but not full DTO validation decorators.
 - **Docs drift** — README references `*-enhanced/` module folders that don't exist (functionality was folded into parent modules); schema uses `Plan` where docs say `SubscriptionPlan`; `dist/` is committed.
 
-**Completion: ~84/100** — All 32 modules implemented with real business logic and Prisma queries. 85+ models. Three-tier architecture complete. TASK-0025 dashboard done. Main gaps: 0% test coverage, rate limiting not wired, adapter stubs.
+**Completion: ~90/100** — All 32 modules implemented with real business logic and Prisma queries. 85+ models. Three-tier architecture complete. Draft/published split, template versioning, media hardening done. Main gaps: 0% test coverage, rate limiting not wired, adapter stubs.
 
 ---
 
@@ -213,10 +219,10 @@ Kept here so this file stays accurate:
 
 ## 11. API Analysis (Condensed)
 
-**Framework & Structure** — NestJS 11 modular monolith, 33 controllers, ~428 endpoints across 32+ domains. Three-tier architecture: Website (platform), App (tenant self-service), Mobile (consumer). Global prefix `/api` + URI versioning `v1`. Swagger UI at `/api/docs`.
+**Framework & Structure** — NestJS 11 modular monolith, 33 controllers, ~434 endpoints across 32+ domains. Three-tier architecture: Website (platform), App (tenant self-service), Mobile (consumer). Global prefix `/api` + URI versioning `v1`. Swagger UI at `/api/docs`.
 
 **Endpoint Statistics**
-- Total endpoints: ~428
+- Total endpoints: ~434
 - Public (no auth): ~35 | Authenticated (JWT): ~380 | Admin-only: ~13
 - App (self-service): ~120 | Mobile/Consumer: ~80 | Platform/Admin: ~50 | BFF: ~20
 - Involving payments: 12 | Background jobs: 27 | External services: 18
@@ -227,7 +233,9 @@ Kept here so this file stays accurate:
 
 *Three-Tier Flow*: Mobile user hits `GET /merchants/:merchantId/products` (public). Tenant owner hits `POST /app/commerce/products` (auto-resolves tenant from JWT membership). Admin hits `POST /admin/merchants` (platform-level).
 
-*SDUI*: Mobile app fetches manifest (cached 5 min in Redis). Contains theme, navigation, plan features, and full SDUI hierarchy (pages→sections→components). Public endpoint; cache TTL hard-coded 300s.
+*SDUI*: Mobile app fetches manifest from `Release.manifest` (cached 5 min in Redis). Contains `manifestVersion`, `identity`, theme, navigation, plan features, and full SDUI hierarchy (pages→sections→components). Falls back to live DB if no release exists. Public endpoint; cache TTL hard-coded 300s.
+
+*Draft/Published Split*: Builder writes to `DraftPage`/`DraftSection`/`DraftComponent` tables. Publishing compiles drafts → `Release.manifest` → clears drafts. Mobile and definition endpoints read from `Release.manifest` only. `GET /definition?version=X.Y.Z` pins a specific release.
 
 *Commerce*: Product catalogue `GET /merchants/:merchantId/products` (public) → add to cart `POST /cart/items` → checkout `POST /cart/:id/checkout` → order creation with status transitions → payment `POST /app/payments/initialize` → provider verify → order status updates.
 
