@@ -18,6 +18,24 @@ export class MobileBffService {
 
     const tenant = await this.prisma.tenant.findFirst({
       where: { OR: [{ id: identifier }, { slug: identifier }] },
+      select: { id: true, slug: true },
+    });
+
+    if (!tenant) return null;
+
+    const release = await this.prisma.release.findFirst({
+      where: { tenantId: tenant.id, status: 'published' },
+      orderBy: { publishedAt: 'desc' },
+      select: { manifest: true },
+    });
+
+    if (release?.manifest) {
+      await this.redis.set(cacheKey, JSON.stringify(release.manifest), 300);
+      return release.manifest;
+    }
+
+    const fullTenant = await this.prisma.tenant.findFirst({
+      where: { OR: [{ id: identifier }, { slug: identifier }] },
       include: {
         theme: true,
         navigation: true,
@@ -42,16 +60,16 @@ export class MobileBffService {
       },
     });
 
-    if (!tenant) return null;
+    if (!fullTenant) return null;
 
-    const features = tenant.subscription?.plan?.features as Record<string, boolean> || {};
+    const features = fullTenant.subscription?.plan?.features as Record<string, boolean> || {};
 
     const manifest = {
-      tenantId: tenant.id,
-      name: tenant.name,
-      slug: tenant.slug,
-      status: tenant.status,
-      theme: tenant.theme || {
+      tenantId: fullTenant.id,
+      name: fullTenant.name,
+      slug: fullTenant.slug,
+      status: fullTenant.status,
+      theme: fullTenant.theme || {
         primaryColor: '#0066FF',
         secondaryColor: '#00CC66',
         backgroundColor: '#FFFFFF',
@@ -59,10 +77,10 @@ export class MobileBffService {
         fontFamily: 'Inter',
         borderRadius: '8px',
       },
-      navigation: tenant.navigation?.items || [],
-      config: tenant.config || { currency: 'NGN', timezone: 'Africa/Lagos' },
+      navigation: fullTenant.navigation?.items || [],
+      config: fullTenant.config || { currency: 'NGN', timezone: 'Africa/Lagos' },
       features,
-      screens: tenant.pages.map((page) => ({
+      screens: fullTenant.pages.map((page) => ({
         name: page.name,
         slug: page.slug,
         isHome: page.isHome,

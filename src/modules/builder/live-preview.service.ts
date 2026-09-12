@@ -62,15 +62,15 @@ export class LivePreviewService {
       include: {
         theme: true,
         navigation: true,
-        pages: {
+        draftPages: {
           where: { isActive: true },
           orderBy: { sortOrder: 'asc' },
           include: {
-            sections: {
+            draftSections: {
               where: { isActive: true },
               orderBy: { sortOrder: 'asc' },
               include: {
-                components: {
+                draftComponents: {
                   where: { isActive: true },
                   orderBy: { sortOrder: 'asc' },
                 },
@@ -97,7 +97,7 @@ export class LivePreviewService {
       : undefined;
 
     const pages = await Promise.all(
-      tenant.pages.map((page) => this.renderPage(page, defaultContext)),
+      tenant.draftPages.map((page) => this.renderPage(page, defaultContext)),
     );
 
     return {
@@ -109,14 +109,14 @@ export class LivePreviewService {
   }
 
   async previewPage(tenantId: string, pageId: string, context?: Partial<PreviewContext>): Promise<RenderedPage> {
-    const page = await this.prisma.page.findUnique({
+    const page = await this.prisma.draftPage.findUnique({
       where: { id: pageId },
       include: {
-        sections: {
+        draftSections: {
           where: { isActive: true },
           orderBy: { sortOrder: 'asc' },
           include: {
-            components: {
+            draftComponents: {
               where: { isActive: true },
               orderBy: { sortOrder: 'asc' },
             },
@@ -125,7 +125,7 @@ export class LivePreviewService {
       },
     });
 
-    if (!page) throw new NotFoundException('Page not found');
+    if (!page) throw new NotFoundException('Draft page not found');
 
     const defaultContext: PreviewContext = {
       tenantId,
@@ -141,7 +141,7 @@ export class LivePreviewService {
 
   private async renderPage(page: any, context: PreviewContext): Promise<RenderedPage> {
     const sections = await Promise.all(
-      page.sections.map((section: any) => this.renderSection(section, context)),
+      page.draftSections.map((section: any) => this.renderSection(section, context)),
     );
 
     return {
@@ -161,7 +161,7 @@ export class LivePreviewService {
     }
 
     const components = await Promise.all(
-      section.components.map((component: any) => this.renderComponent(component, context)),
+      section.draftComponents.map((component: any) => this.renderComponent(component, context)),
     );
 
     return {

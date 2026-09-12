@@ -5,7 +5,24 @@ import { PrismaService } from '../../common/prisma.service';
 export class RendererService {
   constructor(private prisma: PrismaService) {}
 
-  async getAppDefinition(tenantId: string) {
+  async getAppDefinition(tenantId: string, version?: string) {
+    let release: any;
+
+    if (version) {
+      release = await this.prisma.release.findUnique({
+        where: { tenantId_version: { tenantId, version } },
+      });
+    } else {
+      release = await this.prisma.release.findFirst({
+        where: { tenantId, status: 'published' },
+        orderBy: { publishedAt: 'desc' },
+      });
+    }
+
+    if (release?.manifest) {
+      return release.manifest;
+    }
+
     const tenant = await this.prisma.tenant.findUnique({
       where: { id: tenantId },
       include: {

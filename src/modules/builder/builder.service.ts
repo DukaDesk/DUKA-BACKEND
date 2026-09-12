@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, Logger } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma.service';
 import { ComponentRegistryService } from './component-registry.service';
 import { ActionBuilderService, ActionConfig, ActionExecutionResult } from './action-builder.service';
@@ -8,6 +8,8 @@ import { LivePreviewService, PreviewOutput, RenderedPage } from './live-preview.
 
 @Injectable()
 export class BuilderService {
+  private readonly logger = new Logger(BuilderService.name);
+
   constructor(
     private prisma: PrismaService,
     private componentRegistry: ComponentRegistryService,
@@ -35,10 +37,17 @@ export class BuilderService {
     return tenantUser.tenantId;
   }
 
-  async getPages(userId: string) {
+  async initializeDrafts(userId: string) {
     const tenantId = await this.resolveTenantId(userId);
-    return this.prisma.page.findMany({
+
+    const existingDrafts = await this.prisma.draftPage.findFirst({ where: { tenantId } });
+    if (existingDrafts) {
+      return { message: 'Drafts already initialized', initialized: false };
+    }
+
+    const pages = await this.prisma.page.findMany({
       where: { tenantId, isActive: true },
+      orderBy: { sortOrder: 'asc' },
       include: {
         sections: {
           where: { isActive: true },
@@ -51,15 +60,113 @@ export class BuilderService {
           },
         },
       },
+    });
+
+    for (const page of pages) {
+      const draftPage = await this.prisma.draftPage.create({
+        data: {
+          tenantId,
+          name: page.name,
+          slug: page.slug,
+          sortOrder: page.sortOrder,
+          isHome: page.isHome,
+          isActive: page.isActive,
+        },
+      });
+
+      for (const section of page.sections) {
+        const draftSection = await this.prisma.draftSection.create({
+          data: {
+            pageId: draftPage.id,
+            type: section.type,
+            sortOrder: section.sortOrder,
+            config: section.config as any,
+            isActive: section.isActive,
+          },
+        });
+
+        for (const component of section.components) {
+          await this.prisma.draftComponent.create({
+            data: {
+              sectionId: draftSection.id,
+              type: component.type,
+              props: component.props as any,
+              sortOrder: component.sortOrder,
+              isActive: component.isActive,
+            },
+          });
+        }
+      }
+    }
+
+    await this.prisma.tenant.update({
+      where: { id: tenantId },
+      data: { draftVersion: { increment: 1 } },
+    });
+
+    this.logger.log(`Initialized drafts for tenant ${tenantId}`);
+    return { message: 'Drafts initialized from published state', initialized: true };
+  }
+
+  async getDraftStatus(userId: string) {
+    const tenantId = await this.resolveTenantId(userId);
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { draftVersion: true },
+    });
+
+    const draftPageCount = await this.prisma.draftPage.count({ where: { tenantId } });
+    return {
+      hasDrafts: draftPageCount > 0,
+      draftVersion: tenant?.draftVersion || 0,
+      draftPageCount,
+    };
+  }
+
+  async discardDrafts(userId: string) {
+    const tenantId = await this.resolveTenantId(userId);
+
+    await this.prisma.draftComponent.deleteMany({
+      where: { draftSection: { draftPage: { tenantId } } },
+    });
+    await this.prisma.draftSection.deleteMany({
+      where: { draftPage: { tenantId } },
+    });
+    await this.prisma.draftPage.deleteMany({ where: { tenantId } });
+    await this.prisma.tenant.update({
+      where: { id: tenantId },
+      data: { draftVersion: 0 },
+    });
+
+    this.logger.log(`Discarded drafts for tenant ${tenantId}`);
+    return { message: 'Drafts discarded' };
+  }
+
+  async getPages(userId: string) {
+    const tenantId = await this.resolveTenantId(userId);
+    return this.prisma.draftPage.findMany({
+      where: { tenantId, isActive: true },
+      include: {
+        draftSections: {
+          where: { isActive: true },
+          orderBy: { sortOrder: 'asc' },
+          include: {
+            draftComponents: {
+              where: { isActive: true },
+              orderBy: { sortOrder: 'asc' },
+            },
+          },
+        },
+      },
       orderBy: { sortOrder: 'asc' },
     });
   }
 
   async updatePage(pageId: string, data: any) {
-    const page = await this.prisma.page.findUnique({ where: { id: pageId } });
-    if (!page) throw new NotFoundException('Page not found');
+    const page = await this.prisma.draftPage.findUnique({ where: { id: pageId } });
+    if (!page) throw new NotFoundException('Draft page not found');
 
-    return this.prisma.page.update({
+    return this.prisma.draftPage.update({
       where: { id: pageId },
       data: {
         name: data.name,
@@ -72,7 +179,10 @@ export class BuilderService {
   }
 
   async addSection(pageId: string, data: any) {
-    return this.prisma.section.create({
+    const page = await this.prisma.draftPage.findUnique({ where: { id: pageId } });
+    if (!page) throw new NotFoundException('Draft page not found');
+
+    return this.prisma.draftSection.create({
       data: {
         pageId,
         type: data.type,
@@ -83,10 +193,10 @@ export class BuilderService {
   }
 
   async updateSection(sectionId: string, data: any) {
-    const section = await this.prisma.section.findUnique({ where: { id: sectionId } });
-    if (!section) throw new NotFoundException('Section not found');
+    const section = await this.prisma.draftSection.findUnique({ where: { id: sectionId } });
+    if (!section) throw new NotFoundException('Draft section not found');
 
-    return this.prisma.section.update({
+    return this.prisma.draftSection.update({
       where: { id: sectionId },
       data: {
         type: data.type,
@@ -98,7 +208,10 @@ export class BuilderService {
   }
 
   async addComponent(sectionId: string, data: any) {
-    return this.prisma.component.create({
+    const section = await this.prisma.draftSection.findUnique({ where: { id: sectionId } });
+    if (!section) throw new NotFoundException('Draft section not found');
+
+    return this.prisma.draftComponent.create({
       data: {
         sectionId,
         type: data.type,
@@ -109,10 +222,10 @@ export class BuilderService {
   }
 
   async updateComponent(componentId: string, data: any) {
-    const component = await this.prisma.component.findUnique({ where: { id: componentId } });
-    if (!component) throw new NotFoundException('Component not found');
+    const component = await this.prisma.draftComponent.findUnique({ where: { id: componentId } });
+    if (!component) throw new NotFoundException('Draft component not found');
 
-    return this.prisma.component.update({
+    return this.prisma.draftComponent.update({
       where: { id: componentId },
       data: {
         type: data.type,
@@ -121,6 +234,38 @@ export class BuilderService {
         isActive: data.isActive,
       },
     });
+  }
+
+  async deletePage(pageId: string) {
+    const page = await this.prisma.draftPage.findUnique({ where: { id: pageId } });
+    if (!page) throw new NotFoundException('Draft page not found');
+
+    await this.prisma.draftComponent.deleteMany({
+      where: { draftSection: { draftPage: { id: pageId } } },
+    });
+    await this.prisma.draftSection.deleteMany({ where: { pageId } });
+    await this.prisma.draftPage.delete({ where: { id: pageId } });
+
+    return { message: 'Draft page deleted' };
+  }
+
+  async deleteSection(sectionId: string) {
+    const section = await this.prisma.draftSection.findUnique({ where: { id: sectionId } });
+    if (!section) throw new NotFoundException('Draft section not found');
+
+    await this.prisma.draftComponent.deleteMany({ where: { sectionId } });
+    await this.prisma.draftSection.delete({ where: { id: sectionId } });
+
+    return { message: 'Draft section deleted' };
+  }
+
+  async deleteComponent(componentId: string) {
+    const component = await this.prisma.draftComponent.findUnique({ where: { id: componentId } });
+    if (!component) throw new NotFoundException('Draft component not found');
+
+    await this.prisma.draftComponent.delete({ where: { id: componentId } });
+
+    return { message: 'Draft component deleted' };
   }
 
   async getNavigation(userId: string) {

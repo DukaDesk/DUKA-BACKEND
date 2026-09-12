@@ -15,12 +15,12 @@ export class ValidationEngine {
     const errors: { field: string; message: string }[] = [];
     const warnings: string[] = [];
 
-    const pages = await this.prisma.page.findMany({
+    const pages = await this.prisma.draftPage.findMany({
       where: { tenantId, isActive: true },
     });
 
     if (pages.length === 0) {
-      errors.push({ field: 'pages', message: 'At least one page is required' });
+      errors.push({ field: 'pages', message: 'At least one draft page is required' });
     }
 
     const homePages = pages.filter((p) => p.isHome);
@@ -37,13 +37,13 @@ export class ValidationEngine {
       errors.push({ field: 'slug', message: `Duplicate slugs: ${duplicateSlugs.join(', ')}` });
     }
 
-    const sections = await this.prisma.section.findMany({
+    const sections = await this.prisma.draftSection.findMany({
       where: { pageId: { in: pages.map((p) => p.id) }, isActive: true },
-      include: { components: true },
+      include: { draftComponents: true },
     });
 
     for (const section of sections) {
-      if (section.components.length === 0) {
+      if (section.draftComponents.length === 0) {
         warnings.push(`Section ${section.id} has no components`);
       }
     }

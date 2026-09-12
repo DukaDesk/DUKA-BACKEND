@@ -240,6 +240,58 @@ model ValidationReport {
   @@map("validation_reports")
 }
 
+model DraftPage {
+  id         String   @id @default(uuid())
+  tenantId   String
+  name       String
+  slug       String
+  sortOrder  Int      @default(0)
+  isHome     Boolean  @default(false)
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  tenant        Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  draftSections DraftSection[]
+
+  @@unique([tenantId, slug])
+  @@index([tenantId])
+  @@map("draft_pages")
+}
+
+model DraftSection {
+  id        String   @id @default(uuid())
+  pageId    String
+  type      String
+  sortOrder Int      @default(0)
+  config    Json?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  draftPage      DraftPage      @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  draftComponents DraftComponent[]
+
+  @@index([pageId])
+  @@map("draft_sections")
+}
+
+model DraftComponent {
+  id        String   @id @default(uuid())
+  sectionId String
+  type      String
+  props     Json?
+  sortOrder Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  draftSection DraftSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+
+  @@index([sectionId])
+  @@map("draft_components")
+}
+
 // ─── Phase 1: Asset Management ─────────────────────────────────
 
 model AssetFolder {
@@ -1712,10 +1764,11 @@ model Tenant {
   email       String?
   phone       String?
   logo        String?
-  status      TenantStatus @default(draft)
-  publishedAt DateTime?
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+  status       TenantStatus @default(draft)
+  publishedAt  DateTime?
+  draftVersion Int          @default(0)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
 
   users               TenantUser[]
   consents            Consent[]
@@ -1731,6 +1784,7 @@ model Tenant {
   domains             TenantDomain[]
   drafts              Draft[]
   releases            Release[]
+  draftPages          DraftPage[]
   assetFolders        AssetFolder[]
   coupons             Coupon[]
   taxRules            TaxRule[]

@@ -34,12 +34,29 @@ export class PublishingService {
 
     const { manifest, checksum, version } = await this.manifestCompiler.compile(tenantId);
 
+    const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId }, select: { slug: true } });
+
     const release = await this.prisma.release.updateMany({
       where: { tenantId, status: 'draft' },
       data: { status: 'published', publishedAt: new Date() },
     });
 
+    await this.prisma.draftComponent.deleteMany({
+      where: { draftSection: { draftPage: { tenantId } } },
+    });
+    await this.prisma.draftSection.deleteMany({
+      where: { draftPage: { tenantId } },
+    });
+    await this.prisma.draftPage.deleteMany({ where: { tenantId } });
+    await this.prisma.tenant.update({
+      where: { id: tenantId },
+      data: { draftVersion: 0 },
+    });
+
     await this.redis.del(`manifest:${tenantId}`);
+    if (tenant?.slug) {
+      await this.redis.del(`manifest:${tenant.slug}`);
+    }
 
     await this.eventBus.publish({
       type: 'ReleasePublished',
