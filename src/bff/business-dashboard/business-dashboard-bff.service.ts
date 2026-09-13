@@ -28,7 +28,8 @@ export class BusinessDashboardBffService {
 
   async getTenantsList(status?: string, page = 1, limit = 20) {
     const where: any = {};
-    if (status) where.status = status;
+    const allowedStatuses = ['draft', 'published', 'suspended'];
+    if (status && allowedStatuses.includes(status)) where.status = status;
 
     const skip = (page - 1) * limit;
     const [data, total] = await Promise.all([

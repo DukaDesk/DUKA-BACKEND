@@ -35,7 +35,10 @@ export class UsersService {
     }
 
     if (filters?.status) {
-      where.status = filters.status;
+      const allowedStatuses = ['active', 'suspended', 'deactivated', 'deleted'];
+      if (allowedStatuses.includes(filters.status)) {
+        where.status = filters.status;
+      }
     }
 
     const [users, total] = await Promise.all([

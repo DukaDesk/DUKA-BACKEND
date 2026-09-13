@@ -53,7 +53,8 @@ export class AdminService {
     await this.verifyAdmin(adminUserId);
 
     const where: any = {};
-    if (status) where.status = status;
+    const allowedStatuses = ['draft', 'published', 'suspended'];
+    if (status && allowedStatuses.includes(status)) where.status = status;
 
     return this.prisma.tenant.findMany({
       where,
