@@ -155,7 +155,7 @@ API at `https://duka-backend-production.up.railway.app/api/v1` — Swagger docs 
 | `npm run prisma:studio` | Open Prisma Studio |
 | `npm run docker:up` | Start PostgreSQL + Redis |
 
-## API Reference (~434 Endpoints)
+## API Reference (~447 Endpoints)
 
 ### Authentication `/api/v1/auth`
 | Method | Endpoint | Description |
@@ -432,10 +432,12 @@ API at `https://duka-backend-production.up.railway.app/api/v1` — Swagger docs 
 | 4 | Marketplace, Asset Platform, Notification Adapters, Campaign Segmentation | Complete |
 | v0.2 | Three-tier API architecture (Website/App/Mobile split) | Complete |
 | v0.2 | TASK-0025: Customizable Dashboard (widget data resolution, DTOs, widget registry) | Complete |
+| v0.3 | Draft/Published Split, Template Versioning, Media Hardening | Complete |
+| v0.3.1 | P0 Admin Fixes — Status validation, Number() pagination, approve/reject, tenant soft-delete, analytics optional tenantId | Complete |
 
 ## Completion Rate
 
-**~90/100** — See `Reigner.md` for detailed breakdown.
+**~91/100** — See `Reigner.md` for detailed breakdown.
 
 ## Response Format
 

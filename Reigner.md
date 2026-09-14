@@ -182,6 +182,7 @@ Other scripts: `npm run build`, `npm run start:prod`, `npm run lint`, `npm test`
 | v0.3 | Template Versioning + Shared Asset Pool — Template.version, Media.templateId, branding preservation, media copy on apply | Complete |
 | v0.3 | Media Hardening — MIME whitelist (15 types), 10MB limit, Swagger DTOs, asset validation on publish | Complete |
 | v0.3 | Data Contracts — Binding shapes per vertical documented | Complete |
+| v0.3.1 | P0 Admin Fixes — Status enum validation, Number() pagination, POST users approve/reject, DELETE merchants soft-delete (30-day), analytics optional tenantId via TenantResolver | Complete |
 
 ---
 
@@ -203,7 +204,7 @@ Kept here so this file stays accurate:
 - **Swagger incomplete for Builder/Publishing** — Media has full `@ApiProperty()` DTOs; Builder and Publishing have `@ApiOperation` but not full DTO validation decorators.
 - **Docs drift** — README references `*-enhanced/` module folders that don't exist (functionality was folded into parent modules); schema uses `Plan` where docs say `SubscriptionPlan`; `dist/` is committed.
 
-**Completion: ~90/100** — All 32 modules implemented with real business logic and Prisma queries. 85+ models. Three-tier architecture complete. Draft/published split, template versioning, media hardening done. Main gaps: 0% test coverage, rate limiting not wired, adapter stubs.
+**Completion: ~91/100** — All 32 modules implemented with real business logic and Prisma queries. 85+ models. Three-tier architecture complete. Draft/published split, template versioning, media hardening, P0 admin fixes done. Main gaps: 0% test coverage, rate limiting not wired, adapter stubs.
 
 ---
 
@@ -219,10 +220,10 @@ Kept here so this file stays accurate:
 
 ## 11. API Analysis (Condensed)
 
-**Framework & Structure** — NestJS 11 modular monolith, 33 controllers, ~434 endpoints across 32+ domains. Three-tier architecture: Website (platform), App (tenant self-service), Mobile (consumer). Global prefix `/api` + URI versioning `v1`. Swagger UI at `/api/docs`.
+**Framework & Structure** — NestJS 11 modular monolith, 33 controllers, ~447 endpoints across 32+ domains. Three-tier architecture: Website (platform), App (tenant self-service), Mobile (consumer). Global prefix `/api` + URI versioning `v1`. Swagger UI at `/api/docs`.
 
 **Endpoint Statistics**
-- Total endpoints: ~434
+- Total endpoints: ~447
 - Public (no auth): ~35 | Authenticated (JWT): ~380 | Admin-only: ~13
 - App (self-service): ~120 | Mobile/Consumer: ~80 | Platform/Admin: ~50 | BFF: ~20
 - Involving payments: 12 | Background jobs: 27 | External services: 18
