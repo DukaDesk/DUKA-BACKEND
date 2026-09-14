@@ -34,9 +34,11 @@ export class UsersController {
     },
     @CurrentUser('id') adminUserId: string,
   ) {
+    const page = Number(query.page) || 1;
+    const limit = Number(query.limit) || 50;
     return this.usersService.listUsers(
-      query.page,
-      query.limit,
+      page,
+      limit,
       {
         email: query.email,
         role: query.role,
@@ -51,6 +53,26 @@ export class UsersController {
   @ApiParam({ name: 'id', description: 'User ID' })
   async getUserById(@Param() param: { id: string }, @CurrentUser('id') adminUserId: string) {
     return this.usersService.getUserById(param.id);
+  }
+
+  @Post(':id/approve')
+  @ApiOperation({ summary: 'Approve a pending/suspended user (set status to active)' })
+  @ApiParam({ name: 'id', description: 'User ID' })
+  async approveUser(
+    @Param() param: { id: string },
+    @CurrentUser('id') adminUserId: string,
+  ) {
+    return this.usersService.approveUser(param.id);
+  }
+
+  @Post(':id/reject')
+  @ApiOperation({ summary: 'Reject a user (set status to suspended)' })
+  @ApiParam({ name: 'id', description: 'User ID' })
+  async rejectUser(
+    @Param() param: { id: string },
+    @CurrentUser('id') adminUserId: string,
+  ) {
+    return this.usersService.rejectUser(param.id);
   }
 
   @Post(':id/invite')
@@ -106,6 +128,8 @@ export class UsersController {
     @Query() query: { page?: number; limit?: number },
     @CurrentUser('id') adminUserId: string,
   ) {
-    return this.usersService.getTenantUsers(param.merchantId, query.page, query.limit);
+    const page = Number(query.page) || 1;
+    const limit = Number(query.limit) || 50;
+    return this.usersService.getTenantUsers(param.merchantId, page, limit);
   }
 }

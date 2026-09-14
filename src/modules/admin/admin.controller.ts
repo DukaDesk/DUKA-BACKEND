@@ -53,6 +53,12 @@ export class AdminController {
     return this.adminService.updateTenant(adminUserId, id, data);
   }
 
+  @Delete('merchants/:id')
+  @ApiOperation({ summary: 'Soft-delete a tenant (30-day deactivation period)' })
+  deleteTenant(@Param('id') id: string, @CurrentUser('id') userId: string) {
+    return this.adminService.deactivateTenant(id, userId);
+  }
+
   @Post('cleanup-deactivated')
   @ApiOperation({ summary: 'Permanently delete accounts past 30-day deactivation period' })
   cleanupDeactivated(@CurrentUser('id') userId: string) {

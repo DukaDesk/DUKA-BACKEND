@@ -6,6 +6,8 @@ import { AnalyticsService } from './analytics.service';
 import { ReportsService } from './reports.service';
 import { DashboardsService } from './dashboards.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { TenantResolverService } from '../../shared/tenant/tenant-resolver.service';
 
 @ApiTags('Analytics - Public (Read-Only)')
 @Controller({ path: 'analytics', version: '1' })
@@ -14,6 +16,7 @@ export class AnalyticsPublicController {
     private readonly analyticsService: AnalyticsService,
     private readonly reportsService: ReportsService,
     private readonly dashboardsService: DashboardsService,
+    private readonly tenantResolver: TenantResolverService,
   ) {}
 
   // ─── Event Tracking ──────────────────────────────────────────
@@ -22,7 +25,7 @@ export class AnalyticsPublicController {
   @ApiBearerAuth()
   @Get('events')
   @ApiOperation({ summary: 'Get analytics events with filters' })
-  @ApiQuery({ name: 'tenantId', required: true })
+  @ApiQuery({ name: 'tenantId', required: false })
   @ApiQuery({ name: 'event', required: false })
   @ApiQuery({ name: 'category', required: false })
   @ApiQuery({ name: 'userId', required: false })
@@ -30,8 +33,9 @@ export class AnalyticsPublicController {
   @ApiQuery({ name: 'to', required: false })
   @ApiQuery({ name: 'page', required: false })
   @ApiQuery({ name: 'limit', required: false })
-  getEvents(
-    @Query('tenantId') tenantId: string,
+  async getEvents(
+    @CurrentUser('id') currentUserId: string,
+    @Query('tenantId') tenantId?: string,
     @Query('event') event?: string,
     @Query('category') category?: string,
     @Query('userId') userId?: string,
@@ -40,10 +44,11 @@ export class AnalyticsPublicController {
     @Query('page') page?: string,
     @Query('limit') limit?: string,
   ) {
-    return this.analyticsService.getEvents(tenantId, {
+    const tid = tenantId || await this.tenantResolver.resolveTenantId(currentUserId);
+    return this.analyticsService.getEvents(tid, {
       event, category, userId, from, to,
-      page: page ? parseInt(page) : 1,
-      limit: limit ? parseInt(limit) : 50,
+      page: Number(page) || 1,
+      limit: Number(limit) || 50,
     });
   }
 
@@ -51,19 +56,21 @@ export class AnalyticsPublicController {
   @ApiBearerAuth()
   @Get('events/aggregate')
   @ApiOperation({ summary: 'Aggregate events by period' })
-  @ApiQuery({ name: 'tenantId', required: true })
+  @ApiQuery({ name: 'tenantId', required: false })
   @ApiQuery({ name: 'event', required: true })
   @ApiQuery({ name: 'period', required: false })
   @ApiQuery({ name: 'from', required: false })
   @ApiQuery({ name: 'to', required: false })
-  getEventAggregation(
-    @Query('tenantId') tenantId: string,
-    @Query('event') event: string,
+  async getEventAggregation(
+    @CurrentUser('id') currentUserId: string,
+    @Query('tenantId') tenantId?: string,
+    @Query('event') event?: string,
     @Query('period') period?: string,
     @Query('from') from?: string,
     @Query('to') to?: string,
   ) {
-    return this.analyticsService.getEventAggregation(tenantId, event, period as any, from, to);
+    const tid = tenantId || await this.tenantResolver.resolveTenantId(currentUserId);
+    return this.analyticsService.getEventAggregation(tid, event!, period as any, from, to);
   }
 
   // ─── Reports ─────────────────────────────────────────────────
@@ -72,42 +79,46 @@ export class AnalyticsPublicController {
   @ApiBearerAuth()
   @Get('reports/revenue')
   @ApiOperation({ summary: 'Revenue report' })
-  @ApiQuery({ name: 'tenantId', required: true })
+  @ApiQuery({ name: 'tenantId', required: false })
   @ApiQuery({ name: 'from', required: false })
   @ApiQuery({ name: 'to', required: false })
-  getRevenueReport(@Query('tenantId') tenantId: string, @Query('from') from?: string, @Query('to') to?: string) {
-    return this.analyticsService.getRevenueReport(tenantId, from, to);
+  async getRevenueReport(@CurrentUser('id') currentUserId: string, @Query('tenantId') tenantId?: string, @Query('from') from?: string, @Query('to') to?: string) {
+    const tid = tenantId || await this.tenantResolver.resolveTenantId(currentUserId);
+    return this.analyticsService.getRevenueReport(tid, from, to);
   }
 
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @Get('reports/users')
   @ApiOperation({ summary: 'User analytics' })
-  @ApiQuery({ name: 'tenantId', required: true })
+  @ApiQuery({ name: 'tenantId', required: false })
   @ApiQuery({ name: 'from', required: false })
   @ApiQuery({ name: 'to', required: false })
-  getUserAnalytics(@Query('tenantId') tenantId: string, @Query('from') from?: string, @Query('to') to?: string) {
-    return this.analyticsService.getUserAnalytics(tenantId, from, to);
+  async getUserAnalytics(@CurrentUser('id') currentUserId: string, @Query('tenantId') tenantId?: string, @Query('from') from?: string, @Query('to') to?: string) {
+    const tid = tenantId || await this.tenantResolver.resolveTenantId(currentUserId);
+    return this.analyticsService.getUserAnalytics(tid, from, to);
   }
 
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @Get('reports/bookings')
   @ApiOperation({ summary: 'Booking analytics' })
-  @ApiQuery({ name: 'tenantId', required: true })
+  @ApiQuery({ name: 'tenantId', required: false })
   @ApiQuery({ name: 'from', required: false })
   @ApiQuery({ name: 'to', required: false })
-  getBookingAnalytics(@Query('tenantId') tenantId: string, @Query('from') from?: string, @Query('to') to?: string) {
-    return this.analyticsService.getBookingAnalytics(tenantId, from, to);
+  async getBookingAnalytics(@CurrentUser('id') currentUserId: string, @Query('tenantId') tenantId?: string, @Query('from') from?: string, @Query('to') to?: string) {
+    const tid = tenantId || await this.tenantResolver.resolveTenantId(currentUserId);
+    return this.analyticsService.getBookingAnalytics(tid, from, to);
   }
 
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @Get('summary')
   @ApiOperation({ summary: 'Dashboard summary' })
-  @ApiQuery({ name: 'tenantId', required: true })
-  getDashboardSummary(@Query('tenantId') tenantId: string) {
-    return this.analyticsService.getDashboardSummary(tenantId);
+  @ApiQuery({ name: 'tenantId', required: false })
+  async getDashboardSummary(@CurrentUser('id') currentUserId: string, @Query('tenantId') tenantId?: string) {
+    const tid = tenantId || await this.tenantResolver.resolveTenantId(currentUserId);
+    return this.analyticsService.getDashboardSummary(tid);
   }
 
   // ─── Saved Reports ──────────────────────────────────────────
@@ -116,18 +127,20 @@ export class AnalyticsPublicController {
   @ApiBearerAuth()
   @Get('reports/saved')
   @ApiOperation({ summary: 'List saved reports' })
-  @ApiQuery({ name: 'tenantId', required: true })
-  getReports(@Query('tenantId') tenantId: string) {
-    return this.reportsService.findAll(tenantId);
+  @ApiQuery({ name: 'tenantId', required: false })
+  async getReports(@CurrentUser('id') currentUserId: string, @Query('tenantId') tenantId?: string) {
+    const tid = tenantId || await this.tenantResolver.resolveTenantId(currentUserId);
+    return this.reportsService.findAll(tid);
   }
 
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @Get('reports/:id')
   @ApiOperation({ summary: 'Get saved report' })
-  @ApiQuery({ name: 'tenantId', required: true })
-  getReport(@Query('tenantId') tenantId: string, @Param('id') id: string) {
-    return this.reportsService.findOne(tenantId, id);
+  @ApiQuery({ name: 'tenantId', required: false })
+  async getReport(@CurrentUser('id') currentUserId: string, @Param('id') id: string, @Query('tenantId') tenantId?: string) {
+    const tid = tenantId || await this.tenantResolver.resolveTenantId(currentUserId);
+    return this.reportsService.findOne(tid, id);
   }
 
   // ─── Dashboard Data Resolution ──────────────────────────────
@@ -136,9 +149,10 @@ export class AnalyticsPublicController {
   @ApiBearerAuth()
   @Get('dashboards/:id/data')
   @ApiOperation({ summary: 'Resolve all widget data for a dashboard (public)' })
-  @ApiQuery({ name: 'tenantId', required: true })
-  getDashboardData(@Query('tenantId') tenantId: string, @Param('id') id: string) {
-    return this.dashboardsService.resolveDashboardData(tenantId, id);
+  @ApiQuery({ name: 'tenantId', required: false })
+  async getDashboardData(@CurrentUser('id') currentUserId: string, @Param('id') id: string, @Query('tenantId') tenantId?: string) {
+    const tid = tenantId || await this.tenantResolver.resolveTenantId(currentUserId);
+    return this.dashboardsService.resolveDashboardData(tid, id);
   }
 
   // ─── Dashboards ──────────────────────────────────────────────
@@ -147,17 +161,19 @@ export class AnalyticsPublicController {
   @ApiBearerAuth()
   @Get('dashboards')
   @ApiOperation({ summary: 'List dashboards' })
-  @ApiQuery({ name: 'tenantId', required: true })
-  getDashboards(@Query('tenantId') tenantId: string) {
-    return this.dashboardsService.findAll(tenantId);
+  @ApiQuery({ name: 'tenantId', required: false })
+  async getDashboards(@CurrentUser('id') currentUserId: string, @Query('tenantId') tenantId?: string) {
+    const tid = tenantId || await this.tenantResolver.resolveTenantId(currentUserId);
+    return this.dashboardsService.findAll(tid);
   }
 
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @Get('dashboards/:id')
   @ApiOperation({ summary: 'Get dashboard with widgets' })
-  @ApiQuery({ name: 'tenantId', required: true })
-  getDashboard(@Query('tenantId') tenantId: string, @Param('id') id: string) {
-    return this.dashboardsService.findOne(tenantId, id);
+  @ApiQuery({ name: 'tenantId', required: false })
+  async getDashboard(@CurrentUser('id') currentUserId: string, @Param('id') id: string, @Query('tenantId') tenantId?: string) {
+    const tid = tenantId || await this.tenantResolver.resolveTenantId(currentUserId);
+    return this.dashboardsService.findOne(tid, id);
   }
 }

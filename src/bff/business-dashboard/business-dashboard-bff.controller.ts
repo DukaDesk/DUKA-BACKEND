@@ -24,14 +24,16 @@ export class BusinessDashboardBffController {
   @ApiQuery({ name: 'page', required: false })
   @ApiQuery({ name: 'limit', required: false })
   getTenants(@Query('status') status?: string, @Query('page') page?: string, @Query('limit') limit?: string) {
-    return this.bff.getTenantsList(status, page ? parseInt(page) : 1, limit ? parseInt(limit) : 20);
+    const p = Number(page) || 1;
+    const l = Number(limit) || 20;
+    return this.bff.getTenantsList(status, p, l);
   }
 
   @Get('audit')
   @ApiOperation({ summary: 'Get recent audit logs' })
   @ApiQuery({ name: 'limit', required: false })
   getAuditLogs(@Query('limit') limit?: string) {
-    return this.bff.getRecentAuditLogs(limit ? parseInt(limit) : 20);
+    return this.bff.getRecentAuditLogs(Number(limit) || 20);
   }
 
   @Get('analytics')

@@ -49,6 +49,32 @@ export class AdminService {
     });
   }
 
+  async deactivateTenant(tenantId: string, adminUserId: string) {
+    await this.verifyAdmin(adminUserId);
+
+    const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId }, include: { config: true } });
+    if (!tenant) throw new NotFoundException('Tenant not found');
+
+    const config = (tenant.config as any) || {};
+    if (config.scheduledDeletionAt) {
+      const scheduledAt = new Date(config.scheduledDeletionAt);
+      const daysRemaining = Math.ceil(
+        (scheduledAt.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)
+      );
+      return { message: `Tenant already scheduled for deletion in ${daysRemaining} days`, daysRemaining };
+    }
+
+    const scheduledDeletionAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+
+    return this.prisma.tenant.update({
+      where: { id: tenantId },
+      data: {
+        status: 'suspended',
+        config: { ...config, scheduledDeletionAt: scheduledDeletionAt.toISOString() },
+      },
+    });
+  }
+
   async getTenants(adminUserId: string, status?: string) {
     await this.verifyAdmin(adminUserId);
 
@@ -109,7 +135,21 @@ export class AdminService {
       },
     });
 
-    return { deletedCount: deactivatedUsers.length };
+    const allTenants = await this.prisma.tenant.findMany({
+      where: { status: 'suspended' },
+      include: { config: true },
+    });
+
+    let deletedTenants = 0;
+    for (const tenant of allTenants) {
+      const config = (tenant.config as any) || {};
+      if (config.scheduledDeletionAt && new Date(config.scheduledDeletionAt) <= thirtyDaysAgo) {
+        await this.prisma.tenant.delete({ where: { id: tenant.id } });
+        deletedTenants++;
+      }
+    }
+
+    return { deletedUsers: deactivatedUsers.length, deletedTenants };
   }
 
   async getTenantDetail(tenantId: string) {

@@ -95,6 +95,26 @@ export class UsersService {
     return user;
   }
 
+  async approveUser(userId: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new NotFoundException('User not found');
+
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: { status: 'active' },
+    });
+  }
+
+  async rejectUser(userId: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new NotFoundException('User not found');
+
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: { status: 'suspended' },
+    });
+  }
+
   async inviteUser(inviteData: {
     email: string;
     role: string;
