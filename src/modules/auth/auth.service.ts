@@ -34,6 +34,23 @@ export class AuthService {
     private emailAdapter: EmailAdapter,
   ) {}
 
+  private normalizeRole(raw: string): string {
+    const r = String(raw || '').toLowerCase().trim().replace(/\s+/g, '_').replace(/-/g, '_');
+    if (r === 'platform_operator' || r === 'platformoperator' || r === 'admin' || r === 'administrator' || r === 'operations' || r === 'operator') return 'platform_operator';
+    if (r === 'support_agent' || r === 'supportagent' || r === 'support') return 'support_agent';
+    if (r === 'super_admin' || r === 'superadmin') return 'super_admin';
+    return r;
+  }
+
+  private mapRoleToDbName(canonical: string): string {
+    // DB PlatformRole enum: super_admin, support, operations, finance
+    if (canonical === 'super_admin') return 'super_admin';
+    if (canonical === 'platform_operator') return 'operations';
+    if (canonical === 'support_agent') return 'support';
+    if (canonical === 'finance') return 'finance';
+    return canonical;
+  }
+
   async register(dto: RegisterDto) {
     const existing = await this.prisma.user.findUnique({ where: { email: dto.email } });
     if (existing) {
@@ -42,6 +59,8 @@ export class AuthService {
 
     await this.passwordService.validatePasswordStrength(dto.password);
     const passwordHash = await this.passwordService.hash(dto.password);
+
+    const canonicalRole = this.normalizeRole((dto as any).role);
     const user = await this.prisma.user.create({
       data: {
         email: dto.email,
@@ -49,6 +68,7 @@ export class AuthService {
         passwordHash,
         firstName: dto.firstName,
         lastName: dto.lastName,
+        status: 'pending' as any,
       },
       select: {
         id: true,
@@ -60,10 +80,34 @@ export class AuthService {
       },
     });
 
+    // Persist requested role as UserRole with pending status (requires super admin approval)
+    try {
+      const dbRoleName = this.mapRoleToDbName(canonicalRole);
+      const roleRecord = await this.prisma.role.findFirst({ where: { name: dbRoleName } });
+      if (roleRecord) {
+        await this.prisma.userRole.create({
+          data: {
+            userId: user.id,
+            roleId: roleRecord.id,
+            tenantId: null,
+          },
+        });
+      } else {
+        this.logger.warn(`[register] Role not found for ${canonicalRole} (db: ${dbRoleName}), user ${user.id} created without UserRole`);
+      }
+    } catch (e: any) {
+      this.logger.warn(`[register] Failed to assign role ${canonicalRole} to ${user.id}: ${e?.message}`);
+    }
+
     await this.passwordService.recordHistory(user.id, passwordHash);
 
-    const tokens = await this.generateTokens(user.id, user.email);
+    // Do not issue tokens for pending users — require approval (return user only)
+    // Keep tokens for backward compat if legacy flow expects immediate login, but mark pending
+    if ((user as any).status === 'pending') {
+      return { user, message: 'Registration pending approval', pending: true };
+    }
 
+    const tokens = await this.generateTokens(user.id, user.email);
     return { user, ...tokens };
   }
 
