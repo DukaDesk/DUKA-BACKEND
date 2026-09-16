@@ -435,6 +435,7 @@ API at `https://duka-backend-production.up.railway.app/api/v1` — Swagger docs 
 | v0.3 | Draft/Published Split, Template Versioning, Media Hardening | Complete |
 | v0.3.1 | P0 Admin Fixes — Status validation, Number() pagination, approve/reject, tenant soft-delete, analytics optional tenantId | Complete |
 | v0.3.2 | P0 Admin Fixes v2 — UserStatus +pending/+rejected, case-insensitive filter, tenant alias, body+query invite, Swagger decorators | Complete |
+| v0.3.3 | P0 tenantUsers Fix — Fixed tenantUsers→tenants (correct Prisma relation), dropped invalid role include (enum), added admin maintenance/policies stubs | Complete |
 
 ## Completion Rate
 
