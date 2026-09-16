@@ -198,4 +198,20 @@ export class PlatformAdminController {
   getStats() {
     return this.adminService.getPlatformStats();
   }
+
+  // ─── Maintenance (stub) ─────────────────────────────────────
+
+  @Get('admin/maintenance')
+  @ApiOperation({ summary: 'Get maintenance windows (stub)' })
+  getMaintenance() {
+    return { data: [], meta: { page: 1, limit: 10, total: 0, pages: 0 } };
+  }
+
+  // ─── Policies (stub) ────────────────────────────────────────
+
+  @Get('admin/policies')
+  @ApiOperation({ summary: 'Get platform policies (stub)' })
+  getPolicies() {
+    return { data: [], meta: { page: 1, limit: 10, total: 0, pages: 0 } };
+  }
 }

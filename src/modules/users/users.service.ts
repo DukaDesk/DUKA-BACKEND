@@ -51,9 +51,9 @@ export class UsersService {
               role: true,
             },
           },
-          tenantUsers: {
+          tenants: {
             include: {
-              role: true,
+              tenant: true,
             },
           },
         },
@@ -81,9 +81,9 @@ export class UsersService {
             role: true,
           },
         },
-        tenantUsers: {
+        tenants: {
           include: {
-            role: true,
+            tenant: true,
           },
         },
       },
