@@ -183,6 +183,7 @@ Other scripts: `npm run build`, `npm run start:prod`, `npm run lint`, `npm test`
 | v0.3 | Media Hardening — MIME whitelist (15 types), 10MB limit, Swagger DTOs, asset validation on publish | Complete |
 | v0.3 | Data Contracts — Binding shapes per vertical documented | Complete |
 | v0.3.1 | P0 Admin Fixes — Status enum validation, Number() pagination, POST users approve/reject, DELETE merchants soft-delete (30-day), analytics optional tenantId via TenantResolver | Complete |
+| v0.3.2 | P0 Admin Fixes v2 — UserStatus +pending/+rejected, case-insensitive filter, tenant alias, body+query invite, Swagger decorators | Complete |
 
 ---
 

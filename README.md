@@ -434,6 +434,7 @@ API at `https://duka-backend-production.up.railway.app/api/v1` — Swagger docs 
 | v0.2 | TASK-0025: Customizable Dashboard (widget data resolution, DTOs, widget registry) | Complete |
 | v0.3 | Draft/Published Split, Template Versioning, Media Hardening | Complete |
 | v0.3.1 | P0 Admin Fixes — Status validation, Number() pagination, approve/reject, tenant soft-delete, analytics optional tenantId | Complete |
+| v0.3.2 | P0 Admin Fixes v2 — UserStatus +pending/+rejected, case-insensitive filter, tenant alias, body+query invite, Swagger decorators | Complete |
 
 ## Completion Rate
 
