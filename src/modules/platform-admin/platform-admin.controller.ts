@@ -16,6 +16,7 @@ export class PlatformAdminController {
 
   @Get('admin/settings')
   @ApiOperation({ summary: 'Get all platform settings' })
+  @ApiQuery({ name: 'category', required: false, description: 'Filter by setting category' })
   getSettings(@Query('category') category?: string) {
     return this.adminService.getAllSettings(category);
   }
@@ -53,6 +54,8 @@ export class PlatformAdminController {
 
   @Get('admin/announcements')
   @ApiOperation({ summary: 'List all announcements' })
+  @ApiQuery({ name: 'page', required: false, type: Number, default: 1 })
+  @ApiQuery({ name: 'limit', required: false, type: Number, default: 20 })
   getAllAnnouncements(
     @Query('page') page?: string,
     @Query('limit') limit?: string,
@@ -65,6 +68,7 @@ export class PlatformAdminController {
 
   @Get('admin/announcements/active')
   @ApiOperation({ summary: 'Get active announcements' })
+  @ApiQuery({ name: 'type', required: false, description: 'Filter by announcement type' })
   getActiveAnnouncements(@Query('type') type?: string) {
     return this.adminService.getActiveAnnouncements(type);
   }
@@ -169,6 +173,8 @@ export class PlatformAdminController {
 
   @Get('admin/subscriptions')
   @ApiOperation({ summary: 'List all subscriptions' })
+  @ApiQuery({ name: 'page', required: false, type: Number, default: 1 })
+  @ApiQuery({ name: 'limit', required: false, type: Number, default: 20 })
   getSubscriptions(
     @Query('page') page?: string,
     @Query('limit') limit?: string,

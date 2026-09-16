@@ -9,7 +9,9 @@ datasource db {
 
 enum UserStatus {
   active
+  pending
   suspended
+  rejected
   deactivated
   deleted
 }

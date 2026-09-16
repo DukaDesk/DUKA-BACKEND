@@ -84,11 +84,13 @@ export class UsersController {
     @Param() param: { id: string },
     @Body() body: { email: string; role?: string; tenantId?: string },
     @CurrentUser('id') adminUserId: string,
+    @Query('role') queryRole?: string,
+    @Query('tenantId') queryTenantId?: string,
   ) {
     return this.usersService.inviteUser({
       email: body.email,
-      role: body.role || 'staff',
-      tenantId: body.tenantId || param.id,
+      role: body.role || queryRole || 'staff',
+      tenantId: body.tenantId || queryTenantId || param.id,
       inviterId: adminUserId,
     });
   }
@@ -131,5 +133,20 @@ export class UsersController {
     const page = Number(query.page) || 1;
     const limit = Number(query.limit) || 50;
     return this.usersService.getTenantUsers(param.merchantId, page, limit);
+  }
+
+  @Get('tenant/:tenantId')
+  @ApiOperation({ summary: 'Users scoped to a tenant (legacy alias for merchant/:merchantId)' })
+  @ApiParam({ name: 'tenantId', description: 'Tenant ID' })
+  @ApiQuery({ name: 'page', required: false, type: Number, default: 1 })
+  @ApiQuery({ name: 'limit', required: false, type: Number, default: 50 })
+  async getTenantUsersAlias(
+    @Param() param: { tenantId: string },
+    @Query() query: { page?: number; limit?: number },
+    @CurrentUser('id') adminUserId: string,
+  ) {
+    const page = Number(query.page) || 1;
+    const limit = Number(query.limit) || 50;
+    return this.usersService.getTenantUsers(param.tenantId, page, limit);
   }
 }

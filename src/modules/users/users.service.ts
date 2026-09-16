@@ -35,9 +35,10 @@ export class UsersService {
     }
 
     if (filters?.status) {
-      const allowedStatuses = ['active', 'suspended', 'deactivated', 'deleted'];
-      if (allowedStatuses.includes(filters.status)) {
-        where.status = filters.status;
+      const normalized = filters.status.toLowerCase();
+      const allowedStatuses = ['active', 'pending', 'suspended', 'rejected', 'deactivated', 'deleted'];
+      if (allowedStatuses.includes(normalized)) {
+        where.status = normalized;
       }
     }
 
