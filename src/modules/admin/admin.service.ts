@@ -49,6 +49,31 @@ export class AdminService {
     });
   }
 
+  async rejectTenant(tenantId: string, adminUserId: string, reason?: string) {
+    await this.verifyAdmin(adminUserId);
+
+    const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId } });
+    if (!tenant) throw new NotFoundException('Tenant not found');
+    // Only draft/pending tenants should be rejected before going live (published tenants should be suspended)
+    if (tenant.status === 'published') {
+      throw new ForbiddenException('Published tenant cannot be rejected — use suspend');
+    }
+
+    const config = (tenant.config as any) || {};
+    return this.prisma.tenant.update({
+      where: { id: tenantId },
+      data: {
+        status: 'rejected' as any,
+        config: {
+          ...config,
+          rejectionReason: reason || null,
+          rejectedAt: new Date().toISOString(),
+          rejectedBy: adminUserId,
+        },
+      },
+    });
+  }
+
   async deactivateTenant(tenantId: string, adminUserId: string) {
     await this.verifyAdmin(adminUserId);
 
@@ -79,7 +104,7 @@ export class AdminService {
     await this.verifyAdmin(adminUserId);
 
     const where: any = {};
-    const allowedStatuses = ['draft', 'published', 'suspended'];
+    const allowedStatuses = ['draft', 'published', 'suspended', 'rejected'];
     if (status && allowedStatuses.includes(status)) where.status = status;
 
     return this.prisma.tenant.findMany({
@@ -168,7 +193,7 @@ export class AdminService {
   }
 
   async updateTenant(tenantId: string, adminUserId: string, data: {
-    name?: string; slug?: string; description?: string; status?: 'draft' | 'published' | 'suspended';
+    name?: string; slug?: string; description?: string; status?: 'draft' | 'published' | 'suspended' | 'rejected';
     config?: Record<string, any>;
   }) {
     await this.verifyAdmin(adminUserId);

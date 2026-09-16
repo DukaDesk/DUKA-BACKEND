@@ -23,6 +23,13 @@ export class AdminController {
     return this.adminService.suspendTenant(id, userId);
   }
 
+  @Post('merchants/:id/reject')
+  @ApiOperation({ summary: 'Reject a tenant (decline before live)' })
+  @ApiBody({ schema: { type: 'object', properties: { reason: { type: 'string' }, comment: { type: 'string' }, rejectionReason: { type: 'string' } } } })
+  rejectTenant(@Param('id') id: string, @CurrentUser('id') userId: string, @Body() body: { reason?: string; comment?: string; rejectionReason?: string }) {
+    return this.adminService.rejectTenant(id, userId, body?.reason || body?.comment || body?.rejectionReason);
+  }
+
   @Get('merchants')
   @ApiOperation({ summary: 'Get all tenants (admin)' })
   @ApiQuery({ name: 'status', required: false })
