@@ -24,10 +24,10 @@ export class AdminController {
   }
 
   @Post('merchants/:id/reject')
-  @ApiOperation({ summary: 'Reject a tenant' })
-  @ApiBody({ schema: { properties: { rejectionReason: { type: 'string' } } } })
-  rejectTenant(@Param('id') id: string, @CurrentUser('id') userId: string, @Body() body: { rejectionReason?: string }) {
-    return this.adminService.rejectTenant(id, userId, body.rejectionReason);
+  @ApiOperation({ summary: 'Reject a tenant (decline before live)' })
+  @ApiBody({ schema: { type: 'object', properties: { reason: { type: 'string' }, comment: { type: 'string' }, rejectionReason: { type: 'string' } } } })
+  rejectTenant(@Param('id') id: string, @CurrentUser('id') userId: string, @Body() body: { reason?: string; comment?: string; rejectionReason?: string }) {
+    return this.adminService.rejectTenant(id, userId, body?.reason || body?.comment || body?.rejectionReason);
   }
 
   @Get('merchants/stats')
@@ -49,7 +49,7 @@ export class AdminController {
     return this.adminService.getTenantDetail(id);
   }
 
-@Post('merchants')
+  @Post('merchants')
   @ApiOperation({ summary: 'Create a new tenant' })
   @ApiBody({ type: 'object' })
   createTenant(@CurrentUser('id') adminUserId: string, @Body() data: {

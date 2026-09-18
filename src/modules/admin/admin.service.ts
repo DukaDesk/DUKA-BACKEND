@@ -49,20 +49,40 @@ export class AdminService {
     });
   }
 
-  async rejectTenant(tenantId: string, adminUserId: string, rejectionReason?: string) {
+  async rejectTenant(tenantId: string, adminUserId: string, reason?: string) {
     await this.verifyAdmin(adminUserId);
 
     const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId }, include: { config: true } });
     if (!tenant) throw new NotFoundException('Tenant not found');
+    if (tenant.status === 'published') {
+      throw new ForbiddenException('Published tenant cannot be rejected — use suspend');
+    }
 
-    const config = (tenant.config as any) || {};
+    const existingConfig = (tenant.config as any)?.config || {};
+
+    await this.prisma.tenantConfig.upsert({
+      where: { tenantId },
+      create: {
+        tenantId,
+        config: {
+          rejectionReason: reason || null,
+          rejectedAt: new Date().toISOString(),
+          rejectedBy: adminUserId,
+        },
+      },
+      update: {
+        config: {
+          ...existingConfig,
+          rejectionReason: reason || null,
+          rejectedAt: new Date().toISOString(),
+          rejectedBy: adminUserId,
+        },
+      },
+    });
 
     return this.prisma.tenant.update({
       where: { id: tenantId },
-      data: {
-        status: 'rejected',
-        config: { ...config, rejectionReason: rejectionReason || null, rejectedAt: new Date().toISOString() },
-      },
+      data: { status: 'rejected' as any },
     });
   }
 
