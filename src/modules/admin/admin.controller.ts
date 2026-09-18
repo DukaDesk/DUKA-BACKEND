@@ -23,6 +23,19 @@ export class AdminController {
     return this.adminService.suspendTenant(id, userId);
   }
 
+  @Post('merchants/:id/reject')
+  @ApiOperation({ summary: 'Reject a tenant' })
+  @ApiBody({ schema: { properties: { rejectionReason: { type: 'string' } } } })
+  rejectTenant(@Param('id') id: string, @CurrentUser('id') userId: string, @Body() body: { rejectionReason?: string }) {
+    return this.adminService.rejectTenant(id, userId, body.rejectionReason);
+  }
+
+  @Get('merchants/stats')
+  @ApiOperation({ summary: 'Get merchant statistics by status' })
+  getMerchantStats(@CurrentUser('id') userId: string) {
+    return this.adminService.getMerchantStats(userId);
+  }
+
   @Get('merchants')
   @ApiOperation({ summary: 'Get all tenants (admin)' })
   @ApiQuery({ name: 'status', required: false })
@@ -40,7 +53,7 @@ export class AdminController {
   @ApiOperation({ summary: 'Create a new tenant' })
   @ApiBody({ type: 'object' })
   createTenant(@CurrentUser('id') adminUserId: string, @Body() data: {
-    name: string; slug: string; description?: string; status?: 'draft' | 'published' | 'suspended'; config?: Record<string, any>;
+    name: string; slug: string; description?: string; status?: 'draft' | 'published' | 'suspended' | 'rejected'; config?: Record<string, any>;
   }) {
     return this.adminService.createTenant(adminUserId, data);
   }
@@ -48,7 +61,7 @@ export class AdminController {
   @Put('merchants/:id')
   @ApiOperation({ summary: 'Update tenant' })
   updateTenant(@CurrentUser('id') adminUserId: string, @Param('id') id: string, @Body() data: {
-    name?: string; slug?: string; description?: string; status?: 'draft' | 'published' | 'suspended'; config?: Record<string, any>;
+    name?: string; slug?: string; description?: string; status?: 'draft' | 'published' | 'suspended' | 'rejected'; config?: Record<string, any>;
   }) {
     return this.adminService.updateTenant(adminUserId, id, data);
   }

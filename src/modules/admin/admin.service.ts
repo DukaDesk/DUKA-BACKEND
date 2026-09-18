@@ -6,7 +6,7 @@ export class AdminService {
   constructor(private prisma: PrismaService) {}
 
   async createTenant(adminUserId: string, data: {
-    name: string; slug: string; description?: string; status?: 'draft' | 'published' | 'suspended';
+    name: string; slug: string; description?: string; status?: 'draft' | 'published' | 'suspended' | 'rejected';
     config?: Record<string, any>;
   }) {
     await this.verifyAdmin(adminUserId);
@@ -49,6 +49,37 @@ export class AdminService {
     });
   }
 
+  async rejectTenant(tenantId: string, adminUserId: string, rejectionReason?: string) {
+    await this.verifyAdmin(adminUserId);
+
+    const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId }, include: { config: true } });
+    if (!tenant) throw new NotFoundException('Tenant not found');
+
+    const config = (tenant.config as any) || {};
+
+    return this.prisma.tenant.update({
+      where: { id: tenantId },
+      data: {
+        status: 'rejected',
+        config: { ...config, rejectionReason: rejectionReason || null, rejectedAt: new Date().toISOString() },
+      },
+    });
+  }
+
+  async getMerchantStats(adminUserId: string) {
+    await this.verifyAdmin(adminUserId);
+
+    const [total, draft, published, suspended, rejected] = await Promise.all([
+      this.prisma.tenant.count(),
+      this.prisma.tenant.count({ where: { status: 'draft' } }),
+      this.prisma.tenant.count({ where: { status: 'published' } }),
+      this.prisma.tenant.count({ where: { status: 'suspended' } }),
+      this.prisma.tenant.count({ where: { status: 'rejected' as any } }),
+    ]);
+
+    return { total, draft, published, suspended, rejected };
+  }
+
   async deactivateTenant(tenantId: string, adminUserId: string) {
     await this.verifyAdmin(adminUserId);
 
@@ -79,7 +110,7 @@ export class AdminService {
     await this.verifyAdmin(adminUserId);
 
     const where: any = {};
-    const allowedStatuses = ['draft', 'published', 'suspended'];
+    const allowedStatuses = ['draft', 'published', 'suspended', 'rejected'];
     if (status && allowedStatuses.includes(status)) where.status = status;
 
     return this.prisma.tenant.findMany({
@@ -168,7 +199,7 @@ export class AdminService {
   }
 
   async updateTenant(tenantId: string, adminUserId: string, data: {
-    name?: string; slug?: string; description?: string; status?: 'draft' | 'published' | 'suspended';
+    name?: string; slug?: string; description?: string; status?: 'draft' | 'published' | 'suspended' | 'rejected';
     config?: Record<string, any>;
   }) {
     await this.verifyAdmin(adminUserId);
