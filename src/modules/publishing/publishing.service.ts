@@ -21,24 +21,61 @@ export class PublishingService {
     return this.validationEngine.validateDraft(tenantId);
   }
 
-  async publish(tenantId: string, userId: string) {
+  async publish(tenantId: string, userId: string, body?: { manifest?: any; version?: string }) {
     await this.verifyPublishingPermission(tenantId, userId);
 
-    const validation = await this.validationEngine.validateDraft(tenantId);
-    if (!validation.passed) {
-      throw new BadRequestException({
-        message: 'Validation failed',
-        errors: validation.errors,
-      });
-    }
+    let manifest: any;
+    let checksum: string;
+    let version: string;
 
-    const { manifest, checksum, version } = await this.manifestCompiler.compile(tenantId);
+    if (body?.manifest && body.manifest.screens && Array.isArray(body.manifest.screens) && body.manifest.screens.length > 0) {
+      manifest = body.manifest;
+      const crypto = await import('crypto');
+      checksum = crypto.createHash('sha256').update(JSON.stringify(manifest)).digest('hex');
+
+      const latestRelease = await this.prisma.release.findFirst({
+        where: { tenantId },
+        orderBy: { buildNumber: 'desc' },
+      });
+      const buildNumber = (latestRelease?.buildNumber || 0) + 1;
+      const major = latestRelease ? parseInt(latestRelease.version.split('.')[0]) : 1;
+      version = body.version || `${major}.0.${buildNumber}`;
+
+      this.logger.log(`Publishing client-compiled manifest v${version} for tenant ${tenantId}`);
+    } else {
+      const validation = await this.validationEngine.validateDraft(tenantId);
+      if (!validation.passed) {
+        throw new BadRequestException({
+          message: 'Validation failed',
+          errors: validation.errors,
+        });
+      }
+
+      const compiled = await this.manifestCompiler.compile(tenantId);
+      manifest = compiled.manifest;
+      checksum = compiled.checksum;
+      version = compiled.version;
+    }
 
     const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId }, select: { slug: true } });
 
-    const release = await this.prisma.release.updateMany({
-      where: { tenantId, status: 'draft' },
-      data: { status: 'published', publishedAt: new Date() },
+    const latestRelease = await this.prisma.release.findFirst({
+      where: { tenantId },
+      orderBy: { buildNumber: 'desc' },
+    });
+    const buildNumber = (latestRelease?.buildNumber || 0) + 1;
+
+    const release = await this.prisma.release.create({
+      data: {
+        tenantId,
+        version,
+        buildNumber,
+        manifest: manifest as any,
+        checksum,
+        status: 'published',
+        publishedAt: new Date(),
+        channel: 'production',
+      },
     });
 
     await this.prisma.draftComponent.deleteMany({

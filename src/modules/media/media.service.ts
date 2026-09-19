@@ -2,8 +2,7 @@ import { Injectable, BadRequestException, NotFoundException, Logger } from '@nes
 import { PrismaService } from '../../common/prisma.service';
 import { RedisService } from '../../common/redis/redis.service';
 import { ImageOptimizer } from './image-optimizer.service';
-import * as path from 'path';
-import * as fs from 'fs/promises';
+import { StorageService } from './storage.service';
 import { randomUUID } from 'crypto';
 
 const ALLOWED_MIME_TYPES = [
@@ -29,21 +28,19 @@ const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 @Injectable()
 export class MediaService {
   private readonly logger = new Logger(MediaService.name);
-  private uploadDir = path.join(process.cwd(), 'uploads');
 
   constructor(
     private prisma: PrismaService,
     private redis: RedisService,
     private imageOptimizer: ImageOptimizer,
-  ) {
-    fs.mkdir(this.uploadDir, { recursive: true }).catch(() => {});
-  }
+    private storage: StorageService,
+  ) {}
 
   async upload(tenantId: string, file: any, folderId?: string) {
     if (!file) throw new BadRequestException('No file provided');
 
     if (!ALLOWED_MIME_TYPES.includes(file.mimetype)) {
-      throw new BadRequestException(`File type '${file.mimetype}' is not allowed. Accepted: images (JPEG, PNG, GIF, WebP, SVG, AVIF), documents (PDF, Word, Excel), video (MP4, WebM), audio (MP3, WAV)`);
+      throw new BadRequestException(`File type '${file.mimetype}' is not allowed.`);
     }
 
     if (file.size > MAX_FILE_SIZE) {
@@ -51,11 +48,12 @@ export class MediaService {
     }
 
     const hash = randomUUID();
-    const ext = path.extname(file.originalname) || '.bin';
+    const ext = require('path').extname(file.originalname) || '.bin';
     const baseName = hash;
     const fileName = `${baseName}${ext}`;
-    const filePath = path.join(this.uploadDir, fileName);
-    await fs.writeFile(filePath, file.buffer);
+    const storageKey = `uploads/${fileName}`;
+
+    await this.storage.upload(storageKey, file.buffer, file.mimetype);
 
     const isImage = file.mimetype.startsWith('image/');
     let variants: any = null;
@@ -70,14 +68,10 @@ export class MediaService {
           presets: result.variants.map((v) => ({ url: v.filePath, width: v.width, height: v.height, format: v.format, size: v.size, name: v.name })),
         };
 
-        const webpPath = path.join(this.uploadDir, `${baseName}.webp`);
-        await fs.writeFile(webpPath, result.optimized.buffer);
+        await this.storage.upload(`uploads/${baseName}.webp`, result.optimized.buffer, 'image/webp');
         optimizedUrl = `/uploads/${baseName}.webp`;
 
-        const origWebpPath = path.join(this.uploadDir, `${baseName}${ext}`);
-        if (origWebpPath !== webpPath) {
-          await fs.unlink(origWebpPath).catch(() => {});
-        }
+        await this.storage.delete(storageKey);
       } catch (err: any) {
         this.logger.warn(`Image optimization failed for ${file.originalname}: ${err.message}`);
       }
@@ -132,14 +126,12 @@ export class MediaService {
     const media = await this.prisma.media.findUnique({ where: { id } });
     if (!media) throw new NotFoundException('Media not found');
 
-    const filePath = path.join(process.cwd(), media.url);
-    await fs.unlink(filePath).catch(() => {});
+    await this.storage.delete(media.url);
 
     if (media.variants) {
-      const variants: any = media.variants;
-      for (const preset of variants.presets || []) {
-        const vp = path.join(process.cwd(), preset.url);
-        await fs.unlink(vp).catch(() => {});
+      const v: any = media.variants;
+      for (const preset of v.presets || []) {
+        await this.storage.delete(preset.url);
       }
     }
 
@@ -156,7 +148,7 @@ export class MediaService {
   async getCdnUrl(mediaId: string, variant?: string): Promise<string> {
     const media = await this.prisma.media.findUnique({ where: { id: mediaId } });
     if (!media) throw new NotFoundException('Media not found');
-    const baseUrl = process.env.CDN_URL || '';
+    const baseUrl = this.storage.baseUrl;
     if (!variant || !media.variants) return `${baseUrl}${media.url}`;
     const v: any = media.variants;
     const preset = (v.presets || []).find((p: any) => p.name === variant);

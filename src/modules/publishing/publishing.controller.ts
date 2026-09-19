@@ -1,5 +1,5 @@
-import { Controller, Get, Post, Param, UseGuards } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
+import { Controller, Get, Post, Param, UseGuards, Body } from '@nestjs/common';
+import { ApiTags, ApiBearerAuth, ApiOperation, ApiBody } from '@nestjs/swagger';
 import { PublishingService } from './publishing.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -18,9 +18,20 @@ export class PublishingController {
   }
 
   @Post('publish')
-  @ApiOperation({ summary: 'Validate, compile, and publish' })
-  publish(@Param('id') id: string, @CurrentUser('id') userId: string) {
-    return this.publishingService.publish(id, userId);
+  @ApiOperation({ summary: 'Validate, compile, and publish (or accept client-compiled manifest)' })
+  @ApiBody({ schema: {
+    type: 'object',
+    properties: {
+      manifest: { type: 'object', description: 'Client-compiled manifest (optional — if omitted, compiles from drafts)' },
+      version: { type: 'string', description: 'Requested version string (optional)' },
+    },
+  }})
+  publish(
+    @Param('id') id: string,
+    @CurrentUser('id') userId: string,
+    @Body() body?: { manifest?: any; version?: string },
+  ) {
+    return this.publishingService.publish(id, userId, body);
   }
 
   @Get('releases')
