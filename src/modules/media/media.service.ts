@@ -71,7 +71,10 @@ export class MediaService {
         await this.storage.upload(`uploads/${baseName}.webp`, result.optimized.buffer, 'image/webp');
         optimizedUrl = `/uploads/${baseName}.webp`;
 
-        await this.storage.delete(storageKey);
+        const origPath = `uploads/${fileName}`;
+        if (origPath !== `uploads/${baseName}.webp`) {
+          await this.storage.delete(origPath);
+        }
       } catch (err: any) {
         this.logger.warn(`Image optimization failed for ${file.originalname}: ${err.message}`);
       }

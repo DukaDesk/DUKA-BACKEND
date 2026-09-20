@@ -28,8 +28,26 @@ export class PublishingService {
     let checksum: string;
     let version: string;
 
-    if (body?.manifest && body.manifest.screens && Array.isArray(body.manifest.screens) && body.manifest.screens.length > 0) {
-      manifest = body.manifest;
+    if (body?.manifest && body.manifest.screens) {
+      manifest = { ...body.manifest };
+
+      if (!Array.isArray(manifest.screens)) {
+        if (typeof manifest.screens === 'object' && manifest.screens !== null) {
+          manifest.screens = Object.entries(manifest.screens).map(([key, val]: [string, any]) => {
+            if (typeof val === 'string') return { id: val, slug: val, name: val };
+            return { id: key, ...val };
+          });
+        } else if (typeof manifest.screens === 'string') {
+          manifest.screens = [{ id: manifest.screens, slug: manifest.screens, name: manifest.screens }];
+        } else {
+          manifest.screens = [];
+        }
+      }
+
+      if (manifest.screens.length === 0) {
+        throw new BadRequestException({ message: 'Manifest screens empty — cannot publish' });
+      }
+
       const crypto = await import('crypto');
       checksum = crypto.createHash('sha256').update(JSON.stringify(manifest)).digest('hex');
 
@@ -41,43 +59,61 @@ export class PublishingService {
       const major = latestRelease ? parseInt(latestRelease.version.split('.')[0]) : 1;
       version = body.version || `${major}.0.${buildNumber}`;
 
-      this.logger.log(`Publishing client-compiled manifest v${version} for tenant ${tenantId}`);
-    } else {
-      const validation = await this.validationEngine.validateDraft(tenantId);
-      if (!validation.passed) {
-        throw new BadRequestException({
-          message: 'Validation failed',
-          errors: validation.errors,
+      const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId }, select: { slug: true } });
+
+      const existingPublished = await this.prisma.release.findFirst({
+        where: { tenantId, status: 'published' },
+      });
+      if (existingPublished) {
+        await this.prisma.release.update({
+          where: { id: existingPublished.id },
+          data: { status: 'superseded' },
         });
       }
 
-      const compiled = await this.manifestCompiler.compile(tenantId);
-      manifest = compiled.manifest;
-      checksum = compiled.checksum;
-      version = compiled.version;
+      const release = await this.prisma.release.create({
+        data: {
+          tenantId, version, buildNumber,
+          manifest: manifest as any, checksum,
+          status: 'published', publishedAt: new Date(), channel: 'production',
+        },
+      });
+
+      await this.clearDraftsAndCache(tenantId, tenant?.slug);
+
+      this.logger.log(`Published client manifest v${version} for tenant ${tenantId}`);
+      return { message: 'Published successfully', version, checksum };
     }
+
+    const validation = await this.validationEngine.validateDraft(tenantId);
+    if (!validation.passed) {
+      throw new BadRequestException({ message: 'Validation failed', errors: validation.errors });
+    }
+
+    const compiled = await this.manifestCompiler.compile(tenantId);
+    manifest = compiled.manifest;
+    checksum = compiled.checksum;
+    version = compiled.version;
 
     const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId }, select: { slug: true } });
 
-    const latestRelease = await this.prisma.release.findFirst({
-      where: { tenantId },
-      orderBy: { buildNumber: 'desc' },
-    });
-    const buildNumber = (latestRelease?.buildNumber || 0) + 1;
-
-    const release = await this.prisma.release.create({
-      data: {
-        tenantId,
-        version,
-        buildNumber,
-        manifest: manifest as any,
-        checksum,
-        status: 'published',
-        publishedAt: new Date(),
-        channel: 'production',
-      },
+    await this.prisma.release.updateMany({
+      where: { tenantId, status: 'published' },
+      data: { status: 'superseded' },
     });
 
+    await this.prisma.release.updateMany({
+      where: { tenantId, status: 'draft' },
+      data: { status: 'published', publishedAt: new Date() },
+    });
+
+    await this.clearDraftsAndCache(tenantId, tenant?.slug);
+
+    this.logger.log(`Published v${version} for tenant ${tenantId}`);
+    return { message: 'Published successfully', version, checksum };
+  }
+
+  private async clearDraftsAndCache(tenantId: string, slug?: string) {
     await this.prisma.draftComponent.deleteMany({
       where: { draftSection: { draftPage: { tenantId } } },
     });
@@ -91,19 +127,15 @@ export class PublishingService {
     });
 
     await this.redis.del(`manifest:${tenantId}`);
-    if (tenant?.slug) {
-      await this.redis.del(`manifest:${tenant.slug}`);
+    if (slug) {
+      await this.redis.del(`manifest:${slug}`);
     }
 
     await this.eventBus.publish({
       type: 'ReleasePublished',
       aggregateId: tenantId,
-      data: { tenantId, version, checksum },
+      data: { tenantId, version: 'latest' },
     });
-
-    this.logger.log(`Published v${version} for tenant ${tenantId}`);
-
-    return { message: 'Published successfully', version, checksum };
   }
 
   private async verifyPublishingPermission(tenantId: string, userId: string) {
@@ -164,6 +196,10 @@ export class PublishingService {
     });
 
     await this.redis.del(`manifest:${tenantId}`);
+    const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId }, select: { slug: true } });
+    if (tenant?.slug) {
+      await this.redis.del(`manifest:${tenant.slug}`);
+    }
 
     await this.eventBus.publish({
       type: 'RollbackCompleted',
