@@ -438,6 +438,7 @@ API at `https://duka-backend-production.up.railway.app/api/v1` — Swagger docs 
 | v0.3.3 | P0 tenantUsers Fix — Fixed tenantUsers→tenants (correct Prisma relation), dropped invalid role include (enum), added admin maintenance/policies stubs | Complete |
 | v0.3.4 | Merchant reject + stats — TenantStatus +rejected, POST /admin/merchants/:id/reject with rejectionReason, GET /admin/merchants/stats by status | Complete |
 | v0.3.5 | Published logo/release mismatch — S3 StorageService, manifest body publish, body limits, publish creates new Release directly | Complete |
+| v0.3.6 | Publishing defect fixes — screen format normalization, duplicate release prevention, rollback cache invalidation, WebP self-delete guard | Complete |
 
 ## Completion Rate
 
