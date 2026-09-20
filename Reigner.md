@@ -350,3 +350,55 @@ The DUKA-BACKEND serves two distinct audiences through its BFF (Backend-for-Fron
 **Bottom line:** The website BFF is your public showcase — 3 clean, unauthenticated endpoints that present the merchant to the world. The mobile BFF is the app's engine — 9 endpoints (3 public, 6 protected) that configure, personalize, and manage the user's app experience. Together they power the DUKADESK "no app store" model: the backend drives the UI, and the app simply renders whatever the backend serves.
 
 **Personal Notes** — Continue adding observations, decisions, and TODOs as development progresses.
+
+---
+
+## 10. Backend Remediation Summary — Published Logo/Release Mismatch (2026-09-20)
+
+### Incident
+
+Merchant `aa0cd445` (Emmanuel Akinyemi) — editor reported v0.0.23 while mobile served Storefront v0.0.7 with a 404 logo. Root cause: no published `Release` record existed; the merchant editor saved locally but the backend never received the compiled manifest.
+
+### What Backend Fixed
+
+| Area | Change | Endpoint Affected |
+|------|--------|-------------------|
+| **S3-compatible storage** | `StorageService` — uploads persist to S3/R2 instead of ephemeral local disk. Activate with `STORAGE_PROVIDER=s3` on Railway. | `POST /app/media/upload` |
+| **Manifest body publish** | `POST /publishing/publish` now accepts `{ manifest, version }` body. If `manifest.screens` is non-empty, persists directly as a new Release — no draft compilation required. Handles screens as array, object, or string array. | `POST /merchants/{id}/publishing/publish` |
+| **Body size limit** | Express body parser increased to 5MB to accommodate URL-only manifests with many screens. | All POST endpoints |
+| **Duplicate release prevention** | Draft path: compiler creates draft Release → publish promotes to published. Client path: supersedes old published → creates new. No more duplicate records. | `POST /publishing/publish` |
+| **Rollback cache fix** | Rollback now invalidates both `manifest:{tenantId}` and `manifest:{slug}` cache keys. | `POST /publishing/rollback/:version` |
+| **WebP self-delete guard** | Optimization only deletes original file if the path differs from the optimized output (prevents deleting the WebP when the original upload was already WebP). | `POST /app/media/upload` |
+
+### What Mobile Needs to Do
+
+1. **Re-publish from merchant editor.** The backend now accepts the client-compiled manifest directly. The editor should POST `{ manifest: { screens: [...], ... } }` to `POST /api/v1/merchants/{id}/publishing/publish` with a valid JWT.
+
+2. **Verify manifest parity.** After publish, confirm both endpoints return the same version:
+   - `GET /api/v1/merchants/{id}/definition` → `data.app.version`
+   - `GET /api/v1/bff/mobile/tenant/{slug}/manifest` → `data.app.version`
+
+3. **Verify logo delivery.** Every `identity.logo` or `theme.brand.logo` URL returned in the manifest must return HTTP 200 without authentication. If logos were uploaded before S3 was configured, they need to be re-uploaded.
+
+4. **Handle manifest shapes.** The manifest may contain:
+   - `data.config.config.deployed.screens` (nested — older format)
+   - `data.config.screens` (flat — legacy)
+   - `data.screens` (top-level — current)
+   
+   Mobile resolver should check all three paths.
+
+5. **Force refresh after publish.** The BFF caches manifests for 5 minutes (Redis TTL 300s). After a successful publish, the mobile app should invalidate its local manifest cache and re-fetch from the BFF.
+
+### Railway Environment Variables Required
+
+```
+STORAGE_PROVIDER=s3
+STORAGE_ENDPOINT=https://<account-id>.r2.cloudflarestorage.com
+STORAGE_REGION=auto
+STORAGE_BUCKET=dukadesk
+STORAGE_ACCESS_KEY=<access-key>
+STORAGE_SECRET_KEY=<secret-key>
+CDN_URL=https://<your-cdn-domain>
+```
+
+Until S3 is configured, uploads use local disk (works but ephemeral on Railway deploys).
