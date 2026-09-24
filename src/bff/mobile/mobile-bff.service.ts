@@ -1,6 +1,7 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma.service';
 import { RedisService } from '../../common/redis/redis.service';
+import { ActiveReleaseService } from '../../shared/releases/active-release.service';
 
 @Injectable()
 export class MobileBffService {
@@ -9,102 +10,42 @@ export class MobileBffService {
   constructor(
     private prisma: PrismaService,
     private redis: RedisService,
+    private releases: ActiveReleaseService,
   ) {}
 
+  /**
+   * Canonical BFF manifest reader (B3).
+   * Shares ActiveReleaseService with RendererService so both paths return
+   * the identical active production snapshot + release receipt.
+   */
   async getTenantManifest(identifier: string) {
     const cacheKey = `manifest:${identifier}`;
     const cached = await this.redis.get(cacheKey);
-    if (cached) return JSON.parse(cached);
-
-    const tenant = await this.prisma.tenant.findFirst({
-      where: { OR: [{ id: identifier }, { slug: identifier }] },
-      select: { id: true, slug: true },
-    });
-
-    if (!tenant) return null;
-
-    const release = await this.prisma.release.findFirst({
-      where: { tenantId: tenant.id, status: 'published' },
-      orderBy: { publishedAt: 'desc' },
-      select: { manifest: true },
-    });
-
-    if (release?.manifest) {
-      await this.redis.set(cacheKey, JSON.stringify(release.manifest), 300);
-      return release.manifest;
+    if (cached) {
+      try {
+        return JSON.parse(cached);
+      } catch {
+        await this.redis.del(cacheKey);
+      }
     }
 
-    const fullTenant = await this.prisma.tenant.findFirst({
-      where: { OR: [{ id: identifier }, { slug: identifier }] },
-      include: {
-        theme: true,
-        navigation: true,
-        pages: {
-          where: { isActive: true },
-          orderBy: { sortOrder: 'asc' },
-          include: {
-            sections: {
-              where: { isActive: true },
-              orderBy: { sortOrder: 'asc' },
-              include: {
-                components: {
-                  where: { isActive: true },
-                  orderBy: { sortOrder: 'asc' },
-                },
-              },
-            },
-          },
-        },
-        config: true,
-        subscription: { include: { plan: true } },
-      },
-    });
+    const result = await this.releases.getActiveRelease(identifier);
+    const payload = result.payload;
 
-    if (!fullTenant) return null;
-
-    const features = fullTenant.subscription?.plan?.features as Record<string, boolean> || {};
-
-    const manifest = {
-      tenantId: fullTenant.id,
-      name: fullTenant.name,
-      slug: fullTenant.slug,
-      status: fullTenant.status,
-      theme: fullTenant.theme || {
-        primaryColor: '#0066FF',
-        secondaryColor: '#00CC66',
-        backgroundColor: '#FFFFFF',
-        textColor: '#1A1A1A',
-        fontFamily: 'Inter',
-        borderRadius: '8px',
-      },
-      navigation: fullTenant.navigation?.items || [],
-      config: fullTenant.config || { currency: 'NGN', timezone: 'Africa/Lagos' },
-      features,
-      screens: fullTenant.pages.map((page) => ({
-        name: page.name,
-        slug: page.slug,
-        isHome: page.isHome,
-        blocks: page.sections.map((section) => ({
-          id: section.id,
-          type: section.type,
-          config: section.config,
-          components: section.components.map((c) => ({
-            id: c.id,
-            type: c.type,
-            props: c.props,
-          })),
-        })),
-      })),
-    };
-
-    await this.redis.set(cacheKey, JSON.stringify(manifest), 300);
-    return manifest;
+    // Immutable by release id — safe to cache the resolved payload briefly.
+    await this.redis.set(cacheKey, JSON.stringify(payload), 300);
+    await this.redis.set(
+      `manifest:${result.slug}`,
+      JSON.stringify(payload),
+      300,
+    );
+    return payload;
   }
 
   async getDiscoveryFeed() {
     const [featured, categories] = await Promise.all([
       this.prisma.tenant.findMany({
-        where: { status: 'published' },
+        where: { status: 'published', activeReleaseId: { not: null } },
         select: { id: true, name: true, slug: true, logo: true },
         take: 10,
         orderBy: { publishedAt: 'desc' },
@@ -150,19 +91,25 @@ export class MobileBffService {
     return { data: notifications, unreadCount };
   }
 
-  async getTenantCatalog(tenantId: string, query: { page?: string; limit?: string; categoryId?: string; search?: string }) {
+  async getTenantCatalog(
+    tenantId: string,
+    query: { page?: string; limit?: string; categoryId?: string; search?: string },
+  ) {
     const where: any = { tenantId, isActive: true };
     if (query.categoryId) where.categoryId = query.categoryId;
     if (query.search) where.name = { contains: query.search, mode: 'insensitive' };
 
-    const page = parseInt(query.page || '1') || 1;
-    const limit = parseInt(query.limit || '20') || 20;
+    const page = parseInt(query.page || '1', 10) || 1;
+    const limit = parseInt(query.limit || '20', 10) || 20;
     const skip = (page - 1) * limit;
 
     const [data, total] = await Promise.all([
       this.prisma.product.findMany({
         where,
-        include: { images: true, category: { select: { id: true, name: true, slug: true } } },
+        include: {
+          images: true,
+          category: { select: { id: true, name: true, slug: true } },
+        },
         skip,
         take: limit,
         orderBy: { createdAt: 'desc' },
@@ -173,8 +120,8 @@ export class MobileBffService {
     return { data, meta: { page, limit, total, pages: Math.ceil(total / limit) } };
   }
 
-  private async getCategories() {
-    return [
+  private getCategories() {
+    return Promise.resolve([
       { id: 'commerce', name: 'Commerce', icon: 'shopping-bag' },
       { id: 'restaurant', name: 'Restaurant', icon: 'utensils' },
       { id: 'fashion', name: 'Fashion', icon: 'shirt' },
@@ -184,6 +131,6 @@ export class MobileBffService {
       { id: 'school', name: 'School', icon: 'graduation-cap' },
       { id: 'church', name: 'Church', icon: 'cross' },
       { id: 'hotel', name: 'Hotel', icon: 'building' },
-    ];
+    ]);
   }
 }

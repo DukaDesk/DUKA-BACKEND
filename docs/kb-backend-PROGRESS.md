@@ -2,15 +2,20 @@
 
 This file tracks the current state of the backend implementation repository.
 
-**KB Version:** 0.1.0
-**Last Updated:** 2026-07-20
+**KB Version:** 0.3.8
+**Last Updated:** 2026-09-24
 
 ## Active Work
 
 | Task | Specification | Status | Owner |
 |------|---------------|--------|-------|
-| API endpoint implementation (390 endpoints) | KB v0.1.0 | In Progress | Engineering |
+| API endpoint implementation (390 endpoints) | KB v0.1.0 | Complete | Engineering |
 | Phase 3 gap-filling (Theme, Commerce, Booking, Notifications, Payments) | KB v0.1.0 | Complete | Engineering |
+| Published app delivery B1–B6 (validator, atomic activation, canonical reader, cache/authz, media folderId + storage URLs) | `PUBLISHED_APP_DELIVERY_BACKEND_TODO` | Complete (code) / live verify pending | Backend |
+| Media folderId FK fix + default merchant app seed | Builder Media TODO 1.1 + 3.1 | Complete | Backend |
+| Unit test suites (5 suites / 38 tests) | Jest | Complete | Backend |
+| E2E integration tests for all modules | KB v0.2.0 | Pending | Engineering |
+| Rate limiting and throttling configuration | KB v0.2.0 | In Progress (`ApiQuotaGuard` + ThrottlerGuard) | Backend |
 
 ## Completed Milestones
 
@@ -22,6 +27,7 @@ This file tracks the current state of the backend implementation repository.
 | 2026-07 | Phase 3b — Adapters & Connectors | Email/Push/Stripe adapters, Anthropic provider, SendGrid & Google Calendar connectors |
 | 2026-07 | Deployment Readiness | Dockerfile, CI/CD pipeline, health checks, Railway config |
 | 2026-07 | Profile Deactivation & Deletion | 30-day soft deactivation flow, hard delete for GDPR/Apple/Google, admin cleanup endpoint, BFF mobile endpoints |
+| 2026-09-24 | Published app delivery B1–B6 | ActiveReleaseService, ManifestValidator, atomic activation, media folderId, default seed, unit suites |
 
 ## Modules Implemented
 
@@ -69,8 +75,9 @@ This file tracks the current state of the backend implementation repository.
 
 ## Next Up
 
-- E2E integration tests for all modules
-- Rate limiting and throttling configuration
+- Apply `prisma/migrations/20260924000000_add_active_release` and verify backfill
+- E2E integration tests for all modules (B8 live publish/rollback evidence)
+- Rate limiting completion (quota defaults + docs)
 - API versioning strategy (v2 planning)
 - Performance optimization and query tuning
 - Monitoring and alerting setup

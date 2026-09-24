@@ -2,11 +2,25 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { PrismaService } from '../../../common/prisma.service';
 import * as crypto from 'crypto';
 
+export interface CompiledManifest {
+  manifest: any;
+  checksum: string;
+  version: string;
+  buildNumber: number;
+  themeBundle?: any;
+  capabilityMeta?: any;
+  assetManifest?: any;
+}
+
+/**
+ * Compiles draft pages into a PublishedApp-style manifest.
+ * Does NOT create a Release — activation is owned by PublishingService (B2).
+ */
 @Injectable()
 export class ManifestCompiler {
   constructor(private prisma: PrismaService) {}
 
-  async compile(tenantId: string): Promise<{ manifest: any; checksum: string; version: string }> {
+  async compile(tenantId: string): Promise<CompiledManifest> {
     const tenant = await this.prisma.tenant.findUnique({
       where: { id: tenantId },
       include: {
@@ -35,7 +49,9 @@ export class ManifestCompiler {
     if (!tenant) throw new NotFoundException('Tenant not found');
 
     if (!tenant.draftPages || tenant.draftPages.length === 0) {
-      throw new BadRequestException('No draft pages found. Initialize drafts before publishing.');
+      throw new BadRequestException(
+        'No draft pages found. Initialize drafts before publishing.',
+      );
     }
 
     const features = (tenant.subscription?.plan?.features as Record<string, boolean>) || {};
@@ -45,13 +61,29 @@ export class ManifestCompiler {
     });
 
     const buildNumber = (latestRelease?.buildNumber || 0) + 1;
-    const major = latestRelease ? parseInt(latestRelease.version.split('.')[0]) : 1;
+    const major = latestRelease ? parseInt(latestRelease.version.split('.')[0], 10) || 1 : 1;
     const version = `${major}.0.${buildNumber}`;
 
     const assetReferences: string[] = [];
 
+    // Align draft compilation with the PublishedApp 1.0.0 contract (B2).
     const manifest = {
-      manifestVersion: '1.0',
+      manifestVersion: '1.0.0',
+      version,
+      publishedAt: new Date().toISOString(),
+      status: 'published',
+      metadata: {
+        version,
+        schemaVersion: '1.0',
+        displayName: tenant.name,
+        category: '',
+        publishedAt: new Date().toISOString(),
+      },
+      identity: {
+        slug: tenant.slug,
+        displayName: tenant.name,
+        logo: tenant.logo,
+      },
       app: {
         tenantId: tenant.id,
         name: tenant.name,
@@ -59,10 +91,6 @@ export class ManifestCompiler {
         version,
         buildNumber,
         publishedAt: new Date().toISOString(),
-      },
-      identity: {
-        displayName: tenant.name,
-        logo: tenant.logo,
       },
       theme: tenant.theme || {
         primaryColor: '#0066FF',
@@ -72,7 +100,7 @@ export class ManifestCompiler {
         fontFamily: 'Inter',
         borderRadius: '8px',
       },
-      navigation: tenant.navigation?.items || [],
+      navigation: this.normalizeNavigation(tenant.navigation?.items, tenant.draftPages),
       config: {
         currency: tenant.config?.currency || 'NGN',
         timezone: tenant.config?.timezone || 'Africa/Lagos',
@@ -80,32 +108,16 @@ export class ManifestCompiler {
         offlinePolicy: tenant.config?.offlinePolicy || 'cache-first',
       },
       features,
-      screens: tenant.draftPages.map((page) => ({
-        name: page.name,
-        slug: page.slug,
-        isHome: page.isHome,
-        route: `/${page.slug}`,
-        blocks: page.draftSections.map((section) => ({
-          id: section.id,
-          type: section.type,
-          config: section.config,
-          components: section.draftComponents.map((c) => {
-            const props = c.props as Record<string, any> || {};
-            if (props.assetId) assetReferences.push(props.assetId);
-            if (props.imageUrl) assetReferences.push(props.imageUrl);
-            return {
-              id: c.id,
-              type: c.type,
-              props: c.props,
-            };
-          }),
-        })),
-      })),
+      runtime: { version: '1.0.0' },
+      // Object screen map (screenId → screen) — not the legacy array form.
+      screens: this.buildScreenMap(tenant.draftPages, assetReferences),
     };
 
     const checksum = crypto.createHash('sha256').update(JSON.stringify(manifest)).digest('hex');
 
-    const uniqueAssetIds = [...new Set(assetReferences.filter((ref) => ref && !ref.startsWith('/')))];
+    const uniqueAssetIds = [
+      ...new Set(assetReferences.filter((ref) => ref && !ref.startsWith('/'))),
+    ];
 
     const invalidAssets: string[] = [];
     if (uniqueAssetIds.length > 0) {
@@ -117,17 +129,12 @@ export class ManifestCompiler {
       invalidAssets.push(...uniqueAssetIds.filter((id) => !existingIds.has(id)));
     }
 
-    await this.prisma.draft.upsert({
-      where: { id: `${tenantId}-draft` },
-      create: { id: `${tenantId}-draft`, tenantId, version: buildNumber, manifest: manifest as any, status: 'compiled' },
-      update: { version: buildNumber, manifest: manifest as any, status: 'compiled' },
-    });
-
     const capabilityMeta = {
       features,
       hasNavigation: !!tenant.navigation,
       hasTheme: !!tenant.theme,
       screenCount: tenant.draftPages.length,
+      manifestVersion: '1.0.0',
     };
 
     const assetManifest = {
@@ -137,21 +144,86 @@ export class ManifestCompiler {
       invalidAssets: invalidAssets.length > 0 ? invalidAssets : undefined,
     };
 
-    const release = await this.prisma.release.create({
-      data: {
+    // Keep a compiled draft record for operator visibility — not a Release.
+    await this.prisma.draft.upsert({
+      where: { id: `${tenantId}-draft` },
+      create: {
+        id: `${tenantId}-draft`,
         tenantId,
-        version,
-        buildNumber,
+        version: buildNumber,
         manifest: manifest as any,
-        themeBundle: tenant.theme as any,
-        capabilityMeta: capabilityMeta as any,
-        assetManifest: assetManifest as any,
-        checksum,
-        status: 'draft',
-        channel: 'production',
+        status: 'compiled',
       },
+      update: { version: buildNumber, manifest: manifest as any, status: 'compiled' },
     });
 
-    return { manifest, checksum, version: release.version };
+    return {
+      manifest,
+      checksum,
+      version,
+      buildNumber,
+      themeBundle: tenant.theme,
+      capabilityMeta,
+      assetManifest,
+    };
+  }
+
+  private normalizeNavigation(items: any, pages: any[]) {
+    if (Array.isArray(items) && items.length > 0) {
+      // Preserve merchant navigation as-is when it's already object form.
+      if (typeof items[0] === 'object') return items;
+      return items;
+    }
+    return pages.map((p) => ({ label: p.name, screenId: p.slug, path: `/${p.slug}` }));
+  }
+
+  private buildScreenMap(pages: any[], assetReferences: string[]) {
+    const map: Record<string, any> = {};
+    for (const page of pages) {
+      const screenId = page.slug || page.id;
+      map[screenId] = {
+        name: page.name,
+        title: page.name,
+        screenId,
+        isHome: page.isHome,
+        route: `/${page.slug}`,
+        layout: {
+          kind: 'scroll',
+          children: page.draftSections.map((section: any) => ({
+            id: section.id,
+            type: 'layout',
+            key: section.id,
+            layout: {
+              kind: 'section',
+              config: section.config,
+              children: section.draftComponents.map((c: any) => {
+                const props = (c.props as Record<string, any>) || {};
+                if (props.assetId) assetReferences.push(props.assetId);
+                if (props.imageUrl) assetReferences.push(props.imageUrl);
+                // Preserve props exactly — including tapAction / actions / list attachments.
+                return {
+                  id: c.id,
+                  type: c.type,
+                  key: c.id,
+                  props: c.props,
+                  ...(c.actions != null ? { actions: c.actions } : {}),
+                };
+              }),
+            },
+          })),
+        },
+        blocks: page.draftSections.map((section: any) => ({
+          id: section.id,
+          type: section.type,
+          config: section.config,
+          components: section.draftComponents.map((c: any) => ({
+            id: c.id,
+            type: c.type,
+            props: c.props,
+          })),
+        })),
+      };
+    }
+    return map;
   }
 }

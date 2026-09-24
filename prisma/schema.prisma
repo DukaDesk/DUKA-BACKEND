@@ -1767,11 +1767,12 @@ model Tenant {
   email       String?
   phone       String?
   logo        String?
-  status       TenantStatus @default(draft)
-  publishedAt  DateTime?
-  draftVersion Int          @default(0)
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
+  status          TenantStatus @default(draft)
+  publishedAt     DateTime?
+  draftVersion    Int          @default(0)
+  activeReleaseId String?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
 
   users               TenantUser[]
   consents            Consent[]

@@ -25,6 +25,16 @@ const ALLOWED_MIME_TYPES = [
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+const VARIANT_MIME: Record<string, string> = {
+  webp: 'image/webp',
+  jpeg: 'image/jpeg',
+  jpg: 'image/jpeg',
+  png: 'image/png',
+};
+
 @Injectable()
 export class MediaService {
   private readonly logger = new Logger(MediaService.name);
@@ -44,8 +54,13 @@ export class MediaService {
     }
 
     if (file.size > MAX_FILE_SIZE) {
-      throw new BadRequestException(`File size ${Math.round(file.size / 1024 / 1024)}MB exceeds limit of 10MB`);
+      throw new BadRequestException(
+        `File size ${Math.round(file.size / 1024 / 1024)}MB exceeds limit of 10MB`,
+      );
     }
+
+    // BUILDER TODO 3.1 — never pass a raw query folderId into Prisma.
+    const resolvedFolderId = await this.resolveFolderId(tenantId, folderId);
 
     const hash = randomUUID();
     const ext = require('path').extname(file.originalname) || '.bin';
@@ -53,28 +68,63 @@ export class MediaService {
     const fileName = `${baseName}${ext}`;
     const storageKey = `uploads/${fileName}`;
 
-    await this.storage.upload(storageKey, file.buffer, file.mimetype);
+    // B6 — retain the URL returned by StorageService (S3/CDN or local).
+    let finalUrl = await this.storage.upload(storageKey, file.buffer, file.mimetype);
 
     const isImage = file.mimetype.startsWith('image/');
     let variants: any = null;
-    let optimizedUrl = `/uploads/${fileName}`;
 
     if (isImage) {
       try {
         const result = await this.imageOptimizer.optimize(file.buffer, file.mimetype, baseName);
+
+        const optimizedKey = `uploads/${baseName}.webp`;
+        const optimizedUrl = await this.storage.upload(
+          optimizedKey,
+          result.optimized.buffer,
+          'image/webp',
+        );
+
+        const presetEntries: any[] = [];
+        for (const variant of result.variants) {
+          const mime = VARIANT_MIME[variant.format] || 'application/octet-stream';
+          const url = await this.storage.upload(variant.key, variant.buffer, mime);
+          presetEntries.push({
+            name: variant.name,
+            url,
+            key: variant.key,
+            width: variant.width,
+            height: variant.height,
+            format: variant.format,
+            size: variant.size,
+          });
+        }
+
         variants = {
-          original: { url: optimizedUrl, width: result.metadata.width, height: result.metadata.height, format: result.metadata.format, size: file.size },
-          optimized: { url: `/uploads/${baseName}.webp`, size: result.optimized.size, format: 'webp' },
-          presets: result.variants.map((v) => ({ url: v.filePath, width: v.width, height: v.height, format: v.format, size: v.size, name: v.name })),
+          original: {
+            url: finalUrl,
+            key: storageKey,
+            width: result.metadata.width,
+            height: result.metadata.height,
+            format: result.metadata.format,
+            size: file.size,
+          },
+          optimized: {
+            url: optimizedUrl,
+            key: optimizedKey,
+            size: result.optimized.size,
+            format: 'webp',
+          },
+          presets: presetEntries,
         };
 
-        await this.storage.upload(`uploads/${baseName}.webp`, result.optimized.buffer, 'image/webp');
-        optimizedUrl = `/uploads/${baseName}.webp`;
-
-        const origPath = `uploads/${fileName}`;
-        if (origPath !== `uploads/${baseName}.webp`) {
-          await this.storage.delete(origPath);
+        // Delete the original only when it is a different object key than the
+        // optimized WebP (prevents .webp uploads from self-deleting — B6).
+        if (storageKey !== optimizedKey) {
+          await this.storage.delete(storageKey);
         }
+
+        finalUrl = optimizedUrl;
       } catch (err: any) {
         this.logger.warn(`Image optimization failed for ${file.originalname}: ${err.message}`);
       }
@@ -86,11 +136,11 @@ export class MediaService {
         fileName: file.originalname,
         mimeType: file.mimetype,
         size: file.size,
-        url: optimizedUrl,
+        url: finalUrl,
         hash,
         variants: variants as any,
         type: isImage ? 'image' : 'document',
-        folderId: folderId || null,
+        folderId: resolvedFolderId,
       },
     });
 
@@ -101,7 +151,7 @@ export class MediaService {
           version: 1,
           fileSize: file.size,
           hash,
-          storagePath: optimizedUrl,
+          storagePath: finalUrl,
           metadata: variants as any,
         },
       });
@@ -112,9 +162,53 @@ export class MediaService {
     return media;
   }
 
+  /**
+   * folderId rules (BUILDER TODO 3.1):
+   * - omitted/empty → null (root)
+   * - valid UUID → must exist for this tenant, else 400 INVALID_FOLDER
+   * - non-UUID string → treated as folder name; find-or-create (idempotent, tenant-scoped)
+   */
+  private async resolveFolderId(tenantId: string, folderId?: string): Promise<string | null> {
+    if (!folderId || !folderId.trim()) return null;
+    const value = folderId.trim();
+
+    if (UUID_RE.test(value)) {
+      const folder = await this.prisma.assetFolder.findFirst({
+        where: { id: value, tenantId },
+        select: { id: true },
+      });
+      if (!folder) {
+        throw new BadRequestException({
+          code: 'INVALID_FOLDER',
+          message: 'Folder not found',
+        });
+      }
+      return folder.id;
+    }
+
+    // Name/slug form (e.g. legacy "?folderId=builder")
+    const existing = await this.prisma.assetFolder.findFirst({
+      where: { tenantId, name: value },
+      select: { id: true },
+    });
+    if (existing) return existing.id;
+
+    const created = await this.prisma.assetFolder.create({
+      data: { tenantId, name: value },
+      select: { id: true },
+    });
+    return created.id;
+  }
+
   async findAll(tenantId: string, folderId?: string) {
+    const where: any = { tenantId };
+    // Only filter by folder when explicitly provided; otherwise list all tenant media.
+    if (folderId && folderId.trim()) {
+      const resolved = await this.resolveFolderId(tenantId, folderId);
+      where.folderId = resolved;
+    }
     return this.prisma.media.findMany({
-      where: { tenantId, folderId: folderId || null },
+      where,
       orderBy: { createdAt: 'desc' },
     });
   }
@@ -134,7 +228,11 @@ export class MediaService {
     if (media.variants) {
       const v: any = media.variants;
       for (const preset of v.presets || []) {
-        await this.storage.delete(preset.url);
+        await this.storage.delete(preset.key || preset.url);
+      }
+      if (v.optimized?.key) await this.storage.delete(v.optimized.key);
+      if (v.original?.key && v.original.key !== v.optimized?.key) {
+        await this.storage.delete(v.original.key);
       }
     }
 
@@ -142,20 +240,38 @@ export class MediaService {
     return { message: 'Media deleted' };
   }
 
-  async update(id: string, data: { fileName?: string; alt?: string; folderId?: string | null; visibility?: string }) {
+  async update(
+    id: string,
+    data: { fileName?: string; alt?: string; folderId?: string | null; visibility?: string },
+  ) {
     const media = await this.prisma.media.findUnique({ where: { id } });
     if (!media) throw new NotFoundException('Media not found');
-    return this.prisma.media.update({ where: { id }, data });
+
+    let folderId = data.folderId;
+    if (folderId != null && folderId !== '') {
+      folderId = await this.resolveFolderId(media.tenantId, folderId);
+    } else if (folderId === '') {
+      folderId = null;
+    }
+
+    return this.prisma.media.update({
+      where: { id },
+      data: { ...data, folderId: folderId as any },
+    });
   }
 
   async getCdnUrl(mediaId: string, variant?: string): Promise<string> {
     const media = await this.prisma.media.findUnique({ where: { id: mediaId } });
     if (!media) throw new NotFoundException('Media not found');
-    const baseUrl = this.storage.baseUrl;
-    if (!variant || !media.variants) return `${baseUrl}${media.url}`;
+    if (!variant || !media.variants) {
+      return media.url.startsWith('http')
+        ? media.url
+        : `${this.storage.baseUrl}${media.url}`;
+    }
     const v: any = media.variants;
     const preset = (v.presets || []).find((p: any) => p.name === variant);
-    return `${baseUrl}${preset?.url || media.url}`;
+    const url = preset?.url || media.url;
+    return url.startsWith('http') ? url : `${this.storage.baseUrl}${url}`;
   }
 
   async createFolder(tenantId: string, name: string, parentId?: string) {
@@ -165,8 +281,10 @@ export class MediaService {
   }
 
   async getFolders(tenantId: string, parentId?: string) {
+    const where: any = { tenantId };
+    if (parentId !== undefined) where.parentId = parentId || null;
     return this.prisma.assetFolder.findMany({
-      where: { tenantId, parentId: parentId || null },
+      where,
       include: { children: true, _count: { select: { media: true } } },
       orderBy: { sortOrder: 'asc' },
     });
@@ -179,10 +297,15 @@ export class MediaService {
   }
 
   async deleteFolder(id: string) {
-    const folder = await this.prisma.assetFolder.findUnique({ where: { id }, include: { children: true, media: true } });
+    const folder = await this.prisma.assetFolder.findUnique({
+      where: { id },
+      include: { children: true, media: true },
+    });
     if (!folder) throw new NotFoundException('Folder not found');
-    if (folder.children.length > 0) throw new BadRequestException('Folder has subfolders — delete them first');
-    if (folder.media.length > 0) throw new BadRequestException('Folder has media — move or delete them first');
+    if (folder.children.length > 0)
+      throw new BadRequestException('Folder has subfolders — delete them first');
+    if (folder.media.length > 0)
+      throw new BadRequestException('Folder has media — move or delete them first');
     return this.prisma.assetFolder.delete({ where: { id } });
   }
 }

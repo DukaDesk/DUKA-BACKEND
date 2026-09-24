@@ -23,7 +23,8 @@ Plain-language breakdown of the platform's capabilities:
 - **Tenant Lifecycle** — businesses create tenants, get approved, subscribe to plans, and manage runtime config (languages, currency, timezone, region, offline policy).
 - **Identity & Access (IAM)** — user registration/login (JWT + refresh rotation), OTP verification, Google/Apple OAuth, password recovery with policy enforcement, device management, consent tracking.
 - **RBAC** — roles and permissions (4 seed roles, 20 permissions) enforced via guards and decorators.
-- **Publishing Pipeline** — validates drafts, compiles a manifest, creates versioned releases, and supports rollback.
+- **Publishing Pipeline** — validates drafts or client-submitted PublishedApp 1.0.0 manifests (`ManifestValidator`), allocates version/checksum, activates one immutable release in a transaction (`tenant.activeReleaseId`), honors `Idempotency-Key`, supports rollback with owner/manager authz, and retains editable drafts after publish.
+- **Canonical public reader** — shared `ActiveReleaseService` used by both Renderer definition and Mobile BFF manifest so they always return the same active production snapshot + `release` receipt (id/version/checksum).
 
 ### Business Engines
 - **Builder & Renderer (SDUI)** — pages → sections → components hierarchy, navigation, theme, and the compiled app definition endpoint consumed by the mobile runtime.
@@ -32,7 +33,7 @@ Plain-language breakdown of the platform's capabilities:
 - **Forms & Workflow** — versioned forms with validation, submissions, and approval workflows.
 - **Payments** — provider adapters (Paystack, Flutterwave, Stripe), payment intents, verification, refunds, settlements, provider health, webhooks.
 - **Notifications** — templates, push/email/SMS/in-app via adapters, campaigns, segmentation, click tracking, preferences, device tokens.
-- **Media / DAM** — uploads with sharp image optimization (WebP, variant presets), folders, versions, CDN URLs, collections, shares, storage providers.
+- **Media / DAM** — uploads with sharp image optimization (WebP, variant presets), folders (find-or-create + UUID validation for `folderId`), versions, CDN URLs (StorageService return values retained), collections, shares, storage providers; original not deleted when keys collide (`.webp` self-delete guard).
 
 ### Platform Enhancements
 - **Integrations** — connector framework (SendGrid, Google Calendar).
@@ -90,7 +91,7 @@ ThrottlerGuard
 | Image processing | sharp (WebP, 5 variant presets) |
 | Validation / Docs | class-validator + class-transformer; Swagger/OpenAPI |
 | Logging | nestjs-pino (structured, correlation IDs) |
-| Testing | Jest + ts-jest + Supertest (configured) |
+| Testing | Jest + ts-jest + Supertest (5 unit suites, 38 tests) |
 | Deployment | Docker (2-stage build) + Railway |
 
 ---
@@ -188,6 +189,7 @@ Other scripts: `npm run build`, `npm run start:prod`, `npm run lint`, `npm test`
 | v0.3.4 | Merchant reject + stats — TenantStatus +rejected, POST /admin/merchants/:id/reject with rejectionReason, GET /admin/merchants/stats by status | Complete |
 | v0.3.5 | Published logo/release mismatch — S3 StorageService, manifest body publish, body limits, publish creates new Release directly | Complete |
 | v0.3.6 | Publishing defect fixes — screen format normalization, duplicate release prevention, rollback cache invalidation, WebP self-delete guard | Complete |
+| v0.3.7 | Published app delivery B1–B6 — ManifestValidator (1.0.0 object screens), atomic release activation + `activeReleaseId`, ActiveReleaseService shared by renderer/BFF, Idempotency-Key, owner/manager authz on publish/rollback, media folderId resolve + StorageService URLs, default merchant app seed, ApiQuotaGuard, 5 unit suites (38 tests) | Complete (code) / live verify pending |
 
 ---
 
@@ -195,10 +197,11 @@ Other scripts: `npm run build`, `npm run start:prod`, `npm run lint`, `npm test`
 
 Kept here so this file stays accurate:
 
-- **No tests yet** — Jest/Supertest are configured but there are zero spec/e2e files written. Coverage is the biggest open gap.
+- **Unit tests only (38)** — five Jest suites cover manifest validation, publishing activation/idempotency/authz, active-release parity, media folderId/storage, and press-action round-trip. Full HTTP e2e / live B8 evidence is still open. Coverage of other modules remains the biggest gap.
 - **Provider adapters are simulated** — payments use placeholder keys, notification adapters default to `log`, SendGrid/GoogleCalendar connectors are stubs, AI Mock is manually wired. Real integrations are scaffolded but not production-tested.
 - **Secret handling is casual** — `.env` is committed in the repo, `JWT_SECRET` has a `'super-secret'` fallback, and the seed hash's plaintext password (`Password123!`) is documented. Needs hardening before real deployment.
-- **Rate limiting not wired** — `ApiQuota` model and `PlatformAdminService.checkQuota()` exist but are not integrated into a NestJS guard/middleware.
+- **Rate limiting partially wired** — global `ThrottlerGuard` + new `ApiQuotaGuard` (platform `checkQuota`/`incrementQuota` on `/app/*` when tenant context exists). Quota defaults and operational docs still need hardening; Redis outage path fails open by design.
+- **Active-release migration not applied** — `prisma/migrations/20260924000000_add_active_release` is written and ready; run `npx prisma migrate deploy` (or `migrate dev`) before relying on the column in production. Runtime fallback backfills pre-migration rows.
 - **SMS adapters are log-only** — Twilio, Termii, Africa's Talking just log and return success (no real HTTP calls).
 - **Email SES/SMTP adapters are log-only** — `sendViaSes()` and `sendViaSmtp()` just log and return success.
 - **APNS push is a stub** — Logs and returns success without actual Apple Push delivery.

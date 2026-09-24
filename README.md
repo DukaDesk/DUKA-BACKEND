@@ -41,7 +41,7 @@ Multi-tenant Backend-as-a-Platform (BaaP) powering the DUKADESK ecosystem. Busin
 | Validation | class-validator + class-transformer |
 | API Docs | Swagger (OpenAPI) |
 | Logging | nestjs-pino + pino-pretty (structured, correlation IDs) |
-| Testing | Jest + ts-jest + Supertest (configured, 0 tests written) |
+| Testing | Jest + ts-jest + Supertest (5 unit suites / 38 tests: manifest validator, publishing, active release, media, press-action round-trip) |
 | Deployment | Docker (2-stage build) + Railway |
 
 ## Three-Tier Endpoint Architecture

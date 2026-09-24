@@ -1,7 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import sharp from 'sharp';
-import * as path from 'path';
-import * as fs from 'fs/promises';
+import sharp, { ResizeOptions } from 'sharp';
 
 export interface OptimizedVariant {
   name: string;
@@ -16,7 +14,8 @@ export interface VariantResult {
   width: number;
   height: number;
   format: string;
-  filePath: string;
+  buffer: Buffer;
+  key: string;
   size: number;
 }
 
@@ -28,17 +27,19 @@ const PRESET_VARIANTS: OptimizedVariant[] = [
   { name: 'og-image', width: 1200, height: 630, format: 'jpeg', quality: 90 },
 ];
 
+/**
+ * Produces optimized buffers + storage keys. Does not touch the filesystem —
+ * MediaService persists everything through StorageService (B6).
+ */
 @Injectable()
 export class ImageOptimizer {
   private readonly logger = new Logger(ImageOptimizer.name);
-  private readonly variantsDir: string;
 
-  constructor() {
-    this.variantsDir = path.join(process.cwd(), 'uploads', 'variants');
-    fs.mkdir(this.variantsDir, { recursive: true }).catch(() => {});
-  }
-
-  async optimize(inputBuffer: Buffer, mimeType: string, baseName: string): Promise<{
+  async optimize(
+    inputBuffer: Buffer,
+    mimeType: string,
+    baseName: string,
+  ): Promise<{
     optimized: { buffer: Buffer; size: number; mimeType: string };
     variants: VariantResult[];
     metadata: { width: number; height: number; format: string };
@@ -52,9 +53,7 @@ export class ImageOptimizer {
     let optimized = inputBuffer;
     let optimizedSize = inputBuffer.length;
     if (mimeType.startsWith('image/')) {
-      const compressed = await sharp(inputBuffer)
-        .webp({ quality: 90 })
-        .toBuffer();
+      const compressed = await sharp(inputBuffer).webp({ quality: 90 }).toBuffer();
       optimized = compressed;
       optimizedSize = compressed.length;
     }
@@ -68,28 +67,47 @@ export class ImageOptimizer {
           .webp({ quality: 70 })
           .toBuffer();
         const thumbName = `${baseName}_${variant.name}.webp`;
-        const thumbPath = path.join(this.variantsDir, thumbName);
-        await fs.writeFile(thumbPath, thumb);
-        variantResults.push({ name: variant.name, width: 150, height: 150, format: 'webp', filePath: `/uploads/variants/${thumbName}`, size: thumb.length });
+        variantResults.push({
+          name: variant.name,
+          width: 150,
+          height: 150,
+          format: 'webp',
+          buffer: thumb,
+          key: `uploads/variants/${thumbName}`,
+          size: thumb.length,
+        });
         continue;
       }
 
-      const resizeOps: sharp.ResizeOptions = variant.height > 0
-        ? { width: variant.width, height: variant.height, fit: 'cover' }
-        : { width: variant.width, fit: 'inside', withoutEnlargement: true };
+      const resizeOps: ResizeOptions =
+        variant.height > 0
+          ? { width: variant.width, height: variant.height, fit: 'cover' }
+          : { width: variant.width, fit: 'inside', withoutEnlargement: true };
 
       const ext = variant.format;
       let buffer: Buffer;
       if (variant.format === 'webp') {
-        buffer = await sharp(inputBuffer).resize(resizeOps).webp({ quality: variant.quality }).toBuffer();
+        buffer = await sharp(inputBuffer)
+          .resize(resizeOps)
+          .webp({ quality: variant.quality })
+          .toBuffer();
       } else {
-        buffer = await sharp(inputBuffer).resize(resizeOps).jpeg({ quality: variant.quality }).toBuffer();
+        buffer = await sharp(inputBuffer)
+          .resize(resizeOps)
+          .jpeg({ quality: variant.quality })
+          .toBuffer();
       }
 
       const fileName = `${baseName}_${variant.name}.${ext}`;
-      const filePath = path.join(this.variantsDir, fileName);
-      await fs.writeFile(filePath, buffer);
-      variantResults.push({ name: variant.name, width: variant.width || width, height: variant.height || Math.round(height * (variant.width / width)), format: ext, filePath: `/uploads/variants/${fileName}`, size: buffer.length });
+      variantResults.push({
+        name: variant.name,
+        width: variant.width || width,
+        height: variant.height || Math.round(height * (variant.width / (width || 1))),
+        format: ext,
+        buffer,
+        key: `uploads/variants/${fileName}`,
+        size: buffer.length,
+      });
     }
 
     return {

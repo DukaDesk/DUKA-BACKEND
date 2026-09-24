@@ -1,7 +1,7 @@
 # Knowledge Base Alignment
 
 **Repository:** backend
-**KB Version:** 0.1.0
-**KB Commit:** e7ff680ebba9615212b4621f6d656605032a2da9
+**KB Version:** 0.3.7
+**KB Commit:** dd32499151381aeb4be32286c3509a915b92f4b9
 **Status:** Compatible
-**Last Verified:** 2026-08-19
+**Last Verified:** 2026-09-24

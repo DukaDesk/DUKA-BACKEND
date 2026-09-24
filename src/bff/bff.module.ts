@@ -8,9 +8,10 @@ import { BusinessDashboardBffService } from './business-dashboard/business-dashb
 import { WebsiteBffController } from './website/website-bff.controller';
 import { WebsiteBffService } from './website/website-bff.service';
 import { UsersModule } from '../modules/users/users.module';
+import { ReleasesModule } from '../shared/releases/releases.module';
 
 @Module({
-  imports: [UsersModule],
+  imports: [UsersModule, ReleasesModule],
   controllers: [
     MobileBffController,
     TenantDashboardBffController,

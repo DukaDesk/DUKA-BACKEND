@@ -39,9 +39,11 @@ import { TenantContextModule } from './shared/context/tenant-context.module';
 import { RedisModule } from './common/redis/redis.module';
 import { QueueModule } from './shared/queue/queue.module';
 import { LoggerModule } from './common/logger/logger.module';
+import { ReleasesModule } from './shared/releases/releases.module';
 import { CorrelationIdMiddleware } from './common/middleware/correlation-id.middleware';
 import { TenantResolverMiddleware } from './shared/context/tenant-resolver.middleware';
 import { SuperAdminBootstrap } from './common/bootstrap/super-admin.bootstrap';
+import { ApiQuotaGuard } from './common/guards/api-quota.guard';
 
 @Module({
   imports: [
@@ -66,6 +68,7 @@ import { SuperAdminBootstrap } from './common/bootstrap/super-admin.bootstrap';
     EventBusModule,
     TenantContextModule,
     RbacModule,
+    ReleasesModule,
     // Modules
     AuthModule,
     UsersModule,
@@ -102,6 +105,10 @@ import { SuperAdminBootstrap } from './common/bootstrap/super-admin.bootstrap';
     {
       provide: APP_GUARD,
       useClass: ThrottlerGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: ApiQuotaGuard,
     },
     SuperAdminBootstrap,
   ],

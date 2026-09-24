@@ -40,20 +40,24 @@ export class StorageService {
   }
 
   async upload(key: string, buffer: Buffer, contentType: string): Promise<string> {
+    const normalizedKey = this.normalizeKey(key);
+
     if (this.useS3) {
-      await this.s3!.send(new PutObjectCommand({
-        Bucket: this.bucket,
-        Key: key,
-        Body: buffer,
-        ContentType: contentType,
-      }));
-      this.logger.debug(`S3 upload: ${key}`);
-      return `${this.baseUrl}/${key}`;
+      await this.s3!.send(
+        new PutObjectCommand({
+          Bucket: this.bucket,
+          Key: normalizedKey,
+          Body: buffer,
+          ContentType: contentType,
+        }),
+      );
+      this.logger.debug(`S3 upload: ${normalizedKey}`);
+      return `${this.baseUrl}/${normalizedKey}`;
     }
 
     const uploadDir = path.join(process.cwd(), 'uploads');
     await fs.mkdir(uploadDir, { recursive: true });
-    const relativePath = key.replace(/^uploads\//, '');
+    const relativePath = normalizedKey.replace(/^uploads\//, '');
     const filePath = path.join(uploadDir, relativePath);
     const dir = path.dirname(filePath);
     await fs.mkdir(dir, { recursive: true });
@@ -61,12 +65,16 @@ export class StorageService {
     return `/uploads/${relativePath}`;
   }
 
-  async delete(key: string): Promise<void> {
+  async delete(keyOrUrl: string): Promise<void> {
+    const key = this.toStorageKey(keyOrUrl);
+
     if (this.useS3) {
-      await this.s3!.send(new DeleteObjectCommand({
-        Bucket: this.bucket,
-        Key: key,
-      }));
+      await this.s3!.send(
+        new DeleteObjectCommand({
+          Bucket: this.bucket,
+          Key: key,
+        }),
+      );
       this.logger.debug(`S3 delete: ${key}`);
       return;
     }
@@ -75,5 +83,40 @@ export class StorageService {
     const relativePath = key.replace(/^uploads\//, '');
     const filePath = path.join(uploadDir, relativePath);
     await fs.unlink(filePath).catch(() => {});
+  }
+
+  private normalizeKey(key: string): string {
+    let k = key.replace(/^\/+/, '');
+    if (k.startsWith('http://') || k.startsWith('https://')) {
+      return this.toStorageKey(key);
+    }
+    if (!k.startsWith('uploads/')) k = `uploads/${k.replace(/^uploads\//, '')}`;
+    return k;
+  }
+
+  /** Accepts a storage key or an absolute/relative URL and returns the object key. */
+  private toStorageKey(keyOrUrl: string): string {
+    let raw = keyOrUrl;
+    if (raw.startsWith('http://') || raw.startsWith('https://')) {
+      try {
+        const u = new URL(raw);
+        raw = decodeURIComponent(u.pathname);
+        // forcePathStyle: /bucket/uploads/... → strip bucket segment
+        const parts = raw.replace(/^\/+/, '').split('/');
+        if (parts[0] === this.bucket) {
+          parts.shift();
+          raw = parts.join('/');
+        } else {
+          raw = raw.replace(/^\/+/, '');
+        }
+      } catch {
+        raw = keyOrUrl;
+      }
+    }
+    raw = raw.replace(/^\/+/, '');
+    if (raw.startsWith('uploads/')) return raw;
+    // `/uploads/foo` handled above; bare `foo` → uploads/foo
+    if (raw.includes('/')) return raw;
+    return `uploads/${raw}`;
   }
 }

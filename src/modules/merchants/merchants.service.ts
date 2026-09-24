@@ -34,7 +34,126 @@ export class MerchantsService {
       },
     });
 
+    // Seed a non-empty default app so new merchants never publish/serve screens: [].
+    await this.seedDefaultApp(tenant.id, tenant.name, tenant.slug);
+
     return tenant;
+  }
+
+  private async seedDefaultApp(tenantId: string, name: string, slug: string) {
+    const template = await this.prisma.template.findFirst({
+      where: { isActive: true, slug: 'modern-store' },
+    });
+
+    if (template) {
+      try {
+        const config = template.config as any;
+        if (config?.pages?.length) {
+          for (const [index, page] of config.pages.entries()) {
+            await this.prisma.page.create({
+              data: {
+                tenantId,
+                templateId: template.id,
+                name: page.name,
+                slug: page.slug,
+                isHome: !!page.isHome,
+                sortOrder: page.sortOrder ?? index,
+                sections: {
+                  create:
+                    page.sections?.map((section: any, si: number) => ({
+                      type: section.type,
+                      sortOrder: section.sortOrder ?? si,
+                      config: section.config ?? {},
+                      components: {
+                        create:
+                          section.components?.map((comp: any, ci: number) => ({
+                            type: comp.type,
+                            props: comp.props ?? {},
+                            sortOrder: comp.sortOrder ?? ci,
+                          })) || [],
+                      },
+                    })) || [],
+                },
+              },
+            });
+          }
+        }
+        if (config?.theme) {
+          await this.prisma.theme.create({
+            data: { tenantId, ...config.theme },
+          });
+        }
+        if (config?.navigation) {
+          await this.prisma.navigation.create({
+            data: { tenantId, items: config.navigation },
+          });
+        }
+        return;
+      } catch {
+        // fall through to minimal seed
+      }
+    }
+
+    // Minimal home + shop pages when template seed is unavailable.
+    await this.prisma.page.create({
+      data: {
+        tenantId,
+        name: 'Home',
+        slug: 'home',
+        isHome: true,
+        sortOrder: 0,
+        sections: {
+          create: [
+            {
+              type: 'text',
+              sortOrder: 0,
+              config: {},
+              components: {
+                create: [
+                  {
+                    type: 'TextBlock',
+                    sortOrder: 0,
+                    props: { text: `Welcome to ${name}` },
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      },
+    });
+    await this.prisma.page.create({
+      data: {
+        tenantId,
+        name: 'Shop',
+        slug: 'shop',
+        isHome: false,
+        sortOrder: 1,
+        sections: {
+          create: [
+            {
+              type: 'grid',
+              sortOrder: 0,
+              config: { columns: 2 },
+              components: {
+                create: [{ type: 'ProductGrid', sortOrder: 0, props: { limit: 12 } }],
+              },
+            },
+          ],
+        },
+      },
+    });
+    await this.prisma.navigation.create({
+      data: {
+        tenantId,
+        items: [
+          { label: 'Home', screenId: 'home', path: '/home' },
+          { label: 'Shop', screenId: 'shop', path: '/shop' },
+        ],
+      },
+    });
+    await this.prisma.theme.create({ data: { tenantId } });
+    void slug;
   }
 
   async findById(id: string) {
