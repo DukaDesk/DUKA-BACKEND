@@ -5,7 +5,8 @@
 The `backend/` repository contains the core server-side platform for DUKADESK OS. It exposes REST APIs, manages business logic, handles events, and coordinates data persistence.
 
 **Implementation Repository:** [DUKA-BACKEND](https://github.com/DukaDesk/DUKA-BACKEND)
-**KB Version:** 0.1.0
+**KB Version:** 0.3.8
+**Last Updated:** 2026-09-24
 
 ## Responsibilities
 
@@ -94,7 +95,10 @@ Specifications that target this repository:
 
 | Specification | Title | State |
 |--------------|-------|-------|
-| KB v0.1.0 | Knowledge Base v0.1.0 | Active |
+| KB v0.1.0 | Knowledge Base v0.1.0 | Superseded |
+| KB v0.2.0 | Three-tier API Architecture | Active |
+| KB v0.2.1 | App/Public Split + Dashboard | Active |
+| KB v0.3.8 | Published app delivery B1–B6 | Active (live verify pending) |
 
 ## Agent Conventions
 
@@ -109,7 +113,7 @@ Specifications that target this repository:
 
 - **Add an API endpoint:** create DTO → service method → controller method → add tests → document with Swagger.
 - **Add a database migration:** update schema.prisma → run `prisma:migrate` → test rollback.
-- **Consume or publish an event:** add queue producer/consumer using Bull.
+- **Consume or publish an event:** use queue producer/consumer using Bull.
 - **Integrate a new provider:** implement adapter interface, register in provider registry.
 
 ## Escalation
@@ -120,3 +124,7 @@ Stop and ask for human input when:
 - A security-critical decision is required.
 - A breaking change affects multiple repositories.
 - A new external dependency is required.
+
+---
+
+2026-09-24: Published app delivery B1–B6 landed on main (commit `00baea3`). `ManifestValidator`, atomic activation + `activeReleaseId`, shared `ActiveReleaseService`, owner/manager authz, media folderId + storage URLs, default merchant app seed, `ApiQuotaGuard`. 5 unit suites / 38 tests; build 0 issues; lint 0 errors. B4 migration file written (not applied); B7 compatibility contract and B8 live integration evidence remain open. See `docs/kb-backend-PROGRESS.md` and `knowledge-base-version.md`.
