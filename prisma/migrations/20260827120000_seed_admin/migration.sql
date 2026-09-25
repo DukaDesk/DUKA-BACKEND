@@ -18,7 +18,7 @@ BEGIN
   SELECT gen_random_uuid(), v_role_id, p.id FROM permissions p
   ON CONFLICT ("roleId", "permissionId") DO NOTHING;
 
-  INSERT INTO users (id, email, "passwordHash", "firstName", "lastName", status, "emailVerified")
+  INSERT INTO users (id, email, "passwordHash", "firstName", "lastName", status, "emailVerified", "createdAt", "updatedAt")
   VALUES (
     gen_random_uuid(),
     'superadmin@duka.dev',
@@ -26,9 +26,11 @@ BEGIN
     'Super',
     'Admin',
     'active',
-    true
+    true,
+    now(),
+    now()
   )
-  ON CONFLICT (email) DO UPDATE SET "passwordHash" = EXCLUDED."passwordHash", status = EXCLUDED.status, "emailVerified" = EXCLUDED."emailVerified"
+  ON CONFLICT (email) DO UPDATE SET "passwordHash" = EXCLUDED."passwordHash", status = EXCLUDED.status, "emailVerified" = EXCLUDED."emailVerified", "updatedAt" = now()
   RETURNING id INTO v_user_id;
 
   INSERT INTO user_roles ("userId", "roleId", "tenantId")
