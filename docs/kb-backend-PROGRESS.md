@@ -75,7 +75,6 @@ This file tracks the current state of the backend implementation repository.
 
 ## Next Up
 
-- Apply `prisma/migrations/20260924000000_add_active_release` and verify backfill
 - E2E integration tests for all modules (B8 live publish/rollback evidence)
 - Rate limiting completion (quota defaults + docs)
 - API versioning strategy (v2 planning)

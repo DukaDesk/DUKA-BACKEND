@@ -6,7 +6,7 @@
   },
   "deploy": {
     "numReplicas": 1,
-    "preDeployCommand": "npx prisma db push --accept-data-loss && npx prisma db seed",
+    "preDeployCommand": "npx prisma migrate deploy && npx prisma db seed",
     "startCommand": "node dist/main",
     "healthcheckPath": "/api/v1/health",
     "healthcheckTimeout": 300,

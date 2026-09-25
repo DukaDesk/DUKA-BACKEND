@@ -161,7 +161,7 @@ npm run start:dev
 
 Other scripts: `npm run build`, `npm run start:prod`, `npm run lint`, `npm test`, `npm run test:e2e`, `npm run prisma:studio`, `npm run docker:down`.
 
-**Deployment (Railway):** Docker build; pre-deploy runs `prisma db push` + seed; healthcheck `/api/v1/health`.
+**Deployment (Railway):** Docker build; pre-deploy runs `prisma migrate deploy` + seed; healthcheck `/api/v1/health`.
 
 ---
 
@@ -201,7 +201,7 @@ Kept here so this file stays accurate:
 - **Provider adapters are simulated** — payments use placeholder keys, notification adapters default to `log`, SendGrid/GoogleCalendar connectors are stubs, AI Mock is manually wired. Real integrations are scaffolded but not production-tested.
 - **Secret handling is casual** — `.env` is committed in the repo, `JWT_SECRET` has a `'super-secret'` fallback, and the seed hash's plaintext password (`Password123!`) is documented. Needs hardening before real deployment.
 - **Rate limiting partially wired** — global `ThrottlerGuard` + new `ApiQuotaGuard` (platform `checkQuota`/`incrementQuota` on `/app/*` when tenant context exists). Quota defaults and operational docs still need hardening; Redis outage path fails open by design.
-- **Active-release migration not applied** — `prisma/migrations/20260924000000_add_active_release` is written and ready; run `npx prisma migrate deploy` (or `migrate dev`) before relying on the column in production. Runtime fallback backfills pre-migration rows.
+- **Active-release migration** — `prisma/migrations/20260924000000_add_active_release` is written; Railway pre-deploy now runs `npx prisma migrate deploy` (was `db push`, which skips SQL backfill). Runtime fallback still backfills pre-migration rows if the column is null.
 - **SMS adapters are log-only** — Twilio, Termii, Africa's Talking just log and return success (no real HTTP calls).
 - **Email SES/SMTP adapters are log-only** — `sendViaSes()` and `sendViaSmtp()` just log and return success.
 - **APNS push is a stub** — Logs and returns success without actual Apple Push delivery.
