@@ -1,7 +1,5 @@
 const { PrismaClient } = require('@prisma/client');
 const bcrypt = require('bcryptjs');
-const fs = require('fs');
-const path = require('path');
 const crypto = require('crypto');
 
 const EMAIL = process.env.SUPER_ADMIN_EMAIL || 'superadmin@duka.dev';
@@ -69,50 +67,10 @@ async function main() {
     create: { userId: user.id, roleId: role.id, tenantId: null },
   });
 
-  // Rewrite the previously-broken migration file into a correct, idempotent one
-  const migrationDir = path.join(
-    __dirname,
-    '..',
-    'prisma',
-    'migrations',
-    '20260827120000_seed_admin',
-  );
-  fs.mkdirSync(migrationDir, { recursive: true });
-  const migrationSql = `-- Seed: Create super admin user (idempotent, reproducible)
--- Password hash below is a bcrypt hash of the bootstrap super-admin password.
--- To change credentials, update the user's passwordHash or run with SUPER_ADMIN_PASSWORD.
-
-DO $$
-DECLARE
-  v_role_id UUID;
-  v_user_id UUID;
-BEGIN
-  INSERT INTO roles (id, name, guard, description, "isSystem", "createdAt")
-  VALUES (gen_random_uuid(), 'super_admin', 'rbac', 'Super administrator with full access', true, now())
-  ON CONFLICT (name) DO UPDATE SET description = EXCLUDED.description
-  RETURNING id INTO v_role_id;
-
-  INSERT INTO role_permissions (id, "roleId", "permissionId")
-  SELECT gen_random_uuid(), v_role_id, p.id FROM permissions p
-  ON CONFLICT ("roleId", "permissionId") DO NOTHING;
-
-  INSERT INTO users (id, email, "passwordHash", "firstName", "lastName", status, "emailVerified")
-  VALUES (gen_random_uuid(), '${EMAIL}', '${hash}', 'Super', 'Admin', 'active', true)
-  ON CONFLICT (email) DO UPDATE SET "passwordHash" = EXCLUDED."passwordHash", status = EXCLUDED.status, "emailVerified" = EXCLUDED."emailVerified"
-  RETURNING id INTO v_user_id;
-
-  INSERT INTO user_roles ("userId", "roleId", "tenantId")
-  VALUES (v_user_id, v_role_id, NULL)
-  ON CONFLICT ("userId", "roleId", "tenantId") DO NOTHING;
-END $$;
-`;
-  fs.writeFileSync(path.join(migrationDir, 'migration.sql'), migrationSql);
-
   console.log('--- SUPER ADMIN CREATED ---');
   console.log(`EMAIL=${EMAIL}`);
   console.log(`PASSWORD=${password}`);
   console.log(`PERMISSIONS_GRANTED=${permissions.length}`);
-  console.log(`MIGRATION_WRITTEN=${path.join(migrationDir, 'migration.sql')}`);
 }
 
 main()
