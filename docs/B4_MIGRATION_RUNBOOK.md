@@ -2,8 +2,8 @@
 
 **Task:** B4 / P0 — Migration and recovery (KNOWLEDGE-BASE `backend/PUBLISHED_APP_DELIVERY_BACKEND_TODO.md`, KB 0.3.8)
 **Owner:** Backend agent
-**Status:** recovery sequence defined; production resolve pending go-ahead
-**Last updated:** 2026-09-26
+**Status:** complete — migration recovered, `add_active_release` applied in production, audit passing
+**Last updated:** 2026-09-27
 
 ## 1. Why production deploys are failing
 
@@ -97,16 +97,24 @@ Record here:
 
 | Evidence | Value |
 |----------|-------|
-| Deployed commit | _pending_ |
-| Deployment ID | _pending_ |
-| `migrate deploy` result | _pending_ |
-| `tenants.activeReleaseId` column present | _pending_ |
-| Backfill rows updated | _pending_ (expected 0) |
-| `prisma db seed` result | _pending_ |
-| Audit script result | _pending_ |
-| `/api/v1/health` | _pending_ |
+| Deployed commit | `7cf6845` (runner tsconfig) on deployment `b104f8d2-34c9-4880-819c-46c5bf243c36`, 2026-09-27 09:15 UTC; migration deploy `a00865ae-6b6d-4a06-b003-ad610f55e0bf`, 2026-09-26 19:37 UTC |
+| Deployment ID | `b104f8d2-34c9-4880-819c-46c5bf243c36` (SUCCESS) |
+| `migrate deploy` result | `a00865ae`: "Applying migration 20260924000000_add_active_release … All migrations have been successfully applied."; `b104f8d2`: "No pending migrations to apply." |
+| `tenants.activeReleaseId` column present | yes, plus index `tenants_activeReleaseId_idx` |
+| Backfill rows updated | 0 (expected — `releases` was empty) |
+| `prisma db seed` result | success — "Seed completed successfully"; 3 templates, tenant `acme-store`, 20 users |
+| Audit script result | PASS WITH WARNINGS, 0 errors / 5 warnings, exit 0 |
+| `/api/v1/health` | HTTP 200 |
+| Ledger after recovery | 8 migrations found, 7 applied then 8 applied, 0 pending, no checksum mismatches |
+
+### 5.1 What the recovery exposed
+
+1. **Baseline** — seven `migrate resolve --applied` calls; `resolve --applied` on the failed `seed_admin` row inserted a second row and marked the original rolled back. The stale duplicate was deleted (`id=f6e32164-b0a2-4e11-8d76-1ede523b5170`) so the ledger reads 7 applied rows, then 8 after the deploy.
+2. **`preDeployCommand` never ran the second command** — `"npx prisma migrate deploy && npx prisma db seed"` executed only `migrate deploy` (no "Running seed command" in logs, `permissions`/`plans`/`templates` all 0). Routed through `npm run predeploy` so npm's shell owns the chain.
+3. **Seed then failed with `ERR_UNKNOWN_FILE_EXTENSION` on `prisma/seed.ts`** — the runner image had no `tsconfig.json`, so ts-node fell back to Node's module syntax detection, which cannot load `.ts` as ESM on Node 20. Reproduced locally with `npx ts-node --skipProject prisma/seed.ts`. Fixed by copying `tsconfig.json` into the runner stage.
+4. **The Railway database proxy drops connections intermittently** from this machine (`P1001` on roughly alternating attempts) — the audit script now retries transient errors (`AUDIT_RETRIES`, default 5).
 
 ## 6. Known gaps after B4
 
-- `releases` is empty, so no tenant resolves an active release. B8 requires merchants to re-publish after this deploy, then live publish/rollback/read-path/media evidence.
-- `scripts/seed-super-admin.js` rewrites `20260827120000_seed_admin/migration.sql` at runtime with the pre-fix SQL; it is not wired into `prisma db seed`, but running it manually would reintroduce the 23502 failure. Do not run it against the migration directory.
+- `releases` is empty, so no tenant resolves an active release. B8 requires merchants to re-publish after this deploy, then live publish/rollback/read-path/media evidence. Four tenants currently report `status=published` with no published production release.
+- `scripts/seed-super-admin.js` used to rewrite `20260827120000_seed_admin/migration.sql` at runtime with the pre-fix SQL; that block was removed in `9a2b222`, so the corrected migration can no longer be regenerated with the missing `updatedAt`.
