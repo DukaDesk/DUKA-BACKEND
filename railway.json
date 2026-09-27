@@ -6,7 +6,7 @@
   },
   "deploy": {
     "numReplicas": 1,
-    "preDeployCommand": "npx prisma migrate deploy && npx prisma db seed",
+    "preDeployCommand": "npm run predeploy",
     "startCommand": "node dist/main",
     "healthcheckPath": "/api/v1/health",
     "healthcheckTimeout": 300,

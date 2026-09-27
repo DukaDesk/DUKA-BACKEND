@@ -11,12 +11,31 @@ function report(severity, area, message) {
   console.log(`${severity.padEnd(5)} [${area}] ${message}`);
 }
 
-function assertReadOnly(sql) {
+const RETRY_ATTEMPTS = Number(process.env.AUDIT_RETRIES || 5);
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function assertReadOnly(sql) {
   const trimmed = sql.trim().replace(/^\(+/, '').trim();
   if (!/^select\b/i.test(trimmed)) {
     throw new Error(`Refusing non-SELECT statement: ${trimmed.slice(0, 60)}`);
   }
-  return prisma.$queryRawUnsafe(sql);
+  let lastError;
+  for (let attempt = 1; attempt <= RETRY_ATTEMPTS; attempt++) {
+    try {
+      return await prisma.$queryRawUnsafe(sql);
+    } catch (e) {
+      lastError = e;
+      const message = String(e.message || '');
+      const transient = /P1001|P1008|ECONNRESET|ETIMEDOUT|EPIPE| forcibly closed/i.test(message);
+      if (!transient || attempt === RETRY_ATTEMPTS) break;
+      console.log(`      retry ${attempt}/${RETRY_ATTEMPTS} after transient error: ${message.split('\n')[0]}`);
+      await sleep(attempt * 2000);
+    }
+  }
+  throw lastError;
 }
 
 async function selectOne(sql) {

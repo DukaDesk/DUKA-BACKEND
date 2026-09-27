@@ -17,6 +17,7 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:migrate:prod": "prisma migrate deploy",
+    "predeploy": "prisma migrate deploy && prisma db seed",
     "prisma:seed": "ts-node prisma/seed.ts",
     "prisma:studio": "prisma studio",
     "docker:up": "docker compose up -d",
