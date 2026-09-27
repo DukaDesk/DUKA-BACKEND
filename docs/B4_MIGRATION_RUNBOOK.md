@@ -102,10 +102,11 @@ Record here:
 | `migrate deploy` result | `a00865ae`: "Applying migration 20260924000000_add_active_release … All migrations have been successfully applied."; `b104f8d2`: "No pending migrations to apply." |
 | `tenants.activeReleaseId` column present | yes, plus index `tenants_activeReleaseId_idx` |
 | Backfill rows updated | 0 (expected — `releases` was empty) |
-| `prisma db seed` result | success — "Seed completed successfully"; 3 templates, tenant `acme-store`, 20 users |
+| `prisma db seed` result | success — "Seed completed successfully"; permissions **20** (was 0), plans **3** (was 0), templates **3** (was 0), tenant `acme-store`, 20 users |
 | Audit script result | PASS WITH WARNINGS, 0 errors / 5 warnings, exit 0 |
 | `/api/v1/health` | HTTP 200 |
 | Ledger after recovery | 8 migrations found, 7 applied then 8 applied, 0 pending, no checksum mismatches |
+| `tenants.activeReleaseId` population | 7 null / 7 tenants — expected while `releases` is empty; readers use the runtime legacy fallback until merchants re-publish (B8) |
 
 ### 5.1 What the recovery exposed
 
