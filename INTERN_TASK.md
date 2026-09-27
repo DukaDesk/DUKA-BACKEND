@@ -18,8 +18,10 @@
    ```
    Use **Try it out** on each endpoint. The API reference you can also read
    offline: `docs/api-endpoints-reference.md` (shared with you).
-3. **Get a token first.** `POST /api/v1/auth/register` → `POST /api/v1/auth/login`
-   → copy the `accessToken` → click **Authorize** (padlock icon) → paste
+3. **Get a token first.** Log in with the **test account your mentor gives you**
+   (`POST /api/v1/auth/login`), or register your own
+   (`POST /api/v1/auth/register`, then ask your mentor to approve it).
+   Copy the `accessToken` → click **Authorize** (padlock icon) → paste
    `Bearer <accessToken>`. All guarded endpoints then work in Swagger.
 4. **Only touch your own data.** Register with your own email (use
    `intern+<yourname>@example.com` style), create your own tenant with a slug
@@ -58,8 +60,8 @@ tenant lifecycle, publishing, public reads) exactly as clients see them.
 | Day | What to do | Endpoint sequence |
 |-----|-----------|-------------------|
 | 1 | **Orientation.** Read `Reigner.md`. Open `/api/docs`. Confirm public endpoints work with no token: health, compatibility, discovery. Note the response envelope shape (`{success, message, data, meta}` and error `{success:false, errors[]}`). | `GET /api/v1/health` → `GET /api/v1/compatibility` → `GET /api/v1/discovery/featured` |
-| 2 | **Auth flow.** Register your intern account, log in, authorize in Swagger, then call a JWT-guarded route. Also verify refresh works. | `POST /api/v1/auth/register` → `POST /api/v1/auth/login` → **Authorize** → `POST /api/v1/auth/refresh` → one `/app/*` route |
-| 3 | **Tenant + preflight.** Create your own tenant (`intern-<name>` slug). Then dry-run compatibility — first **without** a token (expect 401), then **with** a token and a minimal manifest (expect 200 with `compatible: true`). | `POST /api/v1/merchants` → `POST /api/v1/merchants/{id}/publishing/preflight` |
+| 2 | **Auth flow.** Log in with the credentials your mentor gave you (or register your own and get it approved), authorize in Swagger, then call a JWT-guarded route. Also verify refresh works. | `POST /api/v1/auth/login` → **Authorize** → `POST /api/v1/auth/refresh` → one `/app/*` route |
+| 3 | **Tenant + preflight.** Create your own tenant (`intern-<name>` slug) — or use the starter tenant `intern-probe-x1` already on your account. Then dry-run compatibility — first **without** a token (expect 401), then **with** a token and a minimal manifest (expect 200 with `compatible: true`). | `POST /api/v1/merchants` → `POST /api/v1/merchants/{id}/publishing/preflight` |
 | 4 | **Publish + read-back parity.** Publish your minimal manifest with an `Idempotency-Key` header (retry once with the same key — same release must come back). Then compare both public read paths: same `version` **and** same `checksum`. | `POST /api/v1/merchants/{id}/publishing/publish` → `GET /api/v1/merchants/{id}/definition` → `GET /api/v1/bff/mobile/tenant/{slug}/manifest` |
 | 5 | **Discovery + wrap-up.** Your tenant now has an active release — check it appears in discovery with its `release {id, version, checksum}` block. Finish your report. | `GET /api/v1/discovery/featured` → write report |
 
