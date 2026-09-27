@@ -207,14 +207,17 @@ Routes are nested under `/api/v1/tenants/:tenantId/`
 ### 8. Publishing Module
 **Files**: `src/modules/publishing/`
 
-| Endpoint (JWT) `/api/v1/tenants/:id/publishing` | Method | Description |
+| Endpoint (JWT) `/api/v1/merchants/:id/publishing` | Method | Description |
 |----------|--------|-------------|
 | `/validate` | POST | Validates draft completeness |
+| `/preflight` | POST | Runtime compatibility dry-run (manifest or drafts), never publishes |
 | `/publish` | POST | Validates + compiles + creates release |
 | `/releases` | GET | Release history (sorted desc by buildNumber) |
 | `/releases/:version` | GET | Specific release detail |
 | `/rollback/:version` | POST | Rollback to a previous version |
 | `/draft` | GET | Current draft state |
+
+Anonymous contract endpoint: `GET /api/v1/compatibility` (machine-readable `dukadesk.published-app-runtime` catalog). Publish returns 422 `INCOMPATIBLE_RUNTIME` when a manifest targets an unsupported component, action, capability, asset reference or schema version.
 
 **ValidationEngine**: Checks pages exist, home page is set, no duplicate slugs, sections have components, theme and navigation are configured.
 
