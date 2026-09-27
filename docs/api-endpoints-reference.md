@@ -285,7 +285,7 @@ This document catalogs all REST API endpoints exposed by the DUKA-BACKEND servic
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/api/v1/discovery/featured` | Get featured / popular tenants |
+| GET | `/api/v1/discovery/featured` | Get featured / popular tenants (activated only — `activeReleaseId` set, with `release` identity) |
 | GET | `/api/v1/discovery/search` | Search tenants |
 | GET | `/api/v1/discovery/categories` | Get discover categories |
 | GET | `/api/v1/discovery/nearby` | Get nearby tenants |
@@ -334,12 +334,21 @@ This document catalogs all REST API endpoints exposed by the DUKA-BACKEND servic
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/api/v1/tenants/:id/publishing/validate` | Validate current draft |
-| POST | `/api/v1/tenants/:id/publishing/publish` | Validate, compile, and publish |
-| GET | `/api/v1/tenants/:id/publishing/releases` | Get release history |
-| GET | `/api/v1/tenants/:id/publishing/releases/:version` | Get specific release |
-| POST | `/api/v1/tenants/:id/publishing/rollback/:version` | Rollback to a previous version |
-| GET | `/api/v1/tenants/:id/publishing/draft` | Get current draft state |
+| POST | `/api/v1/merchants/:id/publishing/validate` | Validate current draft |
+| POST | `/api/v1/merchants/:id/publishing/preflight` | Runtime compatibility dry-run (manifest or drafts) — never publishes |
+| POST | `/api/v1/merchants/:id/publishing/publish` | Validate, compile, and publish |
+| GET | `/api/v1/merchants/:id/publishing/releases` | Get release history |
+| GET | `/api/v1/merchants/:id/publishing/releases/:version` | Get specific release |
+| POST | `/api/v1/merchants/:id/publishing/rollback/:version` | Rollback to a previous version |
+| GET | `/api/v1/merchants/:id/publishing/draft` | Get current draft state |
+
+Publishing is guarded (owner/manager membership) and accepts an optional `Idempotency-Key` header on `publish`. Manifests that the shell cannot render are rejected with **422 `INCOMPATIBLE_RUNTIME`** before any release is created.
+
+### Compatibility
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/compatibility` | Machine-readable runtime contract (`dukadesk.published-app-runtime`): supported manifest versions, component/action/capability catalogs, asset reference kinds, limits |
 
 ---
 

@@ -2,6 +2,6 @@
 
 **Repository:** backend
 **KB Version:** 0.3.8
-**KB Commit:** 63c21db65f7517d6b7bcf2447faa23f8f8848ccb
+**KB Commit:** 0a5189b027e5ad7aee01405ecf7b02ae2555559a
 **Status:** Compatible
 **Last Verified:** 2026-09-27
