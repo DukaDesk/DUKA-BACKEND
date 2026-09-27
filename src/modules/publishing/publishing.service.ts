@@ -13,6 +13,7 @@ import { ManifestCompiler } from './compiler/manifest-compiler.service';
 import { EventBusService } from '../../shared/events/event-bus.service';
 import { ActiveReleaseService } from '../../shared/releases/active-release.service';
 import { ManifestValidator } from './manifest-validator.service';
+import { CompatibilityService } from '../../shared/compatibility/compatibility.service';
 import * as crypto from 'crypto';
 
 @Injectable()
@@ -26,11 +27,51 @@ export class PublishingService {
     private manifestCompiler: ManifestCompiler,
     private eventBus: EventBusService,
     private releases: ActiveReleaseService,
+    private compatibility: CompatibilityService,
   ) {}
 
   async validate(tenantId: string, userId?: string) {
     if (userId) await this.verifyPublishingPermission(tenantId, userId);
     return this.validationEngine.validateDraft(tenantId);
+  }
+
+  /**
+   * B7 merchant preflight — validate a manifest (or the current drafts)
+   * against the runtime compatibility contract without publishing anything.
+   * Always returns HTTP 200 with a report; `compatible: false` lists exactly
+   * what would block activation.
+   */
+  async preflight(
+    tenantId: string,
+    userId: string,
+    body?: { manifest?: any },
+  ) {
+    await this.verifyPublishingPermission(tenantId, userId);
+
+    let manifest: any;
+    let source: 'manifest' | 'draft';
+    if (body?.manifest !== undefined && body?.manifest !== null) {
+      manifest = body.manifest;
+      source = 'manifest';
+    } else {
+      const compiled = await this.manifestCompiler.compile(tenantId, { persist: false });
+      manifest = compiled.manifest;
+      source = 'draft';
+    }
+
+    const structural = ManifestValidator.validate(manifest);
+    const compat = await this.compatibility.evaluate(manifest, { tenantId });
+
+    return {
+      contract: compat.contract,
+      source,
+      valid: structural.valid,
+      compatible: structural.valid && compat.compatible,
+      errors: [...(structural.valid ? [] : structural.errors), ...compat.errors],
+      warnings: compat.warnings,
+      counts: compat.counts,
+      checkedAt: compat.checkedAt,
+    };
   }
 
   /**
@@ -110,6 +151,9 @@ export class PublishingService {
       requestedVersion: body.version,
     });
 
+    // B7: reject anything the shell cannot render before allocating a version.
+    const compat = await this.compatibility.assertCompatible(manifest, { tenantId });
+
     const checksum = crypto
       .createHash('sha256')
       .update(JSON.stringify(manifest))
@@ -117,7 +161,7 @@ export class PublishingService {
 
     const { version, buildNumber } = await this.allocateVersion(tenantId, checksum, body.version);
 
-    return this.activateRelease({
+    const activated = await this.activateRelease({
       tenantId,
       slug,
       version,
@@ -128,9 +172,12 @@ export class PublishingService {
       capabilityMeta: {
         screenCount: this.countScreens(manifest.screens),
         manifestVersion: manifest.manifestVersion ?? '1.0.0',
+        contract: compat.contract,
       },
       assetManifest: this.buildAssetManifest(manifest),
     });
+
+    return { ...activated, compatibility: { contract: compat.contract, warnings: compat.warnings } };
   }
 
   private async publishFromDrafts(tenantId: string, slug: string) {
@@ -145,7 +192,10 @@ export class PublishingService {
     // Compiler no longer creates a competing draft Release (B2).
     const compiled = await this.manifestCompiler.compile(tenantId);
 
-    return this.activateRelease({
+    // B7: draft-compiled manifests must satisfy the same runtime contract.
+    const compat = await this.compatibility.assertCompatible(compiled.manifest, { tenantId });
+
+    const activated = await this.activateRelease({
       tenantId,
       slug,
       version: compiled.version,
@@ -156,6 +206,8 @@ export class PublishingService {
       capabilityMeta: compiled.capabilityMeta ?? null,
       assetManifest: compiled.assetManifest ?? null,
     });
+
+    return { ...activated, compatibility: { contract: compat.contract, warnings: compat.warnings } };
   }
 
   /**

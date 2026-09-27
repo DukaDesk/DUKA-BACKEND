@@ -20,7 +20,10 @@ export interface CompiledManifest {
 export class ManifestCompiler {
   constructor(private prisma: PrismaService) {}
 
-  async compile(tenantId: string): Promise<CompiledManifest> {
+  async compile(
+    tenantId: string,
+    opts?: { persist?: boolean },
+  ): Promise<CompiledManifest> {
     const tenant = await this.prisma.tenant.findUnique({
       where: { id: tenantId },
       include: {
@@ -145,17 +148,20 @@ export class ManifestCompiler {
     };
 
     // Keep a compiled draft record for operator visibility — not a Release.
-    await this.prisma.draft.upsert({
-      where: { id: `${tenantId}-draft` },
-      create: {
-        id: `${tenantId}-draft`,
-        tenantId,
-        version: buildNumber,
-        manifest: manifest as any,
-        status: 'compiled',
-      },
-      update: { version: buildNumber, manifest: manifest as any, status: 'compiled' },
-    });
+    // Preflight (B7) compiles without persisting.
+    if (opts?.persist !== false) {
+      await this.prisma.draft.upsert({
+        where: { id: `${tenantId}-draft` },
+        create: {
+          id: `${tenantId}-draft`,
+          tenantId,
+          version: buildNumber,
+          manifest: manifest as any,
+          status: 'compiled',
+        },
+        update: { version: buildNumber, manifest: manifest as any, status: 'compiled' },
+      });
+    }
 
     return {
       manifest,

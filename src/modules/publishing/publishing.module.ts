@@ -4,9 +4,10 @@ import { PublishingService } from './publishing.service';
 import { ManifestCompiler } from './compiler/manifest-compiler.service';
 import { ValidationEngine } from './validation/validation-engine.service';
 import { ReleasesModule } from '../../shared/releases/releases.module';
+import { CompatibilityModule } from '../../shared/compatibility/compatibility.module';
 
 @Module({
-  imports: [ReleasesModule],
+  imports: [ReleasesModule, CompatibilityModule],
   controllers: [PublishingController],
   providers: [PublishingService, ManifestCompiler, ValidationEngine],
   exports: [PublishingService, ManifestCompiler, ValidationEngine],

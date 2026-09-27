@@ -1,5 +1,6 @@
 import { PublishingService } from './publishing.service';
 import { ManifestValidator } from './manifest-validator.service';
+import { CompatibilityService } from '../../shared/compatibility/compatibility.service';
 import { BadRequestException, ForbiddenException, UnprocessableEntityException } from '@nestjs/common';
 
 const fixtureManifest = {
@@ -59,6 +60,7 @@ function createService(overrides: Partial<Record<string, any>> = {}) {
     draftSection: { deleteMany: jest.fn() },
     draftComponent: { deleteMany: jest.fn() },
     draft: { findUnique: jest.fn(), upsert: jest.fn() },
+    media: { findMany: jest.fn().mockResolvedValue([]) },
     $transaction: jest.fn(async (fn: any) => fn(prisma)),
     ...overrides,
   };
@@ -74,11 +76,17 @@ function createService(overrides: Partial<Record<string, any>> = {}) {
   };
 
   const manifestCompiler: any = {
-    compile: jest.fn(),
+    compile: jest.fn().mockResolvedValue({
+      manifest: fixtureManifest,
+      checksum: 'draft-checksum',
+      version: '1.0.7',
+      buildNumber: 7,
+    }),
   };
 
   const eventBus: any = { publish: jest.fn() };
   const releases: any = { invalidate: jest.fn().mockResolvedValue(undefined) };
+  const compatibility = new CompatibilityService(prisma);
 
   const service = new PublishingService(
     prisma,
@@ -87,9 +95,19 @@ function createService(overrides: Partial<Record<string, any>> = {}) {
     manifestCompiler,
     eventBus,
     releases,
+    compatibility,
   );
 
-  return { service, prisma, redis, validationEngine, manifestCompiler, eventBus, releases };
+  return {
+    service,
+    prisma,
+    redis,
+    validationEngine,
+    manifestCompiler,
+    eventBus,
+    releases,
+    compatibility,
+  };
 }
 
 describe('PublishingService', () => {
@@ -226,6 +244,7 @@ describe('PublishingService', () => {
         { compile: jest.fn() } as any,
         { publish: jest.fn() } as any,
         { invalidate: jest.fn() } as any,
+        { evaluate: jest.fn(), assertCompatible: jest.fn() } as any,
       );
       await expect(svc.rollback('t1', '1.0.1', 'u1')).rejects.toThrow(ForbiddenException);
     });
@@ -241,6 +260,57 @@ describe('PublishingService', () => {
       });
       await expect(service.publish('t1', 'u1', {})).rejects.toThrow(BadRequestException);
       expect(manifestCompiler.compile).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('B7 — runtime compatibility', () => {
+    it('refuses to activate a manifest the shell cannot render', async () => {
+      const { service, prisma } = createService();
+      const manifest = JSON.parse(JSON.stringify(fixtureManifest));
+      manifest.screens.home.layout.children.push({ type: 'holo_deck', props: {} });
+
+      await expect(service.publish('t1', 'u1', { manifest })).rejects.toMatchObject({
+        status: 422,
+        response: expect.objectContaining({ code: 'INCOMPATIBLE_RUNTIME' }),
+      });
+      expect(prisma.release.create).not.toHaveBeenCalled();
+      expect(prisma.tenant.update).not.toHaveBeenCalled();
+    });
+
+    it('returns the contract on a successful publish', async () => {
+      const { service } = createService();
+      const result = await service.publish('t1', 'u1', { manifest: fixtureManifest });
+      expect(result.compatibility).toEqual({
+        contract: expect.objectContaining({ id: expect.any(String), version: expect.any(String) }),
+        warnings: [],
+      });
+    });
+
+    it('preflights a supplied manifest without publishing', async () => {
+      const { service, prisma } = createService();
+      const manifest = JSON.parse(JSON.stringify(fixtureManifest));
+      manifest.screens.home.layout.children.push({ type: 'holo_deck', props: {} });
+
+      const report = await service.preflight('t1', 'u1', { manifest });
+
+      expect(report.source).toBe('manifest');
+      expect(report.valid).toBe(true);
+      expect(report.compatible).toBe(false);
+      expect(report.errors.join(' ')).toContain('holo_deck');
+      expect(prisma.release.create).not.toHaveBeenCalled();
+      expect(prisma.tenant.update).not.toHaveBeenCalled();
+    });
+
+    it('preflights the compiled drafts when no manifest is supplied', async () => {
+      const { service, manifestCompiler, prisma } = createService();
+
+      const report = await service.preflight('t1', 'u1', {});
+
+      expect(manifestCompiler.compile).toHaveBeenCalledWith('t1', { persist: false });
+      expect(report.source).toBe('draft');
+      expect(report.compatible).toBe(true);
+      expect(prisma.release.create).not.toHaveBeenCalled();
+      expect(prisma.tenant.update).not.toHaveBeenCalled();
     });
   });
 });

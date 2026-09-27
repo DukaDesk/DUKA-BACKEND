@@ -40,6 +40,7 @@ import { RedisModule } from './common/redis/redis.module';
 import { QueueModule } from './shared/queue/queue.module';
 import { LoggerModule } from './common/logger/logger.module';
 import { ReleasesModule } from './shared/releases/releases.module';
+import { CompatibilityModule } from './shared/compatibility/compatibility.module';
 import { CorrelationIdMiddleware } from './common/middleware/correlation-id.middleware';
 import { TenantResolverMiddleware } from './shared/context/tenant-resolver.middleware';
 import { SuperAdminBootstrap } from './common/bootstrap/super-admin.bootstrap';
@@ -69,6 +70,7 @@ import { ApiQuotaGuard } from './common/guards/api-quota.guard';
     TenantContextModule,
     RbacModule,
     ReleasesModule,
+    CompatibilityModule,
     // Modules
     AuthModule,
     UsersModule,

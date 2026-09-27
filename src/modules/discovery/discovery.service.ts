@@ -5,25 +5,64 @@ import { PrismaService } from '../../common/prisma.service';
 export class DiscoveryService {
   constructor(private prisma: PrismaService) {}
 
-  async getFeatured() {
-    return this.prisma.tenant.findMany({
-      where: { status: 'published' },
-      select: { id: true, name: true, slug: true, logo: true },
-      take: 10,
-      orderBy: { publishedAt: 'desc' },
+  /**
+   * B7 — discovery projects published name/slug/logo and the active release
+   * identity, and only for tenants that have been activated
+   * (`activeReleaseId` set). Draft/suspended/unactivated tenants stay hidden.
+   */
+  private async listActivatedTenants(
+    where: Record<string, any>,
+    orderBy?: Record<string, 'asc' | 'desc'>,
+    take?: number,
+  ) {
+    const tenants = await this.prisma.tenant.findMany({
+      where: { ...where, activeReleaseId: { not: null } },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        logo: true,
+        publishedAt: true,
+        activeReleaseId: true,
+      },
+      orderBy,
+      take,
     });
+
+    const releaseIds = tenants
+      .map((tenant) => tenant.activeReleaseId)
+      .filter((id): id is string => !!id);
+    const releases = releaseIds.length
+      ? await this.prisma.release.findMany({
+          where: { id: { in: releaseIds } },
+          select: {
+            id: true,
+            tenantId: true,
+            version: true,
+            checksum: true,
+            channel: true,
+            publishedAt: true,
+          },
+        })
+      : [];
+    const byId = new Map(releases.map((release) => [release.id, release]));
+
+    return tenants.map(({ activeReleaseId, ...tenant }) => ({
+      ...tenant,
+      release: activeReleaseId ? (byId.get(activeReleaseId) ?? null) : null,
+    }));
+  }
+
+  async getFeatured() {
+    return this.listActivatedTenants({ status: 'published' }, { publishedAt: 'desc' }, 10);
   }
 
   async search(query: string) {
-    return this.prisma.tenant.findMany({
-      where: {
-        status: 'published',
-        name: { contains: query, mode: 'insensitive' },
-      },
-      select: { id: true, name: true, slug: true, logo: true, publishedAt: true },
-      take: 20,
-      orderBy: { name: 'asc' },
-    });
+    return this.listActivatedTenants(
+      { status: 'published', name: { contains: query, mode: 'insensitive' } },
+      { name: 'asc' },
+      20,
+    );
   }
 
   async getCategories() {
@@ -45,10 +84,8 @@ export class DiscoveryService {
   }
 
   async getNearby(lat: number, lng: number) {
-    return this.prisma.tenant.findMany({
-      where: { status: 'published' },
-      select: { id: true, name: true, slug: true, logo: true },
-      take: 20,
-    });
+    void lat;
+    void lng;
+    return this.listActivatedTenants({ status: 'published' }, undefined, 20);
   }
 }

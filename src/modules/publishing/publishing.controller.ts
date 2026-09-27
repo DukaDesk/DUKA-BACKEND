@@ -19,6 +19,33 @@ export class PublishingController {
     return this.publishingService.validate(id, userId);
   }
 
+  @Post('preflight')
+  @ApiOperation({
+    summary: 'Runtime compatibility preflight (owner/manager)',
+    description:
+      'Check a manifest (or the current drafts when manifest is omitted) against the ' +
+      'runtime contract published at GET /api/v1/compatibility. Never publishes; returns ' +
+      '200 with { valid, compatible, errors, warnings, counts }.',
+  })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        manifest: {
+          type: 'object',
+          description: 'Client-compiled PublishedApp 1.0.0 (optional — drafts are compiled when omitted)',
+        },
+      },
+    },
+  })
+  preflight(
+    @Param('id') id: string,
+    @CurrentUser('id') userId: string,
+    @Body() body?: { manifest?: any },
+  ) {
+    return this.publishingService.preflight(id, userId, { manifest: body?.manifest });
+  }
+
   @Post('publish')
   @ApiOperation({
     summary: 'Validate, compile, and publish (or accept client-compiled PublishedApp)',
