@@ -3,7 +3,7 @@
 This file tracks the current state of the backend implementation repository.
 
 **KB Version:** 0.3.8
-**Last Updated:** 2026-09-24
+**Last Updated:** 2026-09-27
 
 ## Active Work
 
@@ -11,7 +11,8 @@ This file tracks the current state of the backend implementation repository.
 |------|---------------|--------|-------|
 | API endpoint implementation (390 endpoints) | KB v0.1.0 | Complete | Engineering |
 | Phase 3 gap-filling (Theme, Commerce, Booking, Notifications, Payments) | KB v0.1.0 | Complete | Engineering |
-| Published app delivery B1–B6 (validator, atomic activation, canonical reader, cache/authz, media folderId + storage URLs) | `PUBLISHED_APP_DELIVERY_BACKEND_TODO` | Complete (code) / live verify pending | Backend |
+| Published app delivery B1–B6 (validator, atomic activation, canonical reader, cache/authz, media folderId + storage URLs) | `PUBLISHED_APP_DELIVERY_BACKEND_TODO` | Complete — deployed | Backend |
+| B4 `20260924000000_add_active_release` migration | `docs/B4_MIGRATION_RUNBOOK.md` | Complete — applied in production 2026-09-27 (backfill 0 rows, audit 0 errors) | Backend |
 | Media folderId FK fix + default merchant app seed | Builder Media TODO 1.1 + 3.1 | Complete | Backend |
 | Unit test suites (5 suites / 38 tests) | Jest | Complete | Backend |
 | E2E integration tests for all modules | KB v0.2.0 | Pending | Engineering |
@@ -75,7 +76,9 @@ This file tracks the current state of the backend implementation repository.
 
 ## Next Up
 
+- Merchant re-publish after B4 deploy (4 tenants `status=published` with no published production release)
 - E2E integration tests for all modules (B8 live publish/rollback evidence)
+- B7 machine-readable compatibility contract + merchant preflight
 - Rate limiting completion (quota defaults + docs)
 - API versioning strategy (v2 planning)
 - Performance optimization and query tuning

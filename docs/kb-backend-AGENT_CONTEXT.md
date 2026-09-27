@@ -6,7 +6,7 @@ The `backend/` repository contains the core server-side platform for DUKADESK OS
 
 **Implementation Repository:** [DUKA-BACKEND](https://github.com/DukaDesk/DUKA-BACKEND)
 **KB Version:** 0.3.8
-**Last Updated:** 2026-09-24
+**Last Updated:** 2026-09-27
 
 ## Responsibilities
 
@@ -128,3 +128,5 @@ Stop and ask for human input when:
 ---
 
 2026-09-24: Published app delivery B1–B6 landed on main (commit `00baea3`). `ManifestValidator`, atomic activation + `activeReleaseId`, shared `ActiveReleaseService`, owner/manager authz, media folderId + storage URLs, default merchant app seed, `ApiQuotaGuard`. 5 unit suites / 38 tests; build 0 issues; lint 0 errors. B4 migration file written (not applied); B7 compatibility contract and B8 live integration evidence remain open. See `docs/kb-backend-PROGRESS.md` and `knowledge-base-version.md`.
+
+2026-09-27: B4 complete in production. Failed deploy `a10c79c6` (2026-09-25) → P3018/23502 (`seed_admin` missing `users.updatedAt`; no `_prisma_migrations` baseline because the DB was managed with `db push`). Fixed in `edb4b86`; 7× `migrate resolve --applied`; stale rolled-back ledger row removed; `20260924000000_add_active_release` applied on deploy `a00865ae` (backfill 0 rows, `tenants.activeReleaseId` + index present). Then two deploy-path defects fixed: `preDeployCommand` now `npm run predeploy` (the raw `&&` string only ran `migrate deploy`, so the seed never executed), and `tsconfig.json` ships to the runner image (seed had failed `ERR_UNKNOWN_FILE_EXTENSION` on Node 20). Seed OK (3 templates, `acme-store`), `railway run node scripts/audit-active-release.js` → 0 errors, health 200. Evidence: `docs/B4_MIGRATION_RUNBOOK.md`. Remaining: B7 contract, B8 merchant re-publish + live evidence.
