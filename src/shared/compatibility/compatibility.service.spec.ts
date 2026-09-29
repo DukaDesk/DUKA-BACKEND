@@ -204,3 +204,25 @@ describe('CompatibilityService (B7)', () => {
     }
   });
 });
+
+
+describe('current mobile shell compatibility', () => {
+  it('accepts nested sections and the shell button variants without treating actions as components', async () => {
+    const report = await makeService().service.evaluate({ screens: { home: {
+      layout: { kind: 'scroll', children: [{ type: 'nested_section', props: {}, children: [
+        { type: 'fab', props: { icon: 'plus' }, actions: { default: { type: 'navigate', screenId: 'home' } } },
+        { type: 'icon_button', props: {} }, { type: 'secondary_button', props: {} },
+        { type: 'rectangle', props: {}, tapAction: { type: 'share' } },
+      ] }] }
+    } } });
+    expect(report.errors).toEqual([]);
+    expect(report.counts.components).toBe(5);
+  });
+  it('still rejects unknown children inside a supported container', async () => {
+    const report = await makeService().service.evaluate({ screens: { home: {
+      type: 'nested_section', children: [{ type: 'unsupported_widget', props: {} }]
+    } } });
+    expect(report.compatible).toBe(false);
+    expect(report.errors.join(' ')).toContain('unsupported_widget');
+  });
+});

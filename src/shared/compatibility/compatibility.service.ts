@@ -28,6 +28,8 @@ const UUID_RE =
 
 /** Keys whose subtrees hold props/config rather than renderable nodes. */
 const NON_NODE_KEYS = new Set([
+  'actions',
+  'tapAction',
   'props',
   'style',
   'state',
