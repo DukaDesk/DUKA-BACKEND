@@ -7,7 +7,7 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { TenantResolverService } from '../../shared/tenant/tenant-resolver.service';
 
-@ApiTags('Payments - App (Tenant Self-Service)')
+@ApiTags('Payments - App (Merchant Self-Service)')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
 @Controller({ path: 'app/payments', version: '1' })
@@ -24,7 +24,7 @@ export class PaymentsAppController {
   // ─── Payment Intents ─────────────────────────
 
   @Post('initialize')
-  @ApiOperation({ summary: 'Initialize a payment with provider for current tenant' })
+  @ApiOperation({ summary: 'Initialize a payment with provider for current merchant' })
   async initializePayment(@CurrentUser('id') userId: string, @Body() data: {
     provider: string; amount: number; currency?: string;
     customer: { email: string; name?: string; phone?: string };
@@ -51,7 +51,7 @@ export class PaymentsAppController {
   // ─── Settlements ─────────────────────────────
 
   @Post('settlements')
-  @ApiOperation({ summary: 'Record a settlement entry for current tenant' })
+  @ApiOperation({ summary: 'Record a settlement entry for current merchant' })
   async recordSettlement(@CurrentUser('id') userId: string, @Body() data: {
     provider: string; reference: string; amount: number; fees?: number; currency?: string; periodStart?: string; periodEnd?: string;
   }) {

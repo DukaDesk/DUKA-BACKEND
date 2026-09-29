@@ -28,7 +28,7 @@ export class RendererService {
   async resolveBySlug(slug: string) {
     const tenant = await this.releases.resolveTenant(slug);
     if (!tenant || tenant.status !== 'published') {
-      throw new NotFoundException('Tenant not found');
+      throw new NotFoundException({ code: 'MERCHANT_NOT_FOUND', message: 'Merchant not found' });
     }
     return {
       id: tenant.id,

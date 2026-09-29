@@ -51,8 +51,8 @@ export class ActiveReleaseService {
     const tenant = await this.resolveTenant(identifier);
     if (!tenant) {
       throw new NotFoundException({
-        code: 'TENANT_NOT_FOUND',
-        message: 'Tenant not found',
+        code: 'MERCHANT_NOT_FOUND',
+        message: 'Merchant not found',
       });
     }
 

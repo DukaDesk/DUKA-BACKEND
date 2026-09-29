@@ -10,7 +10,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { TenantResolverService } from '../../shared/tenant/tenant-resolver.service';
 import { UpdateMediaDto, CreateFolderDto, UpdateFolderDto } from './dto/media.dto';
 
-@ApiTags('Media / DAM - App (Tenant Self-Service)')
+@ApiTags('Media / DAM - App (Merchant Self-Service)')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
 @Controller({ path: 'app/media', version: '1' })

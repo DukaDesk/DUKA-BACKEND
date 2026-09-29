@@ -13,6 +13,7 @@ import * as appleSignin from 'apple-signin-auth';
 import { PrismaService } from '../../common/prisma.service';
 import { PasswordService } from '../iam/password.service';
 import { RedisService } from '../../common/redis/redis.service';
+import { MerchantsService } from '../merchants/merchants.service';
 import { EmailAdapter } from '../notifications/adapters/email.adapter';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
@@ -32,6 +33,7 @@ export class AuthService {
     private passwordService: PasswordService,
     private redis: RedisService,
     private emailAdapter: EmailAdapter,
+    private merchantsService: MerchantsService,
   ) {}
 
   private normalizeRole(raw: string): string {
@@ -59,6 +61,11 @@ export class AuthService {
 
     await this.passwordService.validatePasswordStrength(dto.password);
     const passwordHash = await this.passwordService.hash(dto.password);
+
+    // No role → merchant self-serve signup: active account, owned merchant, immediate tokens.
+    if (!dto.role) {
+      return this.registerMerchant(dto, passwordHash);
+    }
 
     const canonicalRole = this.normalizeRole((dto as any).role);
     const user = await this.prisma.user.create({
@@ -107,6 +114,52 @@ export class AuthService {
       return { user, merchants: [], message: 'Registration pending approval', pending: true };
     }
 
+    const tokens = await this.generateTokens(user.id, user.email);
+    return { user, ...tokens };
+  }
+
+  private slugify(name: string): string {
+    return (
+      name.toLowerCase().trim().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'my-business'
+    );
+  }
+
+  private async registerMerchant(dto: RegisterDto, passwordHash: string) {
+    const businessName = dto.businessName?.trim() || `${dto.firstName.trim()}'s Business`;
+    const user = await this.prisma.user.create({
+      data: {
+        email: dto.email,
+        phoneNumber: dto.phoneNumber,
+        passwordHash,
+        firstName: dto.firstName,
+        lastName: dto.lastName,
+        status: 'active' as any,
+      },
+      select: { id: true, email: true, firstName: true, lastName: true, status: true, createdAt: true },
+    });
+
+    const baseSlug = this.slugify(businessName);
+    let tenant: { id: string; name: string; slug: string } | null = null;
+    let lastError: unknown = null;
+    for (let attempt = 0; attempt < 3 && !tenant; attempt++) {
+      const slug = attempt === 0 ? baseSlug : `${baseSlug.slice(0, 32)}-${Math.floor(100 + Math.random() * 900)}`;
+      try {
+        tenant = await this.merchantsService.create(user.id, {
+          name: businessName,
+          slug,
+          email: dto.email,
+          phone: dto.phoneNumber,
+        });
+      } catch (e: any) {
+        lastError = e;
+        if (e?.response?.message !== 'A merchant with this slug already exists' && e?.message !== 'A merchant with this slug already exists') throw e;
+      }
+    }
+    if (!tenant) throw lastError instanceof Error ? lastError : new ConflictException('Could not provision merchant');
+
+    await this.passwordService.recordHistory(user.id, passwordHash);
+    // generateTokens appends merchants from active memberships, which now
+    // include the freshly provisioned owned merchant.
     const tokens = await this.generateTokens(user.id, user.email);
     return { user, ...tokens };
   }

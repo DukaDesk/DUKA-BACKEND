@@ -6,7 +6,7 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { TenantResolverService } from '../../shared/tenant/tenant-resolver.service';
 
-@ApiTags('Theme - App (Tenant Self-Service)')
+@ApiTags('Theme - App (Merchant Self-Service)')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
 @Controller({ path: 'app/theme', version: '1' })

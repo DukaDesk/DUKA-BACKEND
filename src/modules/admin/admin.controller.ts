@@ -50,7 +50,7 @@ export class AdminController {
   }
 
   @Post('merchants')
-  @ApiOperation({ summary: 'Create a new tenant' })
+  @ApiOperation({ summary: 'Create a new merchant' })
   @ApiBody({ type: 'object' })
   createTenant(@CurrentUser('id') adminUserId: string, @Body() data: {
     name: string; slug: string; description?: string; status?: 'draft' | 'published' | 'suspended' | 'rejected'; config?: Record<string, any>;

@@ -7,7 +7,7 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { TenantResolverService } from '../../shared/tenant/tenant-resolver.service';
 
-@ApiTags('Integrations - App (Tenant Self-Service)')
+@ApiTags('Integrations - App (Merchant Self-Service)')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
 @Controller({ path: 'app/integrations', version: '1' })
@@ -22,28 +22,28 @@ export class IntegrationsAppController {
   }
 
   @Post('connect')
-  @ApiOperation({ summary: 'Connect an integration provider for current tenant' })
+  @ApiOperation({ summary: 'Connect an integration provider for current merchant' })
   async connect(@CurrentUser('id') userId: string, @Body() data: { provider: string; config: Record<string, any> }) {
     const tenantId = await this.getTenantId(userId);
     return this.integrationsService.connect(tenantId, data.provider, data.config);
   }
 
   @Post(':provider/disconnect')
-  @ApiOperation({ summary: 'Disconnect an integration for current tenant' })
+  @ApiOperation({ summary: 'Disconnect an integration for current merchant' })
   async disconnect(@CurrentUser('id') userId: string, @Param('provider') provider: string) {
     const tenantId = await this.getTenantId(userId);
     return this.integrationsService.disconnect(tenantId, provider);
   }
 
   @Post(':provider/test')
-  @ApiOperation({ summary: 'Test integration connection for current tenant' })
+  @ApiOperation({ summary: 'Test integration connection for current merchant' })
   async testConnection(@CurrentUser('id') userId: string, @Param('provider') provider: string) {
     const tenantId = await this.getTenantId(userId);
     return this.integrationsService.testConnection(tenantId, provider);
   }
 
   @Post(':provider/sync')
-  @ApiOperation({ summary: 'Trigger a data sync for current tenant' })
+  @ApiOperation({ summary: 'Trigger a data sync for current merchant' })
   @ApiQuery({ name: 'type', required: false, description: 'full | incremental' })
   async sync(@CurrentUser('id') userId: string, @Param('provider') provider: string, @Query('type') type?: string) {
     const tenantId = await this.getTenantId(userId);
@@ -51,7 +51,7 @@ export class IntegrationsAppController {
   }
 
   @Post('webhook')
-  @ApiOperation({ summary: 'Queue an outgoing webhook for current tenant' })
+  @ApiOperation({ summary: 'Queue an outgoing webhook for current merchant' })
   async queueWebhook(@CurrentUser('id') userId: string, @Body() data: {
     eventType: string; payload: any; url: string; headers?: Record<string, string>;
   }) {

@@ -99,7 +99,7 @@ export class PublishingService {
       where: { id: tenantId },
       select: { slug: true },
     });
-    if (!tenant) throw new NotFoundException('Tenant not found');
+    if (!tenant) throw new NotFoundException({ code: 'MERCHANT_NOT_FOUND', message: 'Merchant not found' });
 
     let result: any;
 
@@ -378,7 +378,7 @@ export class PublishingService {
     if (!membership || !['owner', 'manager'].includes(membership.role)) {
       throw new ForbiddenException({
         code: 'NOT_OWNER',
-        message: 'Only tenant owners and managers can publish',
+        message: 'Only merchant owners and managers can publish',
       });
     }
     if (membership.status !== 'active') {

@@ -120,7 +120,7 @@ describe('ActiveReleaseService (B3 — one canonical public reader)', () => {
     });
   });
 
-  it('throws TENANT_NOT_FOUND for unknown tenant', async () => {
+  it('throws MERCHANT_NOT_FOUND for unknown merchant', async () => {
     const { service } = makeService({ tenant: null });
     await expect(service.getActiveRelease('missing')).rejects.toThrow(NotFoundException);
   });

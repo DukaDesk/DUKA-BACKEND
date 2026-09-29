@@ -1,5 +1,5 @@
-import { IsEmail, IsString, MinLength, IsOptional, IsIn, IsNotEmpty } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
+import { IsEmail, IsString, MinLength, IsOptional, IsIn } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class RegisterDto {
   @ApiProperty({ example: 'john@example.com' })
@@ -29,12 +29,18 @@ export class RegisterDto {
   @ApiProperty({
     example: 'platform_operator',
     enum: ['super_admin', 'platform_operator', 'support_agent'],
-    description: 'Requested platform role — required, pending admin approval',
+    required: false,
+    description: 'Requested platform role — omit for merchant self-serve signup (provisions an owned merchant and signs in immediately); when present the account stays pending admin approval',
   })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty({ message: 'Role is required' })
   @IsIn(['super_admin', 'platform_operator', 'support_agent', 'admin', 'support', 'operations', 'finance'], {
     message: 'Role must be one of super_admin, platform_operator, support_agent',
   })
-  role: string;
+  role?: string;
+
+  @ApiPropertyOptional({ example: "Ada's Kitchen", description: 'Business name — used to provision the owned merchant on self-serve signup' })
+  @IsOptional()
+  @IsString()
+  businessName?: string;
 }

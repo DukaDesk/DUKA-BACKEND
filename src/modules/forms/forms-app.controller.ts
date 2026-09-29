@@ -7,7 +7,7 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { TenantResolverService } from '../../shared/tenant/tenant-resolver.service';
 
-@ApiTags('Forms - App (Tenant Self-Service)')
+@ApiTags('Forms - App (Merchant Self-Service)')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
 @Controller({ path: 'app/forms', version: '1' })
@@ -24,14 +24,14 @@ export class FormsAppController {
   // ─── Form CRUD ───────────────────────────────
 
   @Post()
-  @ApiOperation({ summary: 'Create form with fields for current tenant' })
+  @ApiOperation({ summary: 'Create form with fields for current merchant' })
   async createForm(@CurrentUser('id') userId: string, @Body() data: any) {
     const tenantId = await this.getTenantId(userId);
     return this.formsService.createForm(tenantId, data);
   }
 
   @Get()
-  @ApiOperation({ summary: 'List forms for current tenant' })
+  @ApiOperation({ summary: 'List forms for current merchant' })
   @ApiQuery({ name: 'page', required: false })
   @ApiQuery({ name: 'limit', required: false })
   async getForms(@CurrentUser('id') userId: string, @Query() query: any) {
@@ -71,7 +71,7 @@ export class FormsAppController {
   // ─── Workflow / Approval ─────────────────────
 
   @Post(':id/workflow')
-  @ApiOperation({ summary: 'Set approval workflow steps for current tenant form' })
+  @ApiOperation({ summary: 'Set approval workflow steps for current merchant form' })
   async setWorkflow(@Param('id') id: string, @Body() data: { steps: any }) {
     return this.formsService.setWorkflow(id, data);
   }

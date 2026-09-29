@@ -3,7 +3,7 @@ import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { TenantDashboardBffService } from './tenant-dashboard-bff.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 
-@ApiTags('Tenant Dashboard BFF')
+@ApiTags('Merchant Dashboard BFF')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
 @Controller({ path: 'bff/tenant', version: '1' })

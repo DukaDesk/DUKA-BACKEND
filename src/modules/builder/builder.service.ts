@@ -31,7 +31,7 @@ export class BuilderService {
     });
 
     if (!tenantUser) {
-      throw new ForbiddenException('User does not have access to any tenant as owner or manager');
+      throw new ForbiddenException('User does not have access to any merchant as owner or manager');
     }
 
     return tenantUser.tenantId;

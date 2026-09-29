@@ -256,7 +256,7 @@ export class MerchantsService {
       where: { tenantId_userId: { tenantId, userId } },
     });
     if (!membership || !['owner', 'manager'].includes(membership.role)) {
-      throw new ForbiddenException({ code: 'NOT_OWNER', message: 'Only tenant owners and managers can perform this action' });
+      throw new ForbiddenException({ code: 'NOT_OWNER', message: 'Only merchant owners and managers can perform this action' });
     }
   }
 }

@@ -49,7 +49,7 @@ export class UsersController {
   }
 
   @Get(':id')
-  @ApiOperation({ summary: 'Get user detail: profile, roles, tenant memberships, last login' })
+  @ApiOperation({ summary: 'Get user detail: profile, roles, merchant memberships, last login' })
   @ApiParam({ name: 'id', description: 'User ID' })
   async getUserById(@Param() param: { id: string }, @CurrentUser('id') adminUserId: string) {
     return this.usersService.getUserById(param.id);

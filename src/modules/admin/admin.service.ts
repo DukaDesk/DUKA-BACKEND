@@ -29,7 +29,7 @@ export class AdminService {
     await this.verifyAdmin(adminUserId);
 
     const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId } });
-    if (!tenant) throw new NotFoundException('Tenant not found');
+    if (!tenant) throw new NotFoundException({ code: 'MERCHANT_NOT_FOUND', message: 'Merchant not found' });
 
     return this.prisma.tenant.update({
       where: { id: tenantId },
@@ -41,7 +41,7 @@ export class AdminService {
     await this.verifyAdmin(adminUserId);
 
     const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId } });
-    if (!tenant) throw new NotFoundException('Tenant not found');
+    if (!tenant) throw new NotFoundException({ code: 'MERCHANT_NOT_FOUND', message: 'Merchant not found' });
 
     return this.prisma.tenant.update({
       where: { id: tenantId },
@@ -53,7 +53,7 @@ export class AdminService {
     await this.verifyAdmin(adminUserId);
 
     const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId }, include: { config: true } });
-    if (!tenant) throw new NotFoundException('Tenant not found');
+    if (!tenant) throw new NotFoundException({ code: 'MERCHANT_NOT_FOUND', message: 'Merchant not found' });
     if (tenant.status === 'published') {
       throw new ForbiddenException('Published tenant cannot be rejected — use suspend');
     }
@@ -104,7 +104,7 @@ export class AdminService {
     await this.verifyAdmin(adminUserId);
 
     const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId }, include: { config: true } });
-    if (!tenant) throw new NotFoundException('Tenant not found');
+    if (!tenant) throw new NotFoundException({ code: 'MERCHANT_NOT_FOUND', message: 'Merchant not found' });
 
     const config = (tenant.config as any) || {};
     if (config.scheduledDeletionAt) {
@@ -213,7 +213,7 @@ export class AdminService {
       },
     });
 
-    if (!tenant) throw new NotFoundException('Tenant not found');
+    if (!tenant) throw new NotFoundException({ code: 'MERCHANT_NOT_FOUND', message: 'Merchant not found' });
 
     return tenant;
   }
@@ -244,7 +244,7 @@ export class AdminService {
       include: { config: true },
     });
 
-    if (!tenant) throw new NotFoundException('Tenant not found');
+    if (!tenant) throw new NotFoundException({ code: 'MERCHANT_NOT_FOUND', message: 'Merchant not found' });
 
     const settings = tenant.config || {};
     if (category) {

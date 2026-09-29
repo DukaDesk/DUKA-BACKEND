@@ -29,14 +29,14 @@ export class MerchantsController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @Post()
-  @ApiOperation({ summary: 'Create a new tenant' })
+  @ApiOperation({ summary: 'Create a new merchant' })
   create(@CurrentUser('id') userId: string, @Body() dto: CreateTenantDto) {
     return this.merchantsService.create(userId, dto);
   }
 
   @Public()
   @Get(':id')
-  @ApiOperation({ summary: 'Get tenant by ID' })
+  @ApiOperation({ summary: 'Get merchant by ID' })
   findById(@Param('id') id: string) {
     return this.merchantsService.findById(id);
   }

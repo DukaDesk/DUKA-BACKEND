@@ -49,7 +49,7 @@ export class ManifestCompiler {
         },
       },
     });
-    if (!tenant) throw new NotFoundException('Tenant not found');
+    if (!tenant) throw new NotFoundException({ code: 'MERCHANT_NOT_FOUND', message: 'Merchant not found' });
 
     if (!tenant.draftPages || tenant.draftPages.length === 0) {
       throw new BadRequestException(

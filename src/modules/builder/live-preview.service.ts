@@ -81,7 +81,7 @@ export class LivePreviewService {
       },
     });
 
-    if (!tenant) throw new NotFoundException('Tenant not found');
+    if (!tenant) throw new NotFoundException({ code: 'MERCHANT_NOT_FOUND', message: 'Merchant not found' });
 
     const defaultContext: PreviewContext = {
       tenantId,

@@ -7,7 +7,7 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { TenantResolverService } from '../../shared/tenant/tenant-resolver.service';
 
-@ApiTags('Search - App (Tenant Self-Service)')
+@ApiTags('Search - App (Merchant Self-Service)')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
 @Controller({ path: 'app/search', version: '1' })
@@ -22,7 +22,7 @@ export class SearchAppController {
   }
 
   @Post('index')
-  @ApiOperation({ summary: 'Index a document for current tenant' })
+  @ApiOperation({ summary: 'Index a document for current merchant' })
   async index(@CurrentUser('id') userId: string, @Body() data: {
     entityType: string; entityId: string;
     title?: string; content?: string; tags?: string[];
@@ -33,14 +33,14 @@ export class SearchAppController {
   }
 
   @Delete('index/:entityType/:entityId')
-  @ApiOperation({ summary: 'Remove from index for current tenant' })
+  @ApiOperation({ summary: 'Remove from index for current merchant' })
   async remove(@CurrentUser('id') userId: string, @Param('entityType') entityType: string, @Param('entityId') entityId: string) {
     const tenantId = await this.getTenantId(userId);
     return this.searchService.remove(tenantId, entityType, entityId);
   }
 
   @Post('index/bulk')
-  @ApiOperation({ summary: 'Bulk index documents for current tenant' })
+  @ApiOperation({ summary: 'Bulk index documents for current merchant' })
   async bulkIndex(@CurrentUser('id') userId: string, @Body() data: {
     entries: Array<{ entityType: string; entityId: string; title?: string; content?: string; tags?: string[]; metadata?: Record<string, any> }>;
   }) {
@@ -50,7 +50,7 @@ export class SearchAppController {
   }
 
   @Post('synonyms')
-  @ApiOperation({ summary: 'Create search synonym for current tenant' })
+  @ApiOperation({ summary: 'Create search synonym for current merchant' })
   async createSynonym(@CurrentUser('id') userId: string, @Body() data: { terms: string[]; type?: string }) {
     const tenantId = await this.getTenantId(userId);
     return this.searchService.createSynonym(tenantId, data);

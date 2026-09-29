@@ -15,7 +15,7 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { TenantResolverService } from '../../shared/tenant/tenant-resolver.service';
 
-@ApiTags('Merchants - App (Tenant Self-Service)')
+@ApiTags('Merchants - App (Merchant Self-Service)')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
 @Controller({ path: 'app/merchants', version: '1' })
@@ -32,55 +32,55 @@ export class MerchantsAppController {
   }
 
   @Get()
-  @ApiOperation({ summary: 'Get my tenants' })
+  @ApiOperation({ summary: 'Get my merchants' })
   async getMyTenants(@CurrentUser('id') userId: string) {
     return this.merchantsService.getMyTenants(userId);
   }
 
   @Put()
-  @ApiOperation({ summary: 'Update current tenant' })
+  @ApiOperation({ summary: 'Update current merchant' })
   async updateTenant(@CurrentUser('id') userId: string, @Body() dto: UpdateTenantDto) {
     const tenantId = await this.getTenantId(userId);
     return this.merchantsService.update(tenantId, userId, dto);
   }
 
   @Post('publish')
-  @ApiOperation({ summary: 'Publish current tenant' })
+  @ApiOperation({ summary: 'Publish current merchant' })
   async publish(@CurrentUser('id') userId: string) {
     const tenantId = await this.getTenantId(userId);
     return this.merchantsService.publish(tenantId, userId);
   }
 
   @Get('config')
-  @ApiOperation({ summary: 'Get current tenant runtime configuration' })
+  @ApiOperation({ summary: 'Get current merchant runtime configuration' })
   async getConfig(@CurrentUser('id') userId: string) {
     const tenantId = await this.getTenantId(userId);
     return this.tenantConfigService.getConfig(tenantId);
   }
 
   @Put('config')
-  @ApiOperation({ summary: 'Update current tenant runtime configuration' })
+  @ApiOperation({ summary: 'Update current merchant runtime configuration' })
   async updateConfig(@CurrentUser('id') userId: string, @Body() data: any) {
     const tenantId = await this.getTenantId(userId);
     return this.tenantConfigService.updateConfig(tenantId, data);
   }
 
   @Get('subscription')
-  @ApiOperation({ summary: 'Get current tenant subscription' })
+  @ApiOperation({ summary: 'Get current merchant subscription' })
   async getSubscription(@CurrentUser('id') userId: string) {
     const tenantId = await this.getTenantId(userId);
     return this.subscriptionService.getSubscription(tenantId);
   }
 
   @Post('subscribe')
-  @ApiOperation({ summary: 'Subscribe current tenant to a plan' })
+  @ApiOperation({ summary: 'Subscribe current merchant to a plan' })
   async subscribe(@CurrentUser('id') userId: string, @Body('plan') planSlug: string) {
     const tenantId = await this.getTenantId(userId);
     return this.subscriptionService.subscribe(tenantId, planSlug);
   }
 
   @Post('subscription/cancel')
-  @ApiOperation({ summary: 'Cancel current tenant subscription' })
+  @ApiOperation({ summary: 'Cancel current merchant subscription' })
   async cancelSubscription(@CurrentUser('id') userId: string) {
     const tenantId = await this.getTenantId(userId);
     return this.subscriptionService.cancel(tenantId);

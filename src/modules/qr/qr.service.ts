@@ -11,7 +11,7 @@ export class QrService {
 
   async generate(tenantId: string) {
     const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId } });
-    if (!tenant) throw new NotFoundException('Tenant not found');
+    if (!tenant) throw new NotFoundException({ code: 'MERCHANT_NOT_FOUND', message: 'Merchant not found' });
 
     const baseUrl = this.configService.get<string>('PLATFORM_URL', 'https://dukadesk.app');
     const qrData = {
@@ -29,7 +29,7 @@ export class QrService {
       select: { id: true, name: true, slug: true, logo: true },
     });
     if (!tenant) {
-      throw new NotFoundException('Tenant not found or not published');
+      throw new NotFoundException({ code: 'MERCHANT_NOT_FOUND', message: 'Merchant not found or not published' });
     }
 
     return {
