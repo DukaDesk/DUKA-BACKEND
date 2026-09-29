@@ -33,8 +33,16 @@ async function bootstrap() {
   app.useGlobalFilters(new HttpExceptionFilter());
   app.useGlobalInterceptors(new TransformInterceptor());
 
+  const configuredOrigins = (process.env.CORS_ORIGINS?.split(',') || []).map(s => s.trim()).filter(Boolean);
+  const trustedOriginPatterns = [/\.netlify\.app$/, /\.railway\.app$/, /^http:\/\/localhost(:\d+)?$/, /^http:\/\/127\.0\.0\.1(:\d+)?$/];
   app.enableCors({
-    origin: process.env.CORS_ORIGINS?.split(',') || '*',
+    origin: (origin, callback) => {
+      // Non-browser clients (curl, native apps, EAS) send no Origin.
+      if (!origin) return callback(null, true);
+      if (configuredOrigins.includes('*') || configuredOrigins.includes(origin)) return callback(null, true);
+      if (trustedOriginPatterns.some(re => re.test(origin))) return callback(null, true);
+      return callback(null, false);
+    },
     credentials: true,
   });
 
