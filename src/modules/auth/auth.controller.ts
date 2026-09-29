@@ -17,21 +17,21 @@ export class AuthController {
 
   @Public()
   @Post('register')
-  @ApiOperation({ summary: 'Register a new user' })
+  @ApiOperation({ summary: 'Register a new user', description: 'Successful token responses include merchants: [{ id, name, slug, role }]. Each id is the merchant ID, never the membership ID. Only active memberships of the authenticated user are included. Pending registration returns an empty merchants array.' })
   register(@Body() dto: RegisterDto) {
     return this.authService.register(dto);
   }
 
   @Public()
   @Post('login')
-  @ApiOperation({ summary: 'Login with email and password' })
+  @ApiOperation({ summary: 'Login with email and password', description: 'Successful token responses include merchants: [{ id, name, slug, role }]. Each id is the merchant ID, never the membership ID. Only active memberships of the authenticated user are included. Pending registration returns an empty merchants array.' })
   login(@Body() dto: LoginDto) {
     return this.authService.login(dto);
   }
 
   @Public()
   @Post('refresh')
-  @ApiOperation({ summary: 'Refresh access token' })
+  @ApiOperation({ summary: 'Refresh access token', description: 'Successful token responses include merchants: [{ id, name, slug, role }]. Each id is the merchant ID, never the membership ID. Only active memberships of the authenticated user are included. Pending registration returns an empty merchants array.' })
   refresh(@Body() dto: RefreshDto) {
     return this.authService.refresh(dto);
   }

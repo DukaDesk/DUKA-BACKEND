@@ -15,7 +15,7 @@ export class MerchantsService {
   async create(userId: string, dto: CreateTenantDto) {
     const existing = await this.prisma.tenant.findUnique({ where: { slug: dto.slug } });
     if (existing) {
-      throw new ConflictException('A tenant with this slug already exists');
+      throw new ConflictException('A merchant with this slug already exists');
     }
 
     const tenant = await this.prisma.tenant.create({
@@ -165,7 +165,7 @@ export class MerchantsService {
         _count: { select: { products: true, pages: true, users: true } },
       },
     });
-    if (!tenant) throw new NotFoundException('Tenant not found');
+    if (!tenant) throw new NotFoundException({ code: 'MERCHANT_NOT_FOUND', message: 'Merchant not found' });
     return tenant;
   }
 
@@ -174,7 +174,7 @@ export class MerchantsService {
       where: { slug },
       include: { theme: true, navigation: true },
     });
-    if (!tenant) throw new NotFoundException('Tenant not found');
+    if (!tenant) throw new NotFoundException({ code: 'MERCHANT_NOT_FOUND', message: 'Merchant not found' });
     return tenant;
   }
 
@@ -201,7 +201,7 @@ export class MerchantsService {
       where: { id },
       include: { pages: true, theme: true, navigation: true },
     });
-    if (!tenant) throw new NotFoundException('Tenant not found');
+    if (!tenant) throw new NotFoundException({ code: 'MERCHANT_NOT_FOUND', message: 'Merchant not found' });
 
     const updated = await this.prisma.tenant.update({
       where: { id },
@@ -245,7 +245,7 @@ export class MerchantsService {
     const membership = await this.prisma.tenantUser.findUnique({
       where: { tenantId_userId: { tenantId, userId } },
     });
-    if (!membership) throw new NotFoundException('Membership not found');
+    if (!membership) throw new NotFoundException({ code: 'MERCHANT_MEMBER_NOT_FOUND', message: 'Merchant member not found' });
 
     await this.prisma.tenantUser.delete({ where: { id: membership.id } });
     return { message: 'User removed from tenant' };

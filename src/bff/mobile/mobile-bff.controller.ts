@@ -1,5 +1,5 @@
 import { Controller, Get, Post, Delete, Param, Query, Body, UseGuards } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
+import { ApiTags, ApiBearerAuth, ApiOperation, ApiExcludeEndpoint } from '@nestjs/swagger';
 import { MobileBffService } from './mobile-bff.service';
 import { UsersService } from '../../modules/users/users.service';
 import { DeactivateProfileDto } from '../../modules/users/dto/deactivate-profile.dto';
@@ -16,10 +16,18 @@ export class MobileBffController {
   ) {}
 
   @Public()
-  @Get('tenant/:slug/manifest')
+  @Get('merchants/:slug/manifest')
   @ApiOperation({ summary: 'Get aggregated app manifest for mobile runtime' })
   getManifest(@Param('slug') slug: string) {
     return this.mobile.getTenantManifest(slug);
+  }
+
+  // Temporary compatibility route for already installed mobile clients.
+  @Public()
+  @Get('tenant/:slug/manifest')
+  @ApiExcludeEndpoint()
+  getLegacyManifest(@Param('slug') slug: string) {
+    return this.getManifest(slug);
   }
 
   @Public()

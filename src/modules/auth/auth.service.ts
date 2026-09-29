@@ -104,7 +104,7 @@ export class AuthService {
     // Do not issue tokens for pending users — require approval (return user only)
     // Keep tokens for backward compat if legacy flow expects immediate login, but mark pending
     if ((user as any).status === 'pending') {
-      return { user, message: 'Registration pending approval', pending: true };
+      return { user, merchants: [], message: 'Registration pending approval', pending: true };
     }
 
     const tokens = await this.generateTokens(user.id, user.email);
@@ -334,6 +334,12 @@ export class AuthService {
   }
 
   private async generateTokens(userId: string, email: string) {
+    const memberships = await this.prisma.tenantUser.findMany({
+      where: { userId, status: 'active' },
+      select: { role: true, tenant: { select: { id: true, name: true, slug: true } } },
+      orderBy: { tenantId: 'asc' },
+    });
+    const merchants = memberships.map(({ role, tenant }) => ({ ...tenant, role }));
     const payload = { sub: userId, email };
 
     const accessToken = this.jwtService.sign(payload, {
@@ -352,6 +358,6 @@ export class AuthService {
       },
     });
 
-    return { accessToken, refreshToken: refreshTokenValue };
+    return { accessToken, refreshToken: refreshTokenValue, merchants };
   }
 }

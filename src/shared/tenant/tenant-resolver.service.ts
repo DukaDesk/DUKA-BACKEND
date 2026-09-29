@@ -17,7 +17,7 @@ export class TenantResolverService {
     });
 
     if (!tenantUser) {
-      throw new ForbiddenException('User does not have access to any tenant as owner or manager');
+      throw new ForbiddenException({ code: 'MERCHANT_ACCESS_REQUIRED', message: 'User does not have access to a merchant as owner or manager' });
     }
 
     return tenantUser.tenantId;

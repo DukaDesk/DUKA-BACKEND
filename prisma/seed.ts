@@ -394,6 +394,12 @@ async function main() {
 
   // ─── Sample Tenant & User Data ─────────────────────────────
 
+  // Deployment seeds core configuration only; demo business records are opt-in.
+  if (process.env.NODE_ENV === 'production' || process.env.SEED_SAMPLE_DATA !== 'true') {
+    console.log('Core seed completed; sample business data skipped.');
+    return;
+  }
+
   const sampleTenantSlug = 'acme-store';
   const existingTenant = await prisma.tenant.findUnique({ where: { slug: sampleTenantSlug } });
 
