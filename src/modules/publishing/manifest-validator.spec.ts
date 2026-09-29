@@ -105,6 +105,17 @@ describe('ManifestValidator (B1)', () => {
     expect(result.valid).toBe(true);
   });
 
+  it('accepts path-style push destinations on navigate actions', () => {
+    const result = ManifestValidator.validate({
+      manifestVersion: '1.0.0',
+      screens: {
+        home: { screenId: 'home', actions: { tap: { type: 'navigate', payload: { push: '/details' } } } },
+        details: { screenId: 'details' },
+      },
+    });
+    expect(result.valid).toBe(true);
+  });
+
   it('throws UnprocessableEntityException-shaped error via assertValid', () => {
     let thrown: any;
     try {

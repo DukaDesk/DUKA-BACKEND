@@ -171,6 +171,8 @@ export class ManifestValidator {
             const dest =
               a.payload?.screenId ??
               a.payload?.screen ??
+              a.payload?.push ??
+              a.payload?.path ??
               a.payload?.route ??
               a.payload?.target;
             if (!dest) {
