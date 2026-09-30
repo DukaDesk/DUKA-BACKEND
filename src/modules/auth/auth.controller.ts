@@ -1,6 +1,7 @@
-import { Controller, Post, Get, Put, Body, UseGuards } from '@nestjs/common';
+import { Controller, Post, Get, Put, Body, Query, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiBody, ApiOperation } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
+import { AdminInviteService } from '../admin/admin-invite.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { RefreshDto } from './dto/refresh.dto';
@@ -13,13 +14,23 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 @ApiTags('Authentication')
 @Controller({ path: 'auth', version: '1' })
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly adminInviteService: AdminInviteService,
+  ) {}
 
   @Public()
   @Post('register')
-  @ApiOperation({ summary: 'Register a new user', description: 'Successful token responses include merchants: [{ id, name, slug, role }]. Each id is the merchant ID, never the membership ID. Only active memberships of the authenticated user are included. Pending registration returns an empty merchants array.' })
+  @ApiOperation({ summary: 'Register a new user (admin signup requires inviteToken; omit role for merchant self-serve)' })
   register(@Body() dto: RegisterDto) {
     return this.authService.register(dto);
+  }
+
+  @Public()
+  @Get('invites/validate')
+  @ApiOperation({ summary: 'Validate an admin invite link token' })
+  validateInvite(@Query('token') token: string) {
+    return this.adminInviteService.validateInvite(token);
   }
 
   @Public()

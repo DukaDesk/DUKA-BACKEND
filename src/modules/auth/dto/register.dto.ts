@@ -43,4 +43,9 @@ export class RegisterDto {
   @IsOptional()
   @IsString()
   businessName?: string;
+
+  @ApiPropertyOptional({ example: 'a3f9…', description: 'Admin invite token — required when role is present (invite-only admin signup); omit for merchant self-serve signup' })
+  @IsOptional()
+  @IsString()
+  inviteToken?: string;
 }

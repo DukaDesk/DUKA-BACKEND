@@ -14,6 +14,7 @@ import { PrismaService } from '../../common/prisma.service';
 import { PasswordService } from '../iam/password.service';
 import { RedisService } from '../../common/redis/redis.service';
 import { MerchantsService } from '../merchants/merchants.service';
+import { AdminInviteService } from '../admin/admin-invite.service';
 import { EmailAdapter } from '../notifications/adapters/email.adapter';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
@@ -34,6 +35,7 @@ export class AuthService {
     private redis: RedisService,
     private emailAdapter: EmailAdapter,
     private merchantsService: MerchantsService,
+    private adminInviteService: AdminInviteService,
   ) {}
 
   private normalizeRole(raw: string): string {
@@ -67,7 +69,15 @@ export class AuthService {
       return this.registerMerchant(dto, passwordHash);
     }
 
+    // Invite-only admin signup: a platform role requires a valid single-use
+    // invite token bound to this email + role. Merchant self-serve (no role) is unaffected.
+    if (!dto.inviteToken) {
+      throw new BadRequestException('Admin signup requires an invite link — ask a platform operator for an invite');
+    }
+    await this.adminInviteService.consumeInvite(dto.inviteToken, dto.email, (dto as any).role);
+
     const canonicalRole = this.normalizeRole((dto as any).role);
+    // Invited by an admin → pre-approved, active immediately with tokens.
     const user = await this.prisma.user.create({
       data: {
         email: dto.email,
@@ -75,7 +85,7 @@ export class AuthService {
         passwordHash,
         firstName: dto.firstName,
         lastName: dto.lastName,
-        status: 'pending' as any,
+        status: 'active' as any,
       },
       select: {
         id: true,
@@ -87,7 +97,7 @@ export class AuthService {
       },
     });
 
-    // Persist requested role as UserRole with pending status (requires super admin approval)
+    // Persist invited role as UserRole
     try {
       const dbRoleName = this.mapRoleToDbName(canonicalRole);
       const roleRecord = await this.prisma.role.findFirst({ where: { name: dbRoleName } });
@@ -107,12 +117,6 @@ export class AuthService {
     }
 
     await this.passwordService.recordHistory(user.id, passwordHash);
-
-    // Do not issue tokens for pending users — require approval (return user only)
-    // Keep tokens for backward compat if legacy flow expects immediate login, but mark pending
-    if ((user as any).status === 'pending') {
-      return { user, merchants: [], message: 'Registration pending approval', pending: true };
-    }
 
     const tokens = await this.generateTokens(user.id, user.email);
     return { user, ...tokens };

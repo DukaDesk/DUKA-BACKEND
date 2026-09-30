@@ -1,6 +1,8 @@
 import { Controller, Get, Post, Put, Delete, Param, UseGuards, Query, Body } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery, ApiBody } from '@nestjs/swagger';
 import { AdminService } from './admin.service';
+import { AdminInviteService } from './admin-invite.service';
+import { CreateInviteDto } from './dto/create-invite.dto';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 
@@ -9,7 +11,10 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 @UseGuards(JwtAuthGuard)
 @Controller({ path: 'admin', version: '1' })
 export class AdminController {
-  constructor(private readonly adminService: AdminService) {}
+  constructor(
+    private readonly adminService: AdminService,
+    private readonly adminInviteService: AdminInviteService,
+  ) {}
 
   @Post('merchants/:id/approve')
   @ApiOperation({ summary: 'Approve a tenant' })
@@ -90,5 +95,26 @@ export class AdminController {
   @ApiOperation({ summary: 'Update merchant setting' })
   updateTenantSetting(@CurrentUser('id') adminUserId: string, @Param('merchantId') merchantId: string, @Param('key') key: string, @Body() data: any) {
     return this.adminService.updateTenantSetting(merchantId, key, data, adminUserId);
+  }
+
+  // ─── Admin Invites (invite-only admin signup) ───────────────────
+
+  @Post('invites')
+  @ApiOperation({ summary: 'Generate a single-use admin invite link (bound to email + role, 7-day expiry)' })
+  createInvite(@CurrentUser('id') adminUserId: string, @Body() dto: CreateInviteDto) {
+    return this.adminInviteService.createInvite(adminUserId, dto);
+  }
+
+  @Get('invites')
+  @ApiOperation({ summary: 'List admin invites (tokens never exposed)' })
+  @ApiQuery({ name: 'status', required: false, description: 'Filter: pending | used | expired | revoked' })
+  listInvites(@Query('status') status?: string) {
+    return this.adminInviteService.listInvites(status);
+  }
+
+  @Delete('invites/:id')
+  @ApiOperation({ summary: 'Revoke an admin invite' })
+  revokeInvite(@Param('id') id: string) {
+    return this.adminInviteService.revokeInvite(id);
   }
 }

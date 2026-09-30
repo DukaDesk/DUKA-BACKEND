@@ -8,6 +8,7 @@ import { GoogleStrategy } from '../../common/strategies/google.strategy';
 import { AppleStrategy } from '../../common/strategies/apple.strategy';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { MerchantsModule } from '../merchants/merchants.module';
+import { AdminInviteService } from '../admin/admin-invite.service';
 
 @Module({
   imports: [
@@ -23,7 +24,7 @@ import { MerchantsModule } from '../merchants/merchants.module';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, GoogleStrategy, AppleStrategy],
-  exports: [AuthService, JwtModule, JwtStrategy],
+  providers: [AuthService, AdminInviteService, JwtStrategy, GoogleStrategy, AppleStrategy],
+  exports: [AuthService, AdminInviteService, JwtModule, JwtStrategy],
 })
 export class AuthModule {}

@@ -96,6 +96,26 @@ model UserRole {
   @@map("user_roles")
 }
 
+// ─── Admin invite tokens (invite-only admin signup) ─────────────
+// A platform operator generates a single-use token bound to an email +
+// role. Signup with a platform role requires a valid token; merchant
+// self-serve signup (no role) is unaffected.
+
+model AdminInvite {
+  id        String   @id @default(uuid())
+  email     String
+  role      String
+  token     String   @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  revokedAt DateTime?
+  createdBy String
+  createdAt DateTime @default(now())
+
+  @@index([email])
+  @@map("admin_invites")
+}
+
 // ─── Phase 0: IAM ──────────────────────────────────────────────
 
 model Device {
