@@ -32,6 +32,10 @@ const NON_NODE_KEYS = new Set([
   'tapAction',
   'props',
   'style',
+  // Builder appearance records have type fields, but are not renderable nodes.
+  'fills',
+  'strokes',
+  'effects',
   'state',
   'config',
   'payload',

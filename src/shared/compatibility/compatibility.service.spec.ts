@@ -226,3 +226,23 @@ describe('current mobile shell compatibility', () => {
     expect(report.errors.join(' ')).toContain('unsupported_widget');
   });
 });
+
+
+describe('builder appearance metadata', () => {
+  const manifest = (type = 'button') => ({ screens: { home: { layout: { kind: 'scroll', children: [{
+    type, props: { label: 'Continue' },
+    fills: [{ type: 'solid', color: '#E8E5E0', opacity: 100 }],
+    strokes: [{ type: 'solid', color: '#000000' }],
+    effects: [{ type: 'drop-shadow', blur: 4 }],
+  }] } } } });
+  it('does not count paints and effects as components', async () => {
+    const report = await makeService().service.evaluate(manifest());
+    expect(report.errors).toEqual([]);
+    expect(report.counts.components).toBe(1);
+  });
+  it('still rejects solid when it is used as an actual component', async () => {
+    const report = await makeService().service.evaluate(manifest('solid'));
+    expect(report.compatible).toBe(false);
+    expect(report.errors.join(' ')).toContain('"solid" is not supported');
+  });
+});

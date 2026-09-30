@@ -119,6 +119,8 @@ export const SUPPORTED_COMPONENT_TYPES: readonly string[] = [
 export const SUPPORTED_ACTION_TYPES: readonly string[] = [
   'add_to_cart',
   'api_call',
+  'api_request',
+  'submit_form',
   'book_service',
   'call_phone',
   'navigate',
