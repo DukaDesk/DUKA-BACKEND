@@ -246,3 +246,19 @@ describe('builder appearance metadata', () => {
     expect(report.errors.join(' ')).toContain('"solid" is not supported');
   });
 });
+
+describe('merchant canvas layout containers', () => {
+  const manifest = () => ({ screens: { home: { layout: { kind: 'scroll', children: [{
+    type: 'row', key: 'row1', props: { template: '1/2|1/2', gap: 10 },
+    fills: [{ type: 'solid', color: '#E8E5E0', opacity: 100 }],
+    children: [
+      { type: 'text_block', key: 'c1', props: { text: 'Left' } },
+      { type: 'text_block', key: 'c2', props: { text: 'Right' } },
+    ],
+  }] } } } });
+  it('accepts row/column containers with appearance metadata', async () => {
+    const report = await makeService().service.evaluate(manifest());
+    expect(report.errors).toEqual([]);
+    expect(report.compatible).toBe(true);
+  });
+});

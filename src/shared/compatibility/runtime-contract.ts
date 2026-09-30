@@ -50,6 +50,10 @@ export const SUPPORTED_COMPONENT_TYPES: readonly string[] = [
   'surface',
   'tab_bar',
   'tabs',
+  // Structural layout containers emitted by the merchant canvas (row/column
+  // split layouts). Rendered as flex containers by every shell.
+  'row',
+  'column',
   // Mobile v0.0.7 shell registry (KB reconstruction report 2026-09-19)
   'category_pills',
   'cart_summary',
