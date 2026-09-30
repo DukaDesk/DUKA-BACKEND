@@ -25,7 +25,7 @@ export class TenantConfigService {
   async updateConfig(tenantId: string, data: any) {
     const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId } });
     if (!tenant) {
-      throw new NotFoundException(`Tenant with id ${tenantId} not found`);
+      throw new NotFoundException({ code: 'MERCHANT_NOT_FOUND', message: 'Merchant not found' });
     }
     return this.prisma.tenantConfig.upsert({
       where: { tenantId },
