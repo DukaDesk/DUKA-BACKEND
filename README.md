@@ -388,6 +388,8 @@ The admin merchant review routes are available at `/api/v1/admin/merchants/:id/r
 
 Compliance documents must first be uploaded to the submitting merchant's media library. When submitted through `/api/v1/app/merchants/compliance`, the backend moves each file out of public uploads and records a private reference. Admin and merchant review responses contain links that expire after five minutes. Configure `API_PUBLIC_URL` to the public API origin when the UI and API have different origins. S3-compatible storage uses signed object URLs; local storage uses the protected `/api/v1/media/private/:token` endpoint.
 
+To provision the initial super admin, set `SUPER_ADMIN_EMAIL` and a unique `SUPER_ADMIN_PASSWORD` of at least 16 characters in the deployment secret manager, then restart the API or run the database seed. No default super-admin account or password is created. The bootstrap adds the role to that account and never resets an existing password at startup. Only an existing super admin can invite another super admin.
+
 ## Database Schema
 
 85+ models across 32 domains. Key model groups:

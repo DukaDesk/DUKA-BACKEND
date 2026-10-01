@@ -9,8 +9,8 @@ export class SuperAdminBootstrap implements OnModuleInit {
   constructor(private readonly prisma: PrismaService) {}
 
   async onModuleInit() {
-    const email = process.env.SUPER_ADMIN_EMAIL || 'superadmin@duka.dev';
-    const password = process.env.SUPER_ADMIN_PASSWORD || 'admin123';
+    const email = process.env.SUPER_ADMIN_EMAIL?.trim().toLowerCase();
+    const password = process.env.SUPER_ADMIN_PASSWORD;
 
     const role = await this.prisma.role.upsert({
       where: { name: 'super_admin' },
@@ -18,19 +18,35 @@ export class SuperAdminBootstrap implements OnModuleInit {
       create: { name: 'super_admin', description: 'Full platform access', isSystem: true },
     });
 
-    const hash = await bcrypt.hash(password, 12);
-    const user = await this.prisma.user.upsert({
-      where: { email },
-      update: { passwordHash: hash },
-      create: {
-        email,
-        passwordHash: hash,
-        firstName: 'Super',
-        lastName: 'Admin',
-        status: 'active',
-        emailVerified: true,
-      },
-    });
+    if (!email || !password) {
+      this.logger.warn('Super admin bootstrap skipped: set SUPER_ADMIN_EMAIL and SUPER_ADMIN_PASSWORD to provision an account');
+      return;
+    }
+    if (!/^\S+@\S+\.\S+$/.test(email)) {
+      throw new Error('SUPER_ADMIN_EMAIL must be a valid email address');
+    }
+    if (password.length < 16) {
+      throw new Error('SUPER_ADMIN_PASSWORD must contain at least 16 characters');
+    }
+
+    let user = await this.prisma.user.findUnique({ where: { email } });
+    if (!user) {
+      user = await this.prisma.user.create({
+        data: {
+          email,
+          passwordHash: await bcrypt.hash(password, 12),
+          firstName: 'Super',
+          lastName: 'Admin',
+          status: 'active',
+          emailVerified: true,
+        },
+      });
+    } else if (!user.passwordHash) {
+      user = await this.prisma.user.update({
+        where: { id: user.id },
+        data: { passwordHash: await bcrypt.hash(password, 12) },
+      });
+    }
 
     const existingRole = await this.prisma.userRole.findFirst({
       where: { userId: user.id, roleId: role.id, tenantId: null },

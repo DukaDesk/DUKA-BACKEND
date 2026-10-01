@@ -66,35 +66,43 @@ async function main() {
     }
   }
 
-  // Seed super admin user.
-  // Normal /auth/login flow authenticates this account. The password is
-  // env-overridable but falls back to a simple bootstrap default so a fresh
-  // database always has a working admin account. The password is force-updated
-  // on every seed run so redeploys can recover from an unknown prior password.
-  const superAdminEmail = process.env.SUPER_ADMIN_EMAIL || 'superadmin@duka.dev';
-  const superAdminPassword = process.env.SUPER_ADMIN_PASSWORD || 'admin123';
-  const superAdminHash = await bcrypt.hash(superAdminPassword, 12);
-  const superAdminUser = await prisma.user.upsert({
-    where: { email: superAdminEmail },
-    update: { passwordHash: superAdminHash },
-    create: {
-      email: superAdminEmail,
-      passwordHash: superAdminHash,
-      firstName: 'Super',
-      lastName: 'Admin',
-      status: 'active',
-      emailVerified: true,
-    },
-  });
-  if (superAdminRole) {
-    const existingRole = await prisma.userRole.findFirst({
-      where: { userId: superAdminUser.id, roleId: superAdminRole.id, tenantId: null },
-    });
-    if (!existingRole) {
-      await prisma.userRole.create({
-        data: { userId: superAdminUser.id, roleId: superAdminRole.id, tenantId: null },
+  // Provision a bootstrap super admin only when both secrets are explicitly set.
+  // Never reset an existing account's password during a seed or app restart.
+  const superAdminEmail = process.env.SUPER_ADMIN_EMAIL?.trim().toLowerCase();
+  const superAdminPassword = process.env.SUPER_ADMIN_PASSWORD;
+  if (superAdminEmail && superAdminPassword) {
+    if (!/^\S+@\S+\.\S+$/.test(superAdminEmail)) throw new Error('SUPER_ADMIN_EMAIL must be a valid email address');
+    if (superAdminPassword.length < 16) throw new Error('SUPER_ADMIN_PASSWORD must contain at least 16 characters');
+    let superAdminUser = await prisma.user.findUnique({ where: { email: superAdminEmail } });
+    if (!superAdminUser) {
+      superAdminUser = await prisma.user.create({
+        data: {
+          email: superAdminEmail,
+          passwordHash: await bcrypt.hash(superAdminPassword, 12),
+          firstName: 'Super',
+          lastName: 'Admin',
+          status: 'active',
+          emailVerified: true,
+        },
+      });
+    } else if (!superAdminUser.passwordHash) {
+      superAdminUser = await prisma.user.update({
+        where: { id: superAdminUser.id },
+        data: { passwordHash: await bcrypt.hash(superAdminPassword, 12) },
       });
     }
+    if (superAdminRole) {
+      const existingRole = await prisma.userRole.findFirst({
+        where: { userId: superAdminUser.id, roleId: superAdminRole.id, tenantId: null },
+      });
+      if (!existingRole) {
+        await prisma.userRole.create({
+          data: { userId: superAdminUser.id, roleId: superAdminRole.id, tenantId: null },
+        });
+      }
+    }
+  } else {
+    console.warn('Super admin bootstrap skipped: set SUPER_ADMIN_EMAIL and SUPER_ADMIN_PASSWORD to provision an account');
   }
 
   // Seed starter subscription plans
