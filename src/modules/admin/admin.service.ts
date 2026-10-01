@@ -101,16 +101,23 @@ export class AdminService {
 
     const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId } });
     if (!tenant) throw new NotFoundException({ code: 'MERCHANT_NOT_FOUND', message: 'Merchant not found' });
+    if (tenant.verificationStatus === 'verified') {
+      return { message: 'Merchant already verified', tenantId: tenant.id };
+    }
 
-    await this.prisma.kycSubmission.updateMany({
-      where: { tenantId, status: 'pending' },
-      data: { status: 'approved', reviewedBy: adminUserId },
-    });
+    // Single transaction so KYC approvals and the tenant flag can never drift apart.
+    await this.prisma.$transaction([
+      this.prisma.kycSubmission.updateMany({
+        where: { tenantId, status: 'pending' },
+        data: { status: 'approved', reviewedBy: adminUserId },
+      }),
+      this.prisma.tenant.update({
+        where: { id: tenantId },
+        data: { verificationStatus: 'verified', verifiedAt: new Date() },
+      }),
+    ]);
 
-    return this.prisma.tenant.update({
-      where: { id: tenantId },
-      data: { verificationStatus: 'verified', verifiedAt: new Date() },
-    });
+    return this.prisma.tenant.findUnique({ where: { id: tenantId } });
   }
 
   async rejectCredentials(tenantId: string, adminUserId: string, reason?: string) {
@@ -120,15 +127,19 @@ export class AdminService {
     if (!tenant) throw new NotFoundException({ code: 'MERCHANT_NOT_FOUND', message: 'Merchant not found' });
     if (!reason?.trim()) throw new BadRequestException('A rejection reason is required');
 
-    await this.prisma.kycSubmission.updateMany({
-      where: { tenantId, status: 'pending' },
-      data: { status: 'rejected', reviewNote: reason.trim(), reviewedBy: adminUserId },
-    });
+    // Single transaction so KYC rejections and the tenant flag can never drift apart.
+    await this.prisma.$transaction([
+      this.prisma.kycSubmission.updateMany({
+        where: { tenantId, status: 'pending' },
+        data: { status: 'rejected', reviewNote: reason.trim(), reviewedBy: adminUserId },
+      }),
+      this.prisma.tenant.update({
+        where: { id: tenantId },
+        data: { verificationStatus: 'rejected' },
+      }),
+    ]);
 
-    return this.prisma.tenant.update({
-      where: { id: tenantId },
-      data: { verificationStatus: 'rejected' },
-    });
+    return this.prisma.tenant.findUnique({ where: { id: tenantId } });
   }
 
   async getCompliance(tenantId: string, adminUserId: string) {
@@ -151,11 +162,16 @@ export class AdminService {
 
     const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId } });
     if (!tenant) throw new NotFoundException({ code: 'MERCHANT_NOT_FOUND', message: 'Merchant not found' });
-    if ((tenant as any).verificationStatus !== 'verified') {
+    if (tenant.verificationStatus !== 'verified') {
       throw new ForbiddenException('Merchant must pass stage-1 verification before the app can be approved');
     }
-    if ((tenant as any).appStatus === 'approved') {
+    if (tenant.appStatus === 'approved') {
       return { message: 'App already approved', tenantId };
+    }
+
+    const draftCount = await this.prisma.draftPage.count({ where: { tenantId } });
+    if (draftCount === 0) {
+      throw new BadRequestException('No app design submitted for review');
     }
 
     const result = await this.publishingService.publishAsAdmin(tenantId);
