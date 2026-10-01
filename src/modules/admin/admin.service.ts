@@ -114,9 +114,9 @@ export class AdminService {
     }
 
     // One transaction for KYC approvals, the tenant flag, and the audit
-    // trail — they can never drift apart. Returns the updated tenant.
+    // trail — they can never drift apart. tenant.update is index 1.
     // (tenant.update throws P2025 if the row vanished, so no null check.)
-    const [, , updated] = await this.prisma.$transaction([
+    const [, updated] = await this.prisma.$transaction([
       this.prisma.kycSubmission.updateMany({
         where: { tenantId, status: 'pending' },
         data: { status: 'approved', reviewedBy: adminUserId },
@@ -148,8 +148,8 @@ export class AdminService {
     if (!trimmedReason) throw new BadRequestException('A rejection reason is required');
 
     // One transaction for KYC rejections, the tenant flag, and the audit
-    // trail. Returns the updated tenant.
-    const [, , updated] = await this.prisma.$transaction([
+    // trail. tenant.update is index 1.
+    const [, updated] = await this.prisma.$transaction([
       this.prisma.kycSubmission.updateMany({
         where: { tenantId, status: 'pending' },
         data: { status: 'rejected', reviewNote: trimmedReason, reviewedBy: adminUserId },
@@ -202,8 +202,8 @@ export class AdminService {
 
     // Bookkeeping atomically: the approval flag and its audit trail land
     // together, so a failure here can never leave a published release
-    // without its approval record (tenant.update throws P2025 if missing).
-    const [, updated] = await this.prisma.$transaction([
+    // without its approval record. tenant.update is index 0.
+    const [updated] = await this.prisma.$transaction([
       this.prisma.tenant.update({
         where: { id: tenantId },
         data: { appStatus: 'approved', appReviewedAt: new Date() },
@@ -227,7 +227,7 @@ export class AdminService {
     const trimmedReason = reason?.trim();
     if (!trimmedReason) throw new BadRequestException('A rejection reason is required');
 
-    const [, updated] = await this.prisma.$transaction([
+    const [updated] = await this.prisma.$transaction([
       this.prisma.tenant.update({
         where: { id: tenantId },
         data: { appStatus: 'rejected', appReviewedAt: new Date() },
