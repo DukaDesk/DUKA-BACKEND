@@ -181,7 +181,10 @@ export class AuthService {
       throw new UnauthorizedException('Invalid email or password');
     }
 
-    const tokens = await this.generateTokens(user.id, user.email);
+    const [tokens, platformRoles] = await Promise.all([
+      this.generateTokens(user.id, user.email),
+      this.getPlatformRoles(user.id),
+    ]);
 
     return {
       user: {
@@ -190,9 +193,27 @@ export class AuthService {
         firstName: user.firstName,
         lastName: user.lastName,
         status: user.status,
+        role: platformRoles.role,
+        roles: platformRoles.roles,
       },
       ...tokens,
     };
+  }
+
+  private async getPlatformRoles(userId: string): Promise<{ role: string; roles: string[] }> {
+    const assignments = await this.prisma.userRole.findMany({
+      where: { userId, tenantId: null },
+      include: { role: { select: { name: true } } },
+    });
+    const canonicalRoles = [...new Set(assignments.map(({ role }) => {
+      if (role.name === 'super_admin') return 'super_admin';
+      if (role.name === 'operations' || role.name === 'platform_operator') return 'platform_operator';
+      if (role.name === 'support' || role.name === 'support_agent') return 'support_agent';
+      return role.name;
+    }))];
+    const priority = ['super_admin', 'platform_operator', 'support_agent'];
+    const role = priority.find((candidate) => canonicalRoles.includes(candidate)) || canonicalRoles[0] || 'platform_operator';
+    return { role, roles: canonicalRoles };
   }
 
   async refresh(dto: RefreshDto) {
