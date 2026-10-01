@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma.service';
 
 @Injectable()
@@ -26,7 +26,8 @@ export class BusinessDashboardBffService {
     };
   }
 
-  async getTenantsList(status?: string, page = 1, limit = 20, verification?: string, appStatus?: string) {
+  async getTenantsList(adminUserId: string, status?: string, page = 1, limit = 20, verification?: string, appStatus?: string) {
+    await this.verifyAdmin(adminUserId);
     const where: any = {};
     const allowedStatuses = ['draft', 'published', 'suspended', 'rejected'];
     if (status && allowedStatuses.includes(status)) where.status = status;
@@ -41,6 +42,7 @@ export class BusinessDashboardBffService {
         where,
         include: {
           _count: { select: { users: true, products: true, pages: true } },
+          users: { where: { role: 'owner' }, take: 1, include: { user: { select: { email: true } } } },
           subscription: { include: { plan: { select: { name: true } } } },
         },
         skip,
@@ -50,7 +52,24 @@ export class BusinessDashboardBffService {
       this.prisma.tenant.count({ where }),
     ]);
 
-    return { data, meta: { page, limit, total, pages: Math.ceil(total / limit) } };
+    return {
+      data: data.map((tenant) => ({
+        ...tenant,
+        email: tenant.email ?? tenant.users[0]?.user.email,
+        plan: tenant.subscription?.plan?.name,
+      })),
+      meta: { page, limit, total, pages: Math.ceil(total / limit) },
+    };
+  }
+
+  private async verifyAdmin(userId: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
+    if (!user) throw new NotFoundException('User not found');
+    const role = await this.prisma.userRole.findFirst({
+      where: { userId, tenantId: null, role: { name: { in: ['super_admin', 'operations', 'support'] } } },
+      select: { id: true },
+    });
+    if (!role) throw new ForbiddenException('Platform admin permissions are required');
   }
 
   async getRecentAuditLogs(limit = 20) {

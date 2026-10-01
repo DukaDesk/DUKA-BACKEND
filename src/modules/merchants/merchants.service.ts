@@ -309,7 +309,7 @@ export class MerchantsService {
 
     return this.prisma.tenant.update({
       where: { id: tenantId },
-      data: { appStatus: 'in_review' },
+      data: { appStatus: 'in_review', appSubmittedAt: new Date(), appReviewNote: null },
     });
   }
 }

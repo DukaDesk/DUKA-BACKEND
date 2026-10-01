@@ -1,0 +1,2 @@
+ALTER TABLE "tenants" ADD COLUMN IF NOT EXISTS "appSubmittedAt" TIMESTAMP(3);
+ALTER TABLE "tenants" ADD COLUMN IF NOT EXISTS "appReviewNote" TEXT;

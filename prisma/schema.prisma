@@ -1796,7 +1796,9 @@ model Tenant {
   verificationStatus String @default("pending")
   verifiedAt         DateTime?
   appStatus          String @default("none")
+  appSubmittedAt     DateTime?
   appReviewedAt      DateTime?
+  appReviewNote      String?
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
 

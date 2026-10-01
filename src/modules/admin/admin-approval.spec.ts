@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { AdminService } from './admin.service';
 
 const ADMIN_ID = 'admin-1';
@@ -14,6 +14,7 @@ function makePrisma(overrides: any = {}) {
   const updatedRow = { ...tenantRow, ...overrides.updated };
   const prisma: any = {
     user: { findUnique: jest.fn().mockResolvedValue({ id: ADMIN_ID }) },
+    userRole: { findFirst: jest.fn().mockResolvedValue({ id: 'admin-role' }) },
     tenant: {
       findUnique: jest.fn().mockResolvedValue(tenantRow),
       // Merge the update payload like a real database would.
@@ -50,10 +51,10 @@ describe('AdminService two-stage approval', () => {
       expect(prisma.$transaction).not.toHaveBeenCalled();
     });
 
-    it('rejects re-verification with BadRequest when rejected and no pending KYC', async () => {
+    it('rejects verification when rejected and no pending KYC', async () => {
       const { prisma } = makePrisma({ tenant: { verificationStatus: 'rejected' }, pendingKyc: 0 });
       const { service } = makeService(prisma);
-      await expect(service.verifyMerchant(TENANT_ID, ADMIN_ID)).rejects.toBeInstanceOf(BadRequestException);
+      await expect(service.verifyMerchant(TENANT_ID, ADMIN_ID)).rejects.toBeInstanceOf(ConflictException);
       expect(prisma.$transaction).not.toHaveBeenCalled();
     });
 
@@ -65,6 +66,21 @@ describe('AdminService two-stage approval', () => {
         expect.objectContaining({ where: { id: TENANT_ID }, data: expect.objectContaining({ verificationStatus: 'verified' }) }),
       );
       expect(result).toMatchObject({ id: TENANT_ID, verificationStatus: 'verified' });
+    });
+
+    it('rejects a pending merchant when no compliance submission exists', async () => {
+      const { prisma } = makePrisma({ pendingKyc: 0 });
+      const { service } = makeService(prisma);
+      await expect(service.verifyMerchant(TENANT_ID, ADMIN_ID)).rejects.toBeInstanceOf(ConflictException);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('rejects users without a platform admin role', async () => {
+      const { prisma } = makePrisma();
+      prisma.userRole.findFirst.mockResolvedValue(null);
+      const { service } = makeService(prisma);
+      await expect(service.verifyMerchant(TENANT_ID, ADMIN_ID)).rejects.toBeInstanceOf(ForbiddenException);
+      expect(prisma.tenant.findUnique).not.toHaveBeenCalled();
     });
 
     it('resolves the tenant update (index 1), not the audit row (index 2)', async () => {
@@ -133,6 +149,13 @@ describe('AdminService two-stage approval', () => {
       expect(publishingService.publishAsAdmin).not.toHaveBeenCalled();
     });
 
+    it('rejects an app that has not been submitted for review', async () => {
+      const { prisma } = makePrisma({ tenant: { verificationStatus: 'verified', appStatus: 'none' } });
+      const { service, publishingService } = makeService(prisma);
+      await expect(service.approveApp(TENANT_ID, ADMIN_ID)).rejects.toBeInstanceOf(ConflictException);
+      expect(publishingService.publishAsAdmin).not.toHaveBeenCalled();
+    });
+
     it('publishes then returns the tenant update (index 0), not the audit row', async () => {
       const { prisma } = makePrisma({ tenant: { verificationStatus: 'verified', appStatus: 'in_review' } });
       const { service, publishingService } = makeService(prisma);
@@ -161,6 +184,7 @@ describe('AdminService two-stage approval', () => {
       await expect(service.rejectApp(TENANT_ID, ADMIN_ID, '')).rejects.toBeInstanceOf(BadRequestException);
       const result = await service.rejectApp(TENANT_ID, ADMIN_ID, '  off-brand  ');
       expect(result).toMatchObject({ id: TENANT_ID, appStatus: 'rejected' });
+      expect(result.appReviewNote).toBe('off-brand');
       expect(prisma.auditLog.create).toHaveBeenCalledWith(
         expect.objectContaining({ data: expect.objectContaining({ metadata: { reason: 'off-brand' } }) }),
       );

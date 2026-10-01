@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, BadRequestException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma.service';
 import { PublishingService } from '../publishing/publishing.service';
 import { LivePreviewService } from '../builder/live-preview.service';
@@ -104,13 +104,11 @@ export class AdminService {
     if (tenant.verificationStatus === 'verified') {
       return tenant;
     }
-    if (tenant.verificationStatus === 'rejected') {
-      const resubmitted = await this.prisma.kycSubmission.count({
-        where: { tenantId, status: 'pending' },
-      });
-      if (resubmitted === 0) {
-        throw new BadRequestException('Credentials were rejected — require a new compliance submission before verifying');
-      }
+    const pendingSubmissions = await this.prisma.kycSubmission.count({
+      where: { tenantId, status: 'pending' },
+    });
+    if (pendingSubmissions === 0) {
+      throw new ConflictException('A pending compliance submission is required before verifying this merchant');
     }
 
     // One transaction for KYC approvals, the tenant flag, and the audit
@@ -192,8 +190,11 @@ export class AdminService {
     if (tenant.appStatus === 'approved') {
       return tenant;
     }
+    if (tenant.appStatus !== 'in_review') {
+      throw new ConflictException('The app must be submitted for review before it can be approved');
+    }
 
-    const draftCount = await this.prisma.draftPage.count({ where: { tenantId } });
+    const draftCount = await this.prisma.draftPage.count({ where: { tenantId, isActive: true } });
     if (draftCount === 0) {
       throw new BadRequestException('No app design submitted for review');
     }
@@ -224,13 +225,16 @@ export class AdminService {
     if (tenant.appStatus === 'rejected') {
       return tenant;
     }
+    if (tenant.verificationStatus !== 'verified' || tenant.appStatus !== 'in_review') {
+      throw new ConflictException('A verified merchant app in review is required before rejecting it');
+    }
     const trimmedReason = reason?.trim();
     if (!trimmedReason) throw new BadRequestException('A rejection reason is required');
 
     const [updated] = await this.prisma.$transaction([
       this.prisma.tenant.update({
         where: { id: tenantId },
-        data: { appStatus: 'rejected', appReviewedAt: new Date() },
+        data: { appStatus: 'rejected', appReviewedAt: new Date(), appReviewNote: trimmedReason },
       }),
       this.prisma.auditLog.create({
         data: { tenantId, userId: adminUserId, action: 'merchant.app_reject', entity: 'tenant', entityId: tenantId, metadata: { reason: trimmedReason } },
@@ -250,7 +254,7 @@ export class AdminService {
       include: {
         users: {
           where: { role: 'owner' },
-          include: { user: { select: { id: true, firstName: true, lastName: true, email: true, phoneNumber: true, emailVerified: true, phoneVerified: true, status: true } } },
+          include: { user: { select: { id: true, firstName: true, lastName: true, email: true, phoneNumber: true, emailVerified: true, phoneVerified: true, status: true, profile: { select: { avatarUrl: true } } } } },
         },
         subscription: { include: { plan: true } },
         theme: true,
@@ -264,7 +268,7 @@ export class AdminService {
       this.prisma.apiQuota.findUnique({ where: { tenantId } }),
       this.prisma.draftPage.findMany({
         where: { tenantId },
-        select: { id: true, name: true, slug: true, isHome: true, sortOrder: true, _count: { select: { draftSections: true } } },
+        select: { id: true, name: true, slug: true, isHome: true, sortOrder: true, createdAt: true, _count: { select: { draftSections: true } } },
         orderBy: { sortOrder: 'asc' },
       }),
       this.prisma.release.findMany({
@@ -275,7 +279,39 @@ export class AdminService {
       }),
     ]);
 
-    return { tenant, compliance, quota, draftPages, releases };
+    const latestComplianceSubmission = compliance[0];
+    return {
+      tenant: {
+        ...tenant,
+        complianceSubmittedAt: latestComplianceSubmission?.createdAt,
+        owner: tenant.users?.[0]?.user ? {
+          ...tenant.users[0].user,
+          avatarUrl: tenant.users[0].user.profile?.avatarUrl,
+        } : undefined,
+        app: tenant.appStatus !== 'none'
+          ? {
+            name: draftPages.find((page) => page.isHome)?.name ?? draftPages[0]?.name,
+            slug: draftPages.find((page) => page.isHome)?.slug ?? draftPages[0]?.slug,
+            submittedAt: tenant.appSubmittedAt,
+          }
+          : undefined,
+        subscription: tenant.subscription ? {
+          ...tenant.subscription,
+          plan: {
+            ...tenant.subscription.plan,
+            price: Number(tenant.subscription.plan.price),
+          },
+          currentPeriodEnd: tenant.subscription.endDate,
+          renewalDate: tenant.subscription.autoRenew ? tenant.subscription.endDate : undefined,
+        } : undefined,
+      },
+      verificationStatus: tenant.verificationStatus,
+      appStatus: tenant.appStatus,
+      compliance,
+      quota,
+      draftPages,
+      releases,
+    };
   }
 
   // Draft live-preview for admin review (no publish required).
@@ -367,8 +403,13 @@ export class AdminService {
   }
 
   private async verifyAdmin(userId: string) {
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
     if (!user) throw new NotFoundException('User not found');
+    const platformRole = await this.prisma.userRole.findFirst({
+      where: { userId, tenantId: null, role: { name: { in: ['super_admin', 'operations', 'support'] } } },
+      select: { id: true },
+    });
+    if (!platformRole) throw new ForbiddenException('Platform admin permissions are required');
   }
 
   async cleanupDeactivatedAccounts() {
