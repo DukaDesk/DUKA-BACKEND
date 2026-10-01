@@ -102,7 +102,15 @@ export class AdminService {
     const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId } });
     if (!tenant) throw new NotFoundException({ code: 'MERCHANT_NOT_FOUND', message: 'Merchant not found' });
     if (tenant.verificationStatus === 'verified') {
-      return { message: 'Merchant already verified', tenantId: tenant.id };
+      return tenant;
+    }
+    if (tenant.verificationStatus === 'rejected') {
+      const resubmitted = await this.prisma.kycSubmission.count({
+        where: { tenantId, status: 'pending' },
+      });
+      if (resubmitted === 0) {
+        throw new ForbiddenException('Credentials were rejected — require a new compliance submission before verifying');
+      }
     }
 
     // Single transaction so KYC approvals and the tenant flag can never drift apart.
@@ -117,7 +125,9 @@ export class AdminService {
       }),
     ]);
 
-    return this.prisma.tenant.findUnique({ where: { id: tenantId } });
+    const updated = await this.prisma.tenant.findUnique({ where: { id: tenantId } });
+    if (!updated) throw new NotFoundException({ code: 'MERCHANT_NOT_FOUND', message: 'Merchant not found' });
+    return updated;
   }
 
   async rejectCredentials(tenantId: string, adminUserId: string, reason?: string) {
@@ -139,7 +149,9 @@ export class AdminService {
       }),
     ]);
 
-    return this.prisma.tenant.findUnique({ where: { id: tenantId } });
+    const updated = await this.prisma.tenant.findUnique({ where: { id: tenantId } });
+    if (!updated) throw new NotFoundException({ code: 'MERCHANT_NOT_FOUND', message: 'Merchant not found' });
+    return updated;
   }
 
   async getCompliance(tenantId: string, adminUserId: string) {
