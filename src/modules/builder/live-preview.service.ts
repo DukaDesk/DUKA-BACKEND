@@ -43,6 +43,8 @@ export interface PreviewOutput {
   theme: any;
   navigation: any;
   pages: RenderedPage[];
+  source: 'draft' | 'published' | 'empty';
+  releaseVersion?: string;
 }
 
 @Injectable()
@@ -101,6 +103,8 @@ export class LivePreviewService {
     );
     let previewTheme = theme;
     let navigation = tenant.navigation?.items || [];
+    let source: PreviewOutput['source'] = pages.length ? 'draft' : 'empty';
+    let releaseVersion: string | undefined;
 
     // Some legacy merchants publish an app before draft pages are initialized.
     // In that case, review the active immutable release instead of showing an
@@ -117,6 +121,10 @@ export class LivePreviewService {
         pages = await this.renderPublishedScreens(manifest, defaultContext);
         previewTheme = manifest.theme || previewTheme;
         navigation = this.previewNavigation(manifest.navigation) || navigation;
+        if (pages.length) {
+          source = 'published';
+          releaseVersion = release.version;
+        }
       }
     }
 
@@ -125,6 +133,8 @@ export class LivePreviewService {
       theme: previewTheme,
       navigation,
       pages,
+      source,
+      releaseVersion,
     };
   }
 
