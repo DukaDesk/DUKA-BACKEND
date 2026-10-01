@@ -96,16 +96,89 @@ export class LivePreviewService {
       ? this.themeCompiler.compileForPreview(tenant.theme)
       : undefined;
 
-    const pages = await Promise.all(
+    let pages = await Promise.all(
       tenant.draftPages.map((page) => this.renderPage(page, defaultContext)),
     );
+    let previewTheme = theme;
+    let navigation = tenant.navigation?.items || [];
+
+    // Some legacy merchants publish an app before draft pages are initialized.
+    // In that case, review the active immutable release instead of showing an
+    // empty phone preview while the merchant has a published app.
+    if (pages.length === 0) {
+      const release = tenant.activeReleaseId
+        ? await this.prisma.release.findUnique({ where: { id: tenant.activeReleaseId } })
+        : await this.prisma.release.findFirst({
+            where: { tenantId, status: 'published', channel: 'production' },
+            orderBy: [{ publishedAt: 'desc' }, { buildNumber: 'desc' }],
+          });
+      const manifest = release?.manifest as Record<string, any> | null;
+      if (release && manifest && release.status !== 'draft') {
+        pages = await this.renderPublishedScreens(manifest, defaultContext);
+        previewTheme = manifest.theme || previewTheme;
+        navigation = this.previewNavigation(manifest.navigation) || navigation;
+      }
+    }
 
     return {
       tenant: { id: tenant.id, name: tenant.name, slug: tenant.slug },
-      theme,
-      navigation: tenant.navigation?.items || [],
+      theme: previewTheme,
+      navigation,
       pages,
     };
+  }
+
+  private async renderPublishedScreens(manifest: Record<string, any>, context: PreviewContext): Promise<RenderedPage[]> {
+    const screens = manifest.screens;
+    const entries: Array<[string, any]> = Array.isArray(screens)
+      ? screens.map((screen: any, index: number) => [String(screen?.screenId || screen?.slug || index), screen])
+      : screens && typeof screens === 'object'
+        ? Object.entries(screens)
+        : [];
+    const initialScreen = manifest.navigation?.initialScreen || manifest.navigation?.root?.initialRoute;
+
+    return Promise.all(entries.map(async ([screenId, screen]) => {
+      const sections = this.publishedScreenSections(screen);
+      const renderedSections = await Promise.all(sections.map((section) => this.renderSection(section, context)));
+      return {
+        name: screen?.name || screen?.title || screenId,
+        slug: screen?.slug || screen?.screenId || screenId,
+        isHome: Boolean(screen?.isHome || screenId === initialScreen),
+        sections: renderedSections.filter((section): section is RenderedSection => section !== null),
+      };
+    }));
+  }
+
+  private publishedScreenSections(screen: any): any[] {
+    if (Array.isArray(screen?.blocks)) {
+      return screen.blocks.map((block: any, index: number) => ({
+        id: block?.id || `${screen?.screenId || 'screen'}-section-${index}`,
+        type: block?.type || 'section',
+        config: block?.config || {},
+        draftComponents: block?.components || block?.children || [],
+      }));
+    }
+
+    const children = screen?.layout?.children;
+    if (!Array.isArray(children)) return [];
+    return children.map((node: any, index: number) => {
+      const sectionLayout = node?.layout;
+      const components = sectionLayout?.children || node?.components || node?.children ||
+        (node?.type && node.type !== 'layout' ? [node] : []);
+      return {
+        id: node?.id || `${screen?.screenId || 'screen'}-section-${index}`,
+        type: node?.type || sectionLayout?.kind || 'section',
+        config: sectionLayout?.config || node?.config || {},
+        draftComponents: components,
+      };
+    });
+  }
+
+  private previewNavigation(navigation: any): any[] | undefined {
+    if (Array.isArray(navigation)) return navigation;
+    if (Array.isArray(navigation?.items)) return navigation.items;
+    if (Array.isArray(navigation?.tabs)) return navigation.tabs;
+    return undefined;
   }
 
   async previewPage(tenantId: string, pageId: string, context?: Partial<PreviewContext>): Promise<RenderedPage> {
