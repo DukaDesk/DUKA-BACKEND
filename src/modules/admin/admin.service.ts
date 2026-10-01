@@ -113,9 +113,10 @@ export class AdminService {
       }
     }
 
-    // Single transaction so KYC approvals and the tenant flag can never drift
-    // apart. The tenant.update result is returned directly — no extra read.
-    const [, updated] = await this.prisma.$transaction([
+    // One transaction for KYC approvals, the tenant flag, and the audit
+    // trail — they can never drift apart. Returns the updated tenant.
+    // (tenant.update throws P2025 if the row vanished, so no null check.)
+    const [, , updated] = await this.prisma.$transaction([
       this.prisma.kycSubmission.updateMany({
         where: { tenantId, status: 'pending' },
         data: { status: 'approved', reviewedBy: adminUserId },
@@ -124,9 +125,11 @@ export class AdminService {
         where: { id: tenantId },
         data: { verificationStatus: 'verified', verifiedAt: new Date() },
       }),
+      this.prisma.auditLog.create({
+        data: { tenantId, userId: adminUserId, action: 'merchant.verify', entity: 'tenant', entityId: tenantId },
+      }),
     ]);
 
-    if (!updated) throw new NotFoundException({ code: 'MERCHANT_NOT_FOUND', message: 'Merchant not found' });
     return updated;
   }
 
@@ -141,22 +144,25 @@ export class AdminService {
       });
       if (pending === 0) return tenant;
     }
-    if (!reason?.trim()) throw new BadRequestException('A rejection reason is required');
+    const trimmedReason = reason?.trim();
+    if (!trimmedReason) throw new BadRequestException('A rejection reason is required');
 
-    // Single transaction so KYC rejections and the tenant flag can never drift
-    // apart. The tenant.update result is returned directly — no extra read.
-    const [, updated] = await this.prisma.$transaction([
+    // One transaction for KYC rejections, the tenant flag, and the audit
+    // trail. Returns the updated tenant.
+    const [, , updated] = await this.prisma.$transaction([
       this.prisma.kycSubmission.updateMany({
         where: { tenantId, status: 'pending' },
-        data: { status: 'rejected', reviewNote: reason!.trim(), reviewedBy: adminUserId },
+        data: { status: 'rejected', reviewNote: trimmedReason, reviewedBy: adminUserId },
       }),
       this.prisma.tenant.update({
         where: { id: tenantId },
         data: { verificationStatus: 'rejected' },
       }),
+      this.prisma.auditLog.create({
+        data: { tenantId, userId: adminUserId, action: 'merchant.verify_reject', entity: 'tenant', entityId: tenantId, metadata: { reason: trimmedReason } },
+      }),
     ]);
 
-    if (!updated) throw new NotFoundException({ code: 'MERCHANT_NOT_FOUND', message: 'Merchant not found' });
     return updated;
   }
 
@@ -194,13 +200,20 @@ export class AdminService {
 
     const result = await this.publishingService.publishAsAdmin(tenantId);
 
-    const updated = await this.prisma.tenant.update({
-      where: { id: tenantId },
-      data: { appStatus: 'approved', appReviewedAt: new Date() },
-    });
-    if (!updated) throw new NotFoundException({ code: 'MERCHANT_NOT_FOUND', message: 'Merchant not found' });
+    // Bookkeeping atomically: the approval flag and its audit trail land
+    // together, so a failure here can never leave a published release
+    // without its approval record (tenant.update throws P2025 if missing).
+    const [, updated] = await this.prisma.$transaction([
+      this.prisma.tenant.update({
+        where: { id: tenantId },
+        data: { appStatus: 'approved', appReviewedAt: new Date() },
+      }),
+      this.prisma.auditLog.create({
+        data: { tenantId, userId: adminUserId, action: 'merchant.app_approve', entity: 'tenant', entityId: tenantId, metadata: { version: result.version, releaseId: result.releaseId } },
+      }),
+    ]);
 
-    return { ...result, appStatus: 'approved' };
+    return updated;
   }
 
   async rejectApp(tenantId: string, adminUserId: string, reason?: string) {
@@ -211,15 +224,20 @@ export class AdminService {
     if (tenant.appStatus === 'rejected') {
       return tenant;
     }
-    if (!reason?.trim()) throw new BadRequestException('A rejection reason is required');
+    const trimmedReason = reason?.trim();
+    if (!trimmedReason) throw new BadRequestException('A rejection reason is required');
 
-    const updated = await this.prisma.tenant.update({
-      where: { id: tenantId },
-      data: { appStatus: 'rejected', appReviewedAt: new Date() },
-    });
-    if (!updated) throw new NotFoundException({ code: 'MERCHANT_NOT_FOUND', message: 'Merchant not found' });
+    const [, updated] = await this.prisma.$transaction([
+      this.prisma.tenant.update({
+        where: { id: tenantId },
+        data: { appStatus: 'rejected', appReviewedAt: new Date() },
+      }),
+      this.prisma.auditLog.create({
+        data: { tenantId, userId: adminUserId, action: 'merchant.app_reject', entity: 'tenant', entityId: tenantId, metadata: { reason: trimmedReason } },
+      }),
+    ]);
 
-    return { message: 'App design rejected', tenantId, reason: reason.trim() };
+    return updated;
   }
 
   // Full review bundle for the admin approval screen (single call).
