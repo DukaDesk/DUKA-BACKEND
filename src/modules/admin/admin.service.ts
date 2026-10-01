@@ -109,7 +109,7 @@ export class AdminService {
         where: { tenantId, status: 'pending' },
       });
       if (resubmitted === 0) {
-        throw new ForbiddenException('Credentials were rejected — require a new compliance submission before verifying');
+        throw new BadRequestException('Credentials were rejected — require a new compliance submission before verifying');
       }
     }
 

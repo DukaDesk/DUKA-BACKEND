@@ -1,7 +1,7 @@
 import { AuthService } from './auth.service';
 
 const makeService = (prisma: any, merchantsService: any = {}) =>
-  new AuthService(prisma as any, { sign: () => 'access' } as any, { get: () => undefined } as any, {} as any, {} as any, {} as any, merchantsService as any);
+  new AuthService(prisma as any, { sign: () => 'access' } as any, { get: () => undefined } as any, {} as any, {} as any, {} as any, merchantsService as any, {} as any);
 
 describe('authenticated merchant references', () => {
   it('refresh returns merchant IDs and limits the query to the authenticated user active memberships', async () => {
@@ -26,7 +26,7 @@ describe('authenticated merchant references', () => {
       create: jest.fn().mockResolvedValue({ id: 'merchant-9', name: "Ada's Kitchen", slug: 'ada-s-kitchen' }),
     };
     const passwordService = { validatePasswordStrength: jest.fn(), hash: jest.fn().mockResolvedValue('hash'), recordHistory: jest.fn() };
-    const service = new AuthService(prisma as any, { sign: () => 'access' } as any, { get: () => undefined } as any, passwordService as any, {} as any, {} as any, merchantsService as any);
+    const service = new AuthService(prisma as any, { sign: () => 'access' } as any, { get: () => undefined } as any, passwordService as any, {} as any, {} as any, merchantsService as any, {} as any);
     const result = await (service.register as any)({ email: 'ada@test.com', firstName: 'Ada', lastName: 'Okafor', password: 'Pass1234!', businessName: "Ada's Kitchen" } as any);
     expect(merchantsService.create).toHaveBeenCalledWith('user-9', expect.objectContaining({ name: "Ada's Kitchen" }));
     expect(result.merchants).toEqual([{ id: 'merchant-9', name: "Ada's Kitchen", slug: 'ada-s-kitchen', role: 'owner' }]);
@@ -45,10 +45,11 @@ describe('authenticated merchant references', () => {
       create: jest.fn().mockRejectedValueOnce(conflict).mockResolvedValueOnce({ id: 'm2', name: 'Shop', slug: 'shop-123' }),
     };
     const passwordService = { validatePasswordStrength: jest.fn(), hash: jest.fn().mockResolvedValue('hash'), recordHistory: jest.fn() };
-    const service = new AuthService(prisma as any, { sign: () => 'access' } as any, { get: () => undefined } as any, passwordService as any, {} as any, {} as any, merchantsService as any);
+    const service = new AuthService(prisma as any, { sign: () => 'access' } as any, { get: () => undefined } as any, passwordService as any, {} as any, {} as any, merchantsService as any, {} as any);
     const result = await (service.register as any)({ email: 'a@test.com', firstName: 'A', lastName: 'B', password: 'Pass1234!' } as any);
     expect(merchantsService.create).toHaveBeenCalledTimes(2);
     expect(result.merchants).toEqual([{ id: 'm2', name: 'Shop', slug: 'shop-123', role: 'owner' }]);
   });
 });
+
 
