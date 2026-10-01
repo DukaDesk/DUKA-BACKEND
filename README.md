@@ -382,6 +382,12 @@ API at `https://duka-backend-production.up.railway.app/api/v1` — Swagger docs 
 | GET | `/:id/definition` | SDUI app definition (from Release.manifest, `?version=` optional) |
 | GET | `/resolve/:slug` | Resolve slug to tenant |
 
+### Merchant Admin Review
+
+The admin merchant review routes are available at `/api/v1/admin/merchants/:id/review` and `/preview`, with verification and app review actions under the same merchant path. The merchant list is `/api/v1/bff/admin/merchants`. These endpoints require a platform `super_admin`, `operations`, or `support` role.
+
+Compliance documents must first be uploaded to the submitting merchant's media library. When submitted through `/api/v1/app/merchants/compliance`, the backend moves each file out of public uploads and records a private reference. Admin and merchant review responses contain links that expire after five minutes. Configure `API_PUBLIC_URL` to the public API origin when the UI and API have different origins. S3-compatible storage uses signed object URLs; local storage uses the protected `/api/v1/media/private/:token` endpoint.
+
 ## Database Schema
 
 85+ models across 32 domains. Key model groups:

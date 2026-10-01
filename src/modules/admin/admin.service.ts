@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, ForbiddenException, BadRequestException,
 import { PrismaService } from '../../common/prisma.service';
 import { PublishingService } from '../publishing/publishing.service';
 import { LivePreviewService } from '../builder/live-preview.service';
+import { MediaService } from '../media/media.service';
 
 @Injectable()
 export class AdminService {
@@ -9,6 +10,7 @@ export class AdminService {
     private prisma: PrismaService,
     private publishingService: PublishingService,
     private livePreviewService: LivePreviewService,
+    private mediaService: MediaService,
   ) {}
 
   async createTenant(adminUserId: string, data: {
@@ -142,6 +144,10 @@ export class AdminService {
       });
       if (pending === 0) return tenant;
     }
+    const pendingSubmissions = await this.prisma.kycSubmission.count({ where: { tenantId, status: 'pending' } });
+    if (pendingSubmissions === 0) {
+      throw new ConflictException('A pending compliance submission is required before rejecting this merchant');
+    }
     const trimmedReason = reason?.trim();
     if (!trimmedReason) throw new BadRequestException('A rejection reason is required');
 
@@ -170,10 +176,18 @@ export class AdminService {
     const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId } });
     if (!tenant) throw new NotFoundException({ code: 'MERCHANT_NOT_FOUND', message: 'Merchant not found' });
 
-    return this.prisma.kycSubmission.findMany({
+    const submissions = await this.prisma.kycSubmission.findMany({
       where: { tenantId },
       orderBy: { createdAt: 'desc' },
     });
+    return Promise.all(submissions.map(async (submission) => ({
+      ...submission,
+      documents: await this.mediaService.createComplianceDocumentLinks(
+        tenantId,
+        submission.id,
+        Array.isArray(submission.documents) ? submission.documents as any : [],
+      ),
+    })));
   }
 
   // Stage-2: app design review. Approve publishes the drafts (admin bypass
@@ -280,6 +294,14 @@ export class AdminService {
     ]);
 
     const latestComplianceSubmission = compliance[0];
+    const complianceWithDocumentLinks = await Promise.all(compliance.map(async (submission) => ({
+      ...submission,
+      documents: await this.mediaService.createComplianceDocumentLinks(
+        tenantId,
+        submission.id,
+        Array.isArray(submission.documents) ? submission.documents as any : [],
+      ),
+    })));
     return {
       tenant: {
         ...tenant,
@@ -307,7 +329,7 @@ export class AdminService {
       },
       verificationStatus: tenant.verificationStatus,
       appStatus: tenant.appStatus,
-      compliance,
+      compliance: complianceWithDocumentLinks,
       quota,
       draftPages,
       releases,

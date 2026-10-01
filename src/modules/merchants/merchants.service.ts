@@ -5,12 +5,13 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma.service';
+import { MediaService } from '../media/media.service';
 import { CreateTenantDto } from './dto/create-tenant.dto';
 import { UpdateTenantDto } from './dto/update-tenant.dto';
 
 @Injectable()
 export class MerchantsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService, private mediaService: MediaService) {}
 
   async create(userId: string, dto: CreateTenantDto) {
     const existing = await this.prisma.tenant.findUnique({ where: { slug: dto.slug } });
@@ -266,6 +267,7 @@ export class MerchantsService {
 
   async submitKyc(tenantId: string, userId: string, dto: { businessName?: string; regNo?: string; taxId?: string; documents?: any }) {
     await this.verifyOwnership(tenantId, userId);
+    const documents = await this.mediaService.privatizeComplianceDocuments(tenantId, dto.documents ?? []);
 
     const submission = await this.prisma.kycSubmission.create({
       data: {
@@ -273,7 +275,7 @@ export class MerchantsService {
         businessName: dto.businessName,
         regNo: dto.regNo,
         taxId: dto.taxId,
-        documents: (dto.documents ?? []) as any,
+        documents: documents as any,
         status: 'pending',
       },
     });
@@ -283,16 +285,27 @@ export class MerchantsService {
       data: { verificationStatus: 'pending' },
     });
 
-    return submission;
+    return {
+      ...submission,
+      documents: await this.mediaService.createComplianceDocumentLinks(tenantId, submission.id, documents),
+    };
   }
 
   async getMyKyc(tenantId: string, userId: string) {
     await this.verifyOwnership(tenantId, userId);
 
-    return this.prisma.kycSubmission.findMany({
+    const submissions = await this.prisma.kycSubmission.findMany({
       where: { tenantId },
       orderBy: { createdAt: 'desc' },
     });
+    return Promise.all(submissions.map(async (submission) => ({
+      ...submission,
+      documents: await this.mediaService.createComplianceDocumentLinks(
+        tenantId,
+        submission.id,
+        Array.isArray(submission.documents) ? submission.documents as any : [],
+      ),
+    })));
   }
 
   // Stage-2: submit the designed app for admin review. Requires a

@@ -36,7 +36,7 @@ function makePrisma(overrides: any = {}) {
 function makeService(prisma: any, publishing: any = {}) {
   const publishingService = { publishAsAdmin: jest.fn().mockResolvedValue({ version: '1.0.0', releaseId: 'rel-1', checksum: 'abc' }), ...publishing };
   return {
-    service: new AdminService(prisma, publishingService as any, {} as any),
+    service: new AdminService(prisma, publishingService as any, {} as any, {} as any),
     publishingService,
   };
 }
@@ -112,6 +112,13 @@ describe('AdminService two-stage approval', () => {
       const { prisma } = makePrisma();
       const { service } = makeService(prisma);
       await expect(service.rejectCredentials(TENANT_ID, ADMIN_ID, '   ')).rejects.toBeInstanceOf(BadRequestException);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('requires a pending compliance submission before rejecting credentials', async () => {
+      const { prisma } = makePrisma({ pendingKyc: 0 });
+      const { service } = makeService(prisma);
+      await expect(service.rejectCredentials(TENANT_ID, ADMIN_ID, 'incomplete')).rejects.toBeInstanceOf(ConflictException);
       expect(prisma.$transaction).not.toHaveBeenCalled();
     });
 
