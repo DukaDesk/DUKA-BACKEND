@@ -113,8 +113,9 @@ export class AdminService {
       }
     }
 
-    // Single transaction so KYC approvals and the tenant flag can never drift apart.
-    await this.prisma.$transaction([
+    // Single transaction so KYC approvals and the tenant flag can never drift
+    // apart. The tenant.update result is returned directly — no extra read.
+    const [, updated] = await this.prisma.$transaction([
       this.prisma.kycSubmission.updateMany({
         where: { tenantId, status: 'pending' },
         data: { status: 'approved', reviewedBy: adminUserId },
@@ -125,7 +126,6 @@ export class AdminService {
       }),
     ]);
 
-    const updated = await this.prisma.tenant.findUnique({ where: { id: tenantId } });
     if (!updated) throw new NotFoundException({ code: 'MERCHANT_NOT_FOUND', message: 'Merchant not found' });
     return updated;
   }
@@ -135,13 +135,20 @@ export class AdminService {
 
     const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId } });
     if (!tenant) throw new NotFoundException({ code: 'MERCHANT_NOT_FOUND', message: 'Merchant not found' });
+    if (tenant.verificationStatus === 'rejected') {
+      const pending = await this.prisma.kycSubmission.count({
+        where: { tenantId, status: 'pending' },
+      });
+      if (pending === 0) return tenant;
+    }
     if (!reason?.trim()) throw new BadRequestException('A rejection reason is required');
 
-    // Single transaction so KYC rejections and the tenant flag can never drift apart.
-    await this.prisma.$transaction([
+    // Single transaction so KYC rejections and the tenant flag can never drift
+    // apart. The tenant.update result is returned directly — no extra read.
+    const [, updated] = await this.prisma.$transaction([
       this.prisma.kycSubmission.updateMany({
         where: { tenantId, status: 'pending' },
-        data: { status: 'rejected', reviewNote: reason.trim(), reviewedBy: adminUserId },
+        data: { status: 'rejected', reviewNote: reason!.trim(), reviewedBy: adminUserId },
       }),
       this.prisma.tenant.update({
         where: { id: tenantId },
@@ -149,7 +156,6 @@ export class AdminService {
       }),
     ]);
 
-    const updated = await this.prisma.tenant.findUnique({ where: { id: tenantId } });
     if (!updated) throw new NotFoundException({ code: 'MERCHANT_NOT_FOUND', message: 'Merchant not found' });
     return updated;
   }
@@ -178,7 +184,7 @@ export class AdminService {
       throw new ForbiddenException('Merchant must pass stage-1 verification before the app can be approved');
     }
     if (tenant.appStatus === 'approved') {
-      return { message: 'App already approved', tenantId };
+      return tenant;
     }
 
     const draftCount = await this.prisma.draftPage.count({ where: { tenantId } });
@@ -188,10 +194,11 @@ export class AdminService {
 
     const result = await this.publishingService.publishAsAdmin(tenantId);
 
-    await this.prisma.tenant.update({
+    const updated = await this.prisma.tenant.update({
       where: { id: tenantId },
       data: { appStatus: 'approved', appReviewedAt: new Date() },
     });
+    if (!updated) throw new NotFoundException({ code: 'MERCHANT_NOT_FOUND', message: 'Merchant not found' });
 
     return { ...result, appStatus: 'approved' };
   }
@@ -201,12 +208,16 @@ export class AdminService {
 
     const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId } });
     if (!tenant) throw new NotFoundException({ code: 'MERCHANT_NOT_FOUND', message: 'Merchant not found' });
+    if (tenant.appStatus === 'rejected') {
+      return tenant;
+    }
     if (!reason?.trim()) throw new BadRequestException('A rejection reason is required');
 
-    await this.prisma.tenant.update({
+    const updated = await this.prisma.tenant.update({
       where: { id: tenantId },
       data: { appStatus: 'rejected', appReviewedAt: new Date() },
     });
+    if (!updated) throw new NotFoundException({ code: 'MERCHANT_NOT_FOUND', message: 'Merchant not found' });
 
     return { message: 'App design rejected', tenantId, reason: reason.trim() };
   }
