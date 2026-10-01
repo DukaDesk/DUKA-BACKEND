@@ -141,6 +141,44 @@ export class PublishingService {
     return result;
   }
 
+  /**
+   * Admin-bypass publish for stage-2 app approval. Mirrors publish() but
+   * skips the owner/manager membership check — the platform operator has
+   * already reviewed the drafts, and THEY are the approver, not a member.
+   */
+  async publishAsAdmin(tenantId: string) {
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { slug: true },
+    });
+    if (!tenant) throw new NotFoundException({ code: 'MERCHANT_NOT_FOUND', message: 'Merchant not found' });
+
+    const result = await this.publishFromDrafts(tenantId, tenant.slug);
+
+    await this.prisma.tenant.update({
+      where: { id: tenantId },
+      data: { status: 'published', publishedAt: new Date() },
+    });
+
+    await this.releases.invalidate(tenantId, tenant.slug);
+
+    this.eventBus.publish({
+      type: 'ReleasePublished',
+      aggregateId: tenantId,
+      data: {
+        tenantId,
+        version: result.version,
+        releaseId: result.releaseId,
+        checksum: result.checksum,
+      },
+    });
+
+    this.logger.log(
+      `Admin-approved publish v${result.version} (${result.releaseId}) for tenant ${tenantId}`,
+    );
+    return result;
+  }
+
   private async publishClientManifest(
     tenantId: string,
     slug: string,

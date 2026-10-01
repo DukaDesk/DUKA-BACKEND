@@ -11,6 +11,7 @@ import { MerchantsService } from './merchants.service';
 import { TenantConfigService } from './tenant-config.service';
 import { SubscriptionService } from './subscription.service';
 import { UpdateTenantDto } from './dto/update-tenant.dto';
+import { SubmitKycDto } from './dto/submit-kyc.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { TenantResolverService } from '../../shared/tenant/tenant-resolver.service';
@@ -49,6 +50,27 @@ export class MerchantsAppController {
   async publish(@CurrentUser('id') userId: string) {
     const tenantId = await this.getTenantId(userId);
     return this.merchantsService.publish(tenantId, userId);
+  }
+
+  @Post('compliance')
+  @ApiOperation({ summary: 'Submit compliance documents for stage-1 verification' })
+  async submitKyc(@CurrentUser('id') userId: string, @Body() dto: SubmitKycDto) {
+    const tenantId = await this.getTenantId(userId);
+    return this.merchantsService.submitKyc(tenantId, userId, dto);
+  }
+
+  @Get('compliance')
+  @ApiOperation({ summary: 'List my compliance submissions' })
+  async getMyKyc(@CurrentUser('id') userId: string) {
+    const tenantId = await this.getTenantId(userId);
+    return this.merchantsService.getMyKyc(tenantId, userId);
+  }
+
+  @Post('review/submit')
+  @ApiOperation({ summary: 'Submit designed app for stage-2 admin review' })
+  async submitAppReview(@CurrentUser('id') userId: string) {
+    const tenantId = await this.getTenantId(userId);
+    return this.merchantsService.submitAppReview(tenantId, userId);
   }
 
   @Get('config')

@@ -35,6 +35,52 @@ export class AdminController {
     return this.adminService.rejectTenant(id, userId, body?.reason || body?.comment || body?.rejectionReason);
   }
 
+  // ─── Two-stage approval ─────────────────────────────────────
+
+  @Post('merchants/:id/verify')
+  @ApiOperation({ summary: 'Stage-1: verify merchant credentials' })
+  verifyMerchant(@Param('id') id: string, @CurrentUser('id') userId: string) {
+    return this.adminService.verifyMerchant(id, userId);
+  }
+
+  @Post('merchants/:id/verify-reject')
+  @ApiOperation({ summary: 'Stage-1: reject merchant credentials with reason' })
+  @ApiBody({ schema: { type: 'object', properties: { reason: { type: 'string' } } } })
+  rejectCredentials(@Param('id') id: string, @CurrentUser('id') userId: string, @Body() body: { reason?: string }) {
+    return this.adminService.rejectCredentials(id, userId, body?.reason);
+  }
+
+  @Get('merchants/:id/compliance')
+  @ApiOperation({ summary: 'Stage-1: list merchant compliance submissions' })
+  getCompliance(@Param('id') id: string, @CurrentUser('id') userId: string) {
+    return this.adminService.getCompliance(id, userId);
+  }
+
+  @Get('merchants/:id/review')
+  @ApiOperation({ summary: 'Full merchant review bundle for the approval screen' })
+  getMerchantReview(@Param('id') id: string, @CurrentUser('id') userId: string) {
+    return this.adminService.getMerchantReview(id, userId);
+  }
+
+  @Get('merchants/:id/preview')
+  @ApiOperation({ summary: 'Stage-2: draft live-preview of the merchant app for review' })
+  getMerchantPreview(@Param('id') id: string, @CurrentUser('id') userId: string) {
+    return this.adminService.getMerchantPreview(id, userId);
+  }
+
+  @Post('merchants/:id/apps/approve')
+  @ApiOperation({ summary: 'Stage-2: approve app design and publish live' })
+  approveApp(@Param('id') id: string, @CurrentUser('id') userId: string) {
+    return this.adminService.approveApp(id, userId);
+  }
+
+  @Post('merchants/:id/apps/reject')
+  @ApiOperation({ summary: 'Stage-2: reject app design with reason' })
+  @ApiBody({ schema: { type: 'object', properties: { reason: { type: 'string' } } } })
+  rejectApp(@Param('id') id: string, @CurrentUser('id') userId: string, @Body() body: { reason?: string }) {
+    return this.adminService.rejectApp(id, userId, body?.reason);
+  }
+
   @Get('merchants/stats')
   @ApiOperation({ summary: 'Get merchant statistics by status' })
   getMerchantStats(@CurrentUser('id') userId: string) {
@@ -44,8 +90,10 @@ export class AdminController {
   @Get('merchants')
   @ApiOperation({ summary: 'Get all tenants (admin)' })
   @ApiQuery({ name: 'status', required: false })
-  getTenants(@CurrentUser('id') userId: string, @Query('status') status?: string) {
-    return this.adminService.getTenants(userId, status);
+  @ApiQuery({ name: 'verification', required: false, description: 'Filter by stage-1 verification: pending | verified | rejected' })
+  @ApiQuery({ name: 'appStatus', required: false, description: 'Filter by stage-2 app review: none | in_review | approved | rejected' })
+  getTenants(@CurrentUser('id') userId: string, @Query('status') status?: string, @Query('verification') verification?: string, @Query('appStatus') appStatus?: string) {
+    return this.adminService.getTenants(userId, status, verification, appStatus);
   }
 
   @Get('merchants/:id')

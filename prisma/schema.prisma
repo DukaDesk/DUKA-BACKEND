@@ -1791,6 +1791,12 @@ model Tenant {
   publishedAt     DateTime?
   draftVersion    Int          @default(0)
   activeReleaseId String?
+  // Two-stage approval: stage-1 merchant verification, stage-2 app approval.
+  // TenantStatus (draft/published/...) keeps legacy lifecycle untouched.
+  verificationStatus String @default("pending")
+  verifiedAt         DateTime?
+  appStatus          String @default("none")
+  appReviewedAt      DateTime?
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
 
@@ -1821,6 +1827,7 @@ model Tenant {
   integrationConnectors IntegrationConnector[]
   forms               Form[]
   paymentAccounts     TenantPaymentAccount[]
+  kycSubmissions      KycSubmission[]
 
   @@map("tenants")
 }
@@ -1840,6 +1847,31 @@ model TenantUser {
   @@index([tenantId])
   @@index([userId])
   @@map("tenant_users")
+}
+
+// ─── Stage-1 compliance: merchant KYC submissions ────────────
+// Merchants submit business credentials from their portal; a platform
+// operator reviews them before stage-1 verification. Documents are
+// stored as media URLs (see Media) inside the documents JSON.
+
+model KycSubmission {
+  id           String   @id @default(uuid())
+  tenantId     String
+  businessName String?
+  regNo        String?
+  taxId        String?
+  documents    Json?
+  status       String   @default("pending")
+  reviewNote   String?
+  reviewedBy   String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([status])
+  @@map("kyc_submissions")
 }
 
 model Consent {

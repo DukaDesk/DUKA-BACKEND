@@ -259,4 +259,57 @@ export class MerchantsService {
       throw new ForbiddenException({ code: 'NOT_OWNER', message: 'Only merchant owners and managers can perform this action' });
     }
   }
+
+  // ─── Two-stage approval: merchant side ───────────────────────
+  // Stage-1: submit compliance documents for admin verification.
+  // Re-submitting resets a rejection back to pending review.
+
+  async submitKyc(tenantId: string, userId: string, dto: { businessName?: string; regNo?: string; taxId?: string; documents?: any }) {
+    await this.verifyOwnership(tenantId, userId);
+
+    const submission = await this.prisma.kycSubmission.create({
+      data: {
+        tenantId,
+        businessName: dto.businessName,
+        regNo: dto.regNo,
+        taxId: dto.taxId,
+        documents: (dto.documents ?? []) as any,
+        status: 'pending',
+      },
+    });
+
+    await this.prisma.tenant.update({
+      where: { id: tenantId },
+      data: { verificationStatus: 'pending' },
+    });
+
+    return submission;
+  }
+
+  async getMyKyc(tenantId: string, userId: string) {
+    await this.verifyOwnership(tenantId, userId);
+
+    return this.prisma.kycSubmission.findMany({
+      where: { tenantId },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  // Stage-2: submit the designed app for admin review. Requires a
+  // verified merchant; moves the app into the review queue.
+
+  async submitAppReview(tenantId: string, userId: string) {
+    await this.verifyOwnership(tenantId, userId);
+
+    const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId } });
+    if (!tenant) throw new NotFoundException({ code: 'MERCHANT_NOT_FOUND', message: 'Merchant not found' });
+    if ((tenant as any).verificationStatus !== 'verified') {
+      throw new ForbiddenException({ code: 'MERCHANT_NOT_VERIFIED', message: 'Merchant must pass verification before submitting the app for review' });
+    }
+
+    return this.prisma.tenant.update({
+      where: { id: tenantId },
+      data: { appStatus: 'in_review' },
+    });
+  }
 }

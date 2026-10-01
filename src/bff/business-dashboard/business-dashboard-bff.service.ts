@@ -26,10 +26,14 @@ export class BusinessDashboardBffService {
     };
   }
 
-  async getTenantsList(status?: string, page = 1, limit = 20) {
+  async getTenantsList(status?: string, page = 1, limit = 20, verification?: string, appStatus?: string) {
     const where: any = {};
     const allowedStatuses = ['draft', 'published', 'suspended', 'rejected'];
     if (status && allowedStatuses.includes(status)) where.status = status;
+    const allowedVerification = ['pending', 'verified', 'rejected'];
+    if (verification && allowedVerification.includes(verification)) where.verificationStatus = verification;
+    const allowedApp = ['none', 'in_review', 'approved', 'rejected'];
+    if (appStatus && allowedApp.includes(appStatus)) where.appStatus = appStatus;
 
     const skip = (page - 1) * limit;
     const [data, total] = await Promise.all([
