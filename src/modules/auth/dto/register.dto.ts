@@ -44,6 +44,16 @@ export class RegisterDto {
   @IsString()
   businessName?: string;
 
+  @ApiPropertyOptional({ example: 'Religion', description: 'Desk category — presets dashboard tools (Business, Corporate, Legal, Religion, Education, Healthcare, Food & Hospitality, Services, Events, Nonprofit, Personal)' })
+  @IsOptional()
+  @IsString()
+  category?: string;
+
+  @ApiPropertyOptional({ example: 'Religion', description: 'Alias of category (accepted for frontend compat)' })
+  @IsOptional()
+  @IsString()
+  businessCategory?: string;
+
   @ApiPropertyOptional({ example: 'a3f9…', description: 'Admin invite token — required when role is present (invite-only admin signup); omit for merchant self-serve signup' })
   @IsOptional()
   @IsString()

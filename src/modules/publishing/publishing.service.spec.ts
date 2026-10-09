@@ -120,7 +120,7 @@ describe('PublishingService', () => {
       expect(manifestCompiler.compile).not.toHaveBeenCalled();
       expect(prisma.release.create).toHaveBeenCalledTimes(1);
       const createArgs = prisma.release.create.mock.calls[0][0];
-      expect(createArgs.data.status).toBe('published');
+      expect(createArgs.data.status).toBe('pending_review');
       // Object screens preserved exactly
       expect(createArgs.data.manifest.screens).toEqual(fixtureManifest.screens);
       expect(Array.isArray(createArgs.data.manifest.screens)).toBe(false);
@@ -128,6 +128,7 @@ describe('PublishingService', () => {
         releaseId: 'rel-1',
         tenantId: 't1',
         channel: 'production',
+        status: 'pending_review',
         version: expect.any(String),
         checksum: expect.any(String),
       });
@@ -171,24 +172,14 @@ describe('PublishingService', () => {
     });
   });
 
-  describe('B2 — activation', () => {
-    it('runs activation inside a transaction and sets activeReleaseId', async () => {
+  describe('B2 — review submission', () => {
+    it('stores a private candidate without changing the active release', async () => {
       const { service, prisma } = createService();
       await service.publish('t1', 'u1', { manifest: fixtureManifest });
 
-      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
-      expect(prisma.release.updateMany).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: { tenantId: 't1', status: 'published', channel: 'production' },
-          data: { status: 'superseded' },
-        }),
-      );
-      expect(prisma.tenant.update).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: { id: 't1' },
-          data: expect.objectContaining({ activeReleaseId: expect.anything() }),
-        }),
-      );
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+      expect(prisma.release.updateMany).not.toHaveBeenCalled();
+      expect(prisma.tenant.update).not.toHaveBeenCalled();
     });
   });
 
@@ -247,6 +238,26 @@ describe('PublishingService', () => {
         { evaluate: jest.fn(), assertCompatible: jest.fn() } as any,
       );
       await expect(svc.rollback('t1', '1.0.1', 'u1')).rejects.toThrow(ForbiddenException);
+    });
+
+    it('submits an approved rollback target as a new review candidate', async () => {
+      const { service, prisma } = createService();
+      prisma.release.findUnique.mockResolvedValue({
+        id: 'previous-release',
+        version: '1.0.0',
+        status: 'superseded',
+        manifest: fixtureManifest,
+        capabilityMeta: {},
+        assetManifest: {},
+      });
+
+      const result = await service.rollback('t1', '1.0.0', 'u1');
+
+      expect(result).toMatchObject({ status: 'pending_review', rollbackFrom: '1.0.0' });
+      expect(prisma.release.create).toHaveBeenCalledWith(expect.objectContaining({
+        data: expect.objectContaining({ status: 'pending_review' }),
+      }));
+      expect(prisma.tenant.update).not.toHaveBeenCalled();
     });
   });
 

@@ -1787,6 +1787,7 @@ model Tenant {
   email       String?
   phone       String?
   logo        String?
+  category    String?
   status          TenantStatus @default(draft)
   publishedAt     DateTime?
   draftVersion    Int          @default(0)

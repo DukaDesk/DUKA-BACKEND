@@ -55,14 +55,20 @@ export class ActiveReleaseService {
         message: 'Merchant not found',
       });
     }
+    if (tenant.status !== 'published') {
+      throw new NotFoundException({
+        code: 'APP_NOT_APPROVED',
+        message: 'This app is not approved for public delivery',
+      });
+    }
 
     if (opts?.version) {
       const release = await this.prisma.release.findFirst({
         where: {
           tenantId: tenant.id,
           version: opts.version,
-          channel: opts.allowNonProductionChannel ? undefined : 'production',
-          status: { not: 'draft' },
+          channel: 'production',
+          status: 'published',
         },
         orderBy: { publishedAt: 'desc' },
       });
@@ -161,7 +167,7 @@ export class ActiveReleaseService {
       const release = await this.prisma.release.findUnique({
         where: { id: releaseId },
       });
-      if (release?.manifest && release.status !== 'draft') {
+      if (release?.manifest && release.status === 'published' && release.channel === 'production') {
         await this.redis.set(snapKey, JSON.stringify(release), 3600);
         await this.cacheActiveId(tenant.id, release.id);
         return release;

@@ -35,6 +35,26 @@ export class AdminController {
     return this.adminService.rejectTenant(id, userId, body?.reason || body?.comment || body?.rejectionReason);
   }
 
+  @Get('merchants/:id/review')
+  getMerchantAppReview(@Param('id') id: string, @CurrentUser('id') userId: string) {
+    return this.adminService.getMerchantAppReview(id, userId);
+  }
+
+  @Get('merchants/:id/preview')
+  getMerchantAppPreview(@Param('id') id: string, @CurrentUser('id') userId: string) {
+    return this.adminService.getMerchantAppPreview(id, userId);
+  }
+
+  @Post('merchants/:id/apps/approve')
+  approveMerchantApp(@Param('id') id: string, @CurrentUser('id') userId: string) {
+    return this.adminService.approveMerchantApp(id, userId);
+  }
+
+  @Post('merchants/:id/apps/reject')
+  rejectMerchantApp(@Param('id') id: string, @CurrentUser('id') userId: string, @Body() body: { reason?: string }) {
+    return this.adminService.rejectMerchantApp(id, userId, body?.reason);
+  }
+
   @Get('merchants/stats')
   @ApiOperation({ summary: 'Get merchant statistics by status' })
   getMerchantStats(@CurrentUser('id') userId: string) {
@@ -50,8 +70,8 @@ export class AdminController {
 
   @Get('merchants/:id')
   @ApiOperation({ summary: 'Get tenant detail' })
-  getTenantDetail(@Param('id') id: string) {
-    return this.adminService.getTenantDetail(id);
+  getTenantDetail(@Param('id') id: string, @CurrentUser('id') userId: string) {
+    return this.adminService.getTenantDetail(id, userId);
   }
 
   @Post('merchants')

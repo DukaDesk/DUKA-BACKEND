@@ -15,6 +15,16 @@ export class GoogleLoginDto {
   @IsOptional()
   @IsString()
   lastName?: string;
+
+  @ApiProperty({ required: false, description: 'Desk category preset at signup (Church, School, Booking, ...)' })
+  @IsOptional()
+  @IsString()
+  category?: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  businessCategory?: string;
 }
 
 export class AppleLoginDto {
@@ -40,4 +50,9 @@ export class AppleLoginDto {
   @IsOptional()
   @IsString()
   lastName?: string;
+
+  @ApiProperty({ required: false, description: 'Desk category preset at signup' })
+  @IsOptional()
+  @IsString()
+  category?: string;
 }

@@ -104,30 +104,23 @@ export class PublishingService {
     let result: any;
 
     if (body?.manifest !== undefined && body?.manifest !== null) {
-      result = await this.publishClientManifest(tenantId, tenant.slug, {
+      result = await this.publishClientManifest(tenantId, {
         manifest: body.manifest,
         version: body.version,
       });
     } else {
-      result = await this.publishFromDrafts(tenantId, tenant.slug);
+      result = await this.publishFromDrafts(tenantId);
     }
 
-    // B7: reconcile tenant status only after durable activation.
-    await this.prisma.tenant.update({
-      where: { id: tenantId },
-      data: { status: 'published', publishedAt: new Date() },
-    });
-
-    await this.releases.invalidate(tenantId, tenant.slug);
-
     this.eventBus.publish({
-      type: 'ReleasePublished',
+      type: 'ReleaseSubmittedForReview',
       aggregateId: tenantId,
       data: {
         tenantId,
         version: result.version,
         releaseId: result.releaseId,
         checksum: result.checksum,
+        status: 'pending_review',
       },
     });
 
@@ -136,14 +129,13 @@ export class PublishingService {
     }
 
     this.logger.log(
-      `Published v${result.version} (${result.releaseId}) for tenant ${tenantId}`,
+      `Submitted v${result.version} (${result.releaseId}) for review for tenant ${tenantId}`,
     );
     return result;
   }
 
   private async publishClientManifest(
     tenantId: string,
-    slug: string,
     body: { manifest: any; version?: string },
   ) {
     // B1: invalid manifest → 422, never fall through to draft compilation.
@@ -161,9 +153,8 @@ export class PublishingService {
 
     const { version, buildNumber } = await this.allocateVersion(tenantId, checksum, body.version);
 
-    const activated = await this.activateRelease({
+    const submitted = await this.createReviewRelease({
       tenantId,
-      slug,
       version,
       buildNumber,
       manifest,
@@ -177,10 +168,10 @@ export class PublishingService {
       assetManifest: this.buildAssetManifest(manifest),
     });
 
-    return { ...activated, compatibility: { contract: compat.contract, warnings: compat.warnings } };
+    return { ...submitted, compatibility: { contract: compat.contract, warnings: compat.warnings } };
   }
 
-  private async publishFromDrafts(tenantId: string, slug: string) {
+  private async publishFromDrafts(tenantId: string) {
     const validation = await this.validationEngine.validateDraft(tenantId);
     if (!validation.passed) {
       throw new BadRequestException({
@@ -195,9 +186,8 @@ export class PublishingService {
     // B7: draft-compiled manifests must satisfy the same runtime contract.
     const compat = await this.compatibility.assertCompatible(compiled.manifest, { tenantId });
 
-    const activated = await this.activateRelease({
+    const submitted = await this.createReviewRelease({
       tenantId,
-      slug,
       version: compiled.version,
       buildNumber: compiled.buildNumber,
       manifest: compiled.manifest,
@@ -207,17 +197,15 @@ export class PublishingService {
       assetManifest: compiled.assetManifest ?? null,
     });
 
-    return { ...activated, compatibility: { contract: compat.contract, warnings: compat.warnings } };
+    return { ...submitted, compatibility: { contract: compat.contract, warnings: compat.warnings } };
   }
 
   /**
-   * One atomic activation: supersede previous published → insert immutable
-   * release → set tenant.activeReleaseId. Draft rows are retained (B2 policy:
-   * drafts stay editable after publish; publishing is the deploy boundary).
+   * A merchant submission is immutable but not publicly active until an admin
+   * approves it. Existing live releases remain available during review.
    */
-  private async activateRelease(input: {
+  private async createReviewRelease(input: {
     tenantId: string;
-    slug: string;
     version: string;
     buildNumber: number;
     manifest: any;
@@ -229,38 +217,25 @@ export class PublishingService {
     const { tenantId, version, buildNumber, manifest, checksum } = input;
 
     try {
-      const release = await this.prisma.$transaction(async (tx) => {
-        await tx.release.updateMany({
-          where: { tenantId, status: 'published', channel: 'production' },
-          data: { status: 'superseded' },
-        });
-
-        const created = await tx.release.create({
-          data: {
-            tenantId,
-            version,
-            buildNumber,
-            manifest: manifest as any,
-            themeBundle: input.themeBundle ?? undefined,
-            capabilityMeta: input.capabilityMeta ?? undefined,
-            assetManifest: input.assetManifest ?? undefined,
-            checksum,
-            status: 'published',
-            channel: 'production',
-            publishedAt: new Date(),
-          },
-        });
-
-        await tx.tenant.update({
-          where: { id: tenantId },
-          data: { activeReleaseId: created.id, draftVersion: 0 },
-        });
-
-        return created;
+      const release = await this.prisma.release.create({
+        data: {
+          tenantId,
+          version,
+          buildNumber,
+          manifest: manifest as any,
+          themeBundle: input.themeBundle ?? undefined,
+          capabilityMeta: input.capabilityMeta ?? undefined,
+          assetManifest: input.assetManifest ?? undefined,
+          checksum,
+          status: 'pending_review',
+          channel: 'production',
+          publishedAt: new Date(),
+        },
       });
 
       return {
-        message: 'Published successfully',
+        message: 'Submitted for admin review',
+        status: release.status,
         releaseId: release.id,
         tenantId,
         channel: release.channel,
@@ -276,12 +251,9 @@ export class PublishingService {
           where: { tenantId, version },
         });
         if (existing && existing.checksum === checksum) {
-          await this.prisma.tenant.update({
-            where: { id: tenantId },
-            data: { activeReleaseId: existing.id },
-          });
           return {
-            message: 'Published successfully',
+            message: existing.status === 'published' ? 'Already approved' : 'Already submitted for admin review',
+            status: existing.status,
             releaseId: existing.id,
             tenantId,
             channel: existing.channel,
@@ -407,6 +379,34 @@ export class PublishingService {
     });
   }
 
+  async getSubmissionStatus(tenantId: string, userId: string) {
+    await this.verifyPublishingPermission(tenantId, userId);
+    const [tenant, latest] = await Promise.all([
+      this.prisma.tenant.findUnique({
+        where: { id: tenantId },
+        select: { activeReleaseId: true },
+      }),
+      this.prisma.release.findFirst({
+        where: { tenantId },
+        orderBy: { createdAt: 'desc' },
+        select: { id: true, version: true, status: true, releaseNotes: true, capabilityMeta: true, createdAt: true },
+      }),
+    ]);
+    if (!tenant) throw new NotFoundException({ code: 'MERCHANT_NOT_FOUND', message: 'Merchant not found' });
+    const status = latest?.status === 'pending_review'
+      ? 'in_review'
+      : latest?.status === 'rejected'
+        ? 'rejected'
+        : latest && latest.id === tenant.activeReleaseId && latest.status === 'published'
+          ? 'live'
+          : 'draft';
+    return {
+      status,
+      release: latest ? { ...latest, rollbackFrom: (latest.capabilityMeta as any)?.rollbackFrom } : null,
+      activeReleaseId: tenant.activeReleaseId,
+    };
+  }
+
   async getRelease(tenantId: string, version: string, userId: string) {
     await this.verifyPublishingPermission(tenantId, userId);
     const release = await this.prisma.release.findUnique({
@@ -420,62 +420,48 @@ export class PublishingService {
   }
 
   async rollback(tenantId: string, targetVersion: string, userId: string) {
-    // B5: owner/manager membership required — controller now supplies userId.
     await this.verifyPublishingPermission(tenantId, userId);
 
     const target = await this.prisma.release.findUnique({
       where: { tenantId_version: { tenantId, version: targetVersion } },
     });
-    if (!target || target.status === 'draft' || !target.manifest) {
+    if (!target || !['published', 'superseded', 'rolled_back'].includes(target.status) || !target.manifest) {
       throw new NotFoundException('Target release not found');
     }
 
-    const tenant = await this.prisma.tenant.findUnique({
-      where: { id: tenantId },
-      select: { slug: true },
-    });
+    const manifest = JSON.parse(JSON.stringify(target.manifest));
+    const provisionalChecksum = crypto.createHash('sha256').update(JSON.stringify(manifest)).digest('hex');
+    const allocation = await this.allocateVersion(tenantId, provisionalChecksum);
+    manifest.version = allocation.version;
+    const checksum = crypto.createHash('sha256').update(JSON.stringify(manifest)).digest('hex');
+    const compat = await this.compatibility.assertCompatible(manifest, { tenantId });
+    const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId }, select: { slug: true } });
+    if (!tenant) throw new NotFoundException({ code: 'MERCHANT_NOT_FOUND', message: 'Merchant not found' });
 
-    const previous = await this.prisma.release.findFirst({
-      where: { tenantId, status: 'published', channel: 'production' },
-      orderBy: [{ publishedAt: 'desc' }, { buildNumber: 'desc' }],
+    const submission = await this.createReviewRelease({
+      tenantId,
+      version: allocation.version,
+      buildNumber: allocation.buildNumber,
+      manifest,
+      checksum,
+      themeBundle: manifest.theme ?? null,
+      capabilityMeta: { ...((target.capabilityMeta as any) || {}), rollbackFrom: target.version, contract: compat.contract },
+      assetManifest: target.assetManifest ?? this.buildAssetManifest(manifest),
     });
-
-    await this.prisma.$transaction(async (tx) => {
-      if (previous && previous.id !== target.id) {
-        await tx.release.update({
-          where: { id: previous.id },
-          data: { status: 'rolled_back' },
-        });
-      }
-      await tx.release.update({
-        where: { id: target.id },
-        data: { status: 'published', publishedAt: new Date(), channel: 'production' },
-      });
-      await tx.tenant.update({
-        where: { id: tenantId },
-        data: { activeReleaseId: target.id },
-      });
-    });
-
-    await this.releases.invalidate(tenantId, tenant?.slug);
 
     this.eventBus.publish({
-      type: 'RollbackCompleted',
+      type: 'ReleaseSubmittedForReview',
       aggregateId: tenantId,
       data: {
         tenantId,
-        fromVersion: previous?.version,
-        toVersion: targetVersion,
-        releaseId: target.id,
+        fromVersion: target.version,
+        version: submission.version,
+        releaseId: submission.releaseId,
+        status: 'pending_review',
       },
     });
 
-    return {
-      message: `Rolled back to v${targetVersion}`,
-      releaseId: target.id,
-      version: target.version,
-      checksum: target.checksum,
-    };
+    return { ...submission, message: `Rollback of v${targetVersion} submitted for admin review`, rollbackFrom: target.version };
   }
 
   async getCurrentDraft(tenantId: string, userId: string) {

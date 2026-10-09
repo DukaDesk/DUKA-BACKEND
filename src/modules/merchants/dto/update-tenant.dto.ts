@@ -26,4 +26,9 @@ export class UpdateTenantDto {
   @IsOptional()
   @IsString()
   logo?: string;
+
+  @ApiPropertyOptional({ example: 'Religion', description: 'Desk category — presets dashboard tools (broad industry)' })
+  @IsOptional()
+  @IsString()
+  category?: string;
 }

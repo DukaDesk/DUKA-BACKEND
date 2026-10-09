@@ -82,6 +82,12 @@ export class PublishingController {
     return this.publishingService.getReleaseHistory(id, userId);
   }
 
+  @Get('submission')
+  @ApiOperation({ summary: 'Get current app submission status (owner/manager)' })
+  getSubmissionStatus(@Param('id') id: string, @CurrentUser('id') userId: string) {
+    return this.publishingService.getSubmissionStatus(id, userId);
+  }
+
   @Get('releases/:version')
   @ApiOperation({ summary: 'Get specific release (owner/manager, non-draft)' })
   getRelease(

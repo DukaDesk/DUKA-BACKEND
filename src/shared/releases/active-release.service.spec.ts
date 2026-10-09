@@ -125,6 +125,16 @@ describe('ActiveReleaseService (B3 — one canonical public reader)', () => {
     await expect(service.getActiveRelease('missing')).rejects.toThrow(NotFoundException);
   });
 
+  it('does not serve an active release while the tenant is not approved', async () => {
+    const { service, prisma } = makeService({
+      tenant: { id: 't1', slug: 'acme', status: 'draft', activeReleaseId: 'rel-b' },
+    });
+    await expect(service.getActiveRelease('t1')).rejects.toMatchObject({
+      response: expect.objectContaining({ code: 'APP_NOT_APPROVED' }),
+    });
+    expect(prisma.release.findUnique).not.toHaveBeenCalled();
+  });
+
   it('does not serve draft releases via explicit version pin', async () => {
     const draft = {
       id: 'rel-d',

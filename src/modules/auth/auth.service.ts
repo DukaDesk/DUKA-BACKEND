@@ -130,6 +130,7 @@ export class AuthService {
 
   private async registerMerchant(dto: RegisterDto, passwordHash: string) {
     const businessName = dto.businessName?.trim() || `${dto.firstName.trim()}'s Business`;
+    const category = (dto.category?.trim() || (dto as any).businessCategory?.trim() || null) as string | null;
     const user = await this.prisma.user.create({
       data: {
         email: dto.email,
@@ -143,7 +144,7 @@ export class AuthService {
     });
 
     const baseSlug = this.slugify(businessName);
-    let tenant: { id: string; name: string; slug: string } | null = null;
+    let tenant: { id: string; name: string; slug: string; category?: string | null } | null = null;
     let lastError: unknown = null;
     for (let attempt = 0; attempt < 3 && !tenant; attempt++) {
       const slug = attempt === 0 ? baseSlug : `${baseSlug.slice(0, 32)}-${Math.floor(100 + Math.random() * 900)}`;
@@ -153,7 +154,8 @@ export class AuthService {
           slug,
           email: dto.email,
           phone: dto.phoneNumber,
-        });
+          ...(category ? { category } : {}),
+        } as any);
       } catch (e: any) {
         lastError = e;
         if (e?.response?.message !== 'A merchant with this slug already exists' && e?.message !== 'A merchant with this slug already exists') throw e;
@@ -320,6 +322,28 @@ export class AuthService {
       });
     }
 
+    // If the client preset a desk category at signup, persist it on the
+    // user's tenant when empty (new Google users may not have a tenant yet —
+    // generateTokens still returns whatever exists).
+    const googleCategory = (dto as any)?.category?.trim() || (dto as any)?.businessCategory?.trim() || null;
+    if (googleCategory) {
+      try {
+        const memberships = await this.prisma.tenantUser.findMany({
+          where: { userId: user.id },
+          select: { tenantId: true },
+        });
+        for (const m of memberships) {
+          try {
+            await this.merchantsService.update(m.tenantId, user.id, { category: googleCategory } as any);
+          } catch {
+            // update() enforces owner/manager — Google user may be staff; skip.
+          }
+        }
+      } catch {
+        // best-effort only
+      }
+    }
+
     const tokens = await this.generateTokens(user.id, user.email);
     return {
       user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, status: user.status },
@@ -391,12 +415,40 @@ export class AuthService {
   }
 
   private async generateTokens(userId: string, email: string) {
-    const memberships = await this.prisma.tenantUser.findMany({
-      where: { userId, status: 'active' },
-      select: { role: true, tenant: { select: { id: true, name: true, slug: true } } },
-      orderBy: { tenantId: 'asc' },
-    });
-    const merchants = memberships.map(({ role, tenant }) => ({ ...tenant, role }));
+    let memberships: any[];
+    try {
+      memberships = await this.prisma.tenantUser.findMany({
+        where: { userId, status: 'active' },
+        select: { role: true, tenant: { select: { id: true, name: true, slug: true, category: true } } },
+        orderBy: { tenantId: 'asc' },
+      });
+    } catch (e: any) {
+      if (/column .*category.*does not exist|Unknown column/i.test(e?.message || '')) {
+        memberships = await this.prisma.tenantUser.findMany({
+          where: { userId, status: 'active' },
+          select: { role: true, tenant: { select: { id: true, name: true, slug: true } } },
+          orderBy: { tenantId: 'asc' },
+        });
+      } else {
+        throw e;
+      }
+    }
+    // Backfill category from TenantConfig when the column is empty/pre-migration.
+    const merchants = await Promise.all(
+      memberships.map(async ({ role, tenant }: any) => {
+        let category = tenant?.category || null;
+        if (!category && tenant?.id) {
+          try {
+            const cfg = await this.prisma.tenantConfig.findUnique({ where: { tenantId: tenant.id } });
+            const config = (cfg as any)?.config ?? {};
+            category = config?.app?.category || config?.category || null;
+          } catch {
+            category = null;
+          }
+        }
+        return { ...tenant, role, category };
+      }),
+    );
     const payload = { sub: userId, email };
 
     const accessToken = this.jwtService.sign(payload, {

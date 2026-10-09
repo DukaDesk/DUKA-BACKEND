@@ -19,6 +19,14 @@ export class MobileBffService {
    * the identical active production snapshot + release receipt.
    */
   async getTenantManifest(identifier: string) {
+    const tenant = await this.releases.resolveTenant(identifier);
+    if (!tenant || tenant.status !== 'published' || !tenant.activeReleaseId) {
+      throw new NotFoundException({
+        code: 'APP_NOT_APPROVED',
+        message: 'This app is not approved for public delivery',
+      });
+    }
+
     const cacheKey = `manifest:${identifier}`;
     const cached = await this.redis.get(cacheKey);
     if (cached) {
