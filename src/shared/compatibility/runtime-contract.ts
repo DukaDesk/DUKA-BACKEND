@@ -129,6 +129,8 @@ export const SUPPORTED_COMPONENT_TYPES: readonly string[] = [
   'line',
   'arrow',
   'dynamic_card',
+  // Native video block (mobile expo-video renderer)
+  'video',
 ];
 
 /** Action types registered in ActionBuilderService. Unknown → warn (reported). */
