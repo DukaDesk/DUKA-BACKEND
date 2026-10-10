@@ -117,6 +117,18 @@ export const SUPPORTED_COMPONENT_TYPES: readonly string[] = [
   // Shell overlay/modal nodes (KB: overlays preserve props/actions)
   'modal',
   'overlay',
+  // Phase 0 builder aliases (mobile src/components/aliases.tsx — same renderers)
+  'header_bar',
+  'menu_item',
+  'card',
+  'switch_toggle',
+  'checkbox_row',
+  'search_bar',
+  'icon',
+  'chevron',
+  'line',
+  'arrow',
+  'dynamic_card',
 ];
 
 /** Action types registered in ActionBuilderService. Unknown → warn (reported). */
