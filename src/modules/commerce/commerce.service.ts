@@ -2,6 +2,19 @@ import { Injectable, NotFoundException, BadRequestException, Logger } from '@nes
 import { PrismaService } from '../../common/prisma.service';
 import { EventBusService } from '../../shared/events/event-bus.service';
 
+// Buyer-education copy limits (mirrored in the merchant portal form).
+export const PRODUCT_DESCRIPTION_MAX = 800;
+export const PRODUCT_SHORT_DESCRIPTION_MAX = 100;
+
+export function assertProductCopy(description?: unknown, shortDescription?: unknown): void {
+  if (typeof description === 'string' && description.length > PRODUCT_DESCRIPTION_MAX) {
+    throw new BadRequestException(`Description must be ${PRODUCT_DESCRIPTION_MAX} characters or less`);
+  }
+  if (typeof shortDescription === 'string' && shortDescription.length > PRODUCT_SHORT_DESCRIPTION_MAX) {
+    throw new BadRequestException(`Short description must be ${PRODUCT_SHORT_DESCRIPTION_MAX} characters or less`);
+  }
+}
+
 @Injectable()
 export class CommerceService {
   private readonly logger = new Logger(CommerceService.name);
@@ -45,6 +58,7 @@ export class CommerceService {
     if (!this.PRODUCT_TYPES.includes(type)) {
       throw new BadRequestException(`Invalid product type. Must be one of: ${this.PRODUCT_TYPES.join(', ')}`);
     }
+    assertProductCopy(data.description, data.shortDescription);
 
     return this.prisma.product.create({
       data: {
@@ -141,6 +155,7 @@ export class CommerceService {
     if (data.type && !this.PRODUCT_TYPES.includes(data.type)) {
       throw new BadRequestException(`Invalid product type. Must be one of: ${this.PRODUCT_TYPES.join(', ')}`);
     }
+    assertProductCopy(data.description, data.shortDescription);
 
     const { images, variants, ...productData } = data;
 
