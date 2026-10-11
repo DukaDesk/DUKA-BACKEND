@@ -1,7 +1,7 @@
 import {
-  Controller, Get, Post, Param, UseGuards, Body, Headers,
+  Controller, Get, Post, Param, UseGuards, Body,
 } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiOperation, ApiBody, ApiHeader } from '@nestjs/swagger';
+import { ApiTags, ApiBearerAuth, ApiOperation, ApiBody } from '@nestjs/swagger';
 import { PublishingService } from './publishing.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -48,32 +48,15 @@ export class PublishingController {
 
   @Post('publish')
   @ApiOperation({
-    summary: 'Validate, compile, and publish (or accept client-compiled PublishedApp)',
-  })
-  @ApiHeader({ name: 'idempotency-key', required: false })
-  @ApiBody({
-    schema: {
-      type: 'object',
-      properties: {
-        manifest: {
-          type: 'object',
-          description: 'Client-compiled PublishedApp 1.0.0 (optional — if omitted, compiles from drafts)',
-        },
-        version: { type: 'string', description: 'Requested version string (optional)' },
-      },
-    },
+    summary: 'Submit a private release candidate for admin review',
+    description:
+      'Creates a pending_review release and never activates it. Public delivery starts only after an administrator approves the app.',
   })
   publish(
     @Param('id') id: string,
     @CurrentUser('id') userId: string,
-    @Headers('idempotency-key') idempotencyKey?: string,
-    @Body() body?: { manifest?: any; version?: string },
   ) {
-    return this.publishingService.publish(id, userId, {
-      manifest: body?.manifest,
-      version: body?.version,
-      idempotencyKey: idempotencyKey || undefined,
-    });
+    return this.publishingService.publish(id, userId);
   }
 
   @Get('releases')
@@ -99,7 +82,10 @@ export class PublishingController {
   }
 
   @Post('rollback/:version')
-  @ApiOperation({ summary: 'Rollback to a previous version (owner/manager)' })
+  @ApiOperation({
+    summary: 'Submit a rollback candidate for admin review',
+    description: 'Creates a pending_review release candidate and never activates it directly.',
+  })
   rollback(
     @Param('id') id: string,
     @Param('version') version: string,

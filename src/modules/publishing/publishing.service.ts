@@ -74,11 +74,46 @@ export class PublishingService {
     };
   }
 
-  /**
-   * Publish either a client-compiled PublishedApp (B1) or drafts (legacy).
-   * Activation is one transaction that supersedes the prior release, inserts
-   * the new immutable release, and points tenant.activeReleaseId at it (B2).
-   */
+  /** Save the exact client snapshot for admin preview and create an immutable
+   * private release candidate. Neither operation changes the active release. */
+  async submitForReview(tenantId: string, userId: string, submittedManifest: any) {
+    await this.verifyPublishingPermission(tenantId, userId);
+    const manifest = ManifestValidator.assertValid(submittedManifest);
+    const compat = await this.compatibility.assertCompatible(manifest, { tenantId });
+    const checksum = crypto.createHash('sha256').update(JSON.stringify(manifest)).digest('hex');
+
+    const savedDraft = await this.prisma.draft.upsert({
+      where: { id: `${tenantId}-draft` },
+      create: { id: `${tenantId}-draft`, tenantId, version: 1, manifest, status: 'in_review' },
+      update: { version: { increment: 1 }, manifest, status: 'in_review' },
+    });
+    const release = await this.publishClientManifest(tenantId, {
+      manifest,
+      version: manifest.version,
+    });
+    this.eventBus.publish({
+      type: 'ReleaseSubmittedForReview',
+      aggregateId: tenantId,
+      data: {
+        tenantId,
+        version: release.version,
+        releaseId: release.releaseId,
+        checksum,
+        status: 'pending_review',
+      },
+    });
+
+    return {
+      ...release,
+      status: 'in_review',
+      checksum,
+      submittedAt: savedDraft.updatedAt,
+      compatibility: { contract: compat.contract, warnings: compat.warnings },
+    };
+  }
+
+  /** Store a private candidate. Public activation is reserved for
+   * publishAsAdmin after app review approval. */
   async publish(
     tenantId: string,
     userId: string,
@@ -134,11 +169,7 @@ export class PublishingService {
     return result;
   }
 
-  /**
-   * Admin-bypass publish for stage-2 app approval. Mirrors publish() but
-   * skips the owner/manager membership check — the platform operator has
-   * already reviewed the drafts, and THEY are the approver, not a member.
-   */
+  /** Activate the exact candidate that an administrator reviewed. */
   async publishAsAdmin(tenantId: string) {
     const tenant = await this.prisma.tenant.findUnique({
       where: { id: tenantId },
@@ -146,30 +177,73 @@ export class PublishingService {
     });
     if (!tenant) throw new NotFoundException({ code: 'MERCHANT_NOT_FOUND', message: 'Merchant not found' });
 
-    const result = await this.publishFromDrafts(tenantId, tenant.slug);
+    const submittedDraft = await this.prisma.draft.findUnique({
+      where: { id: `${tenantId}-draft` },
+    });
+    let result: any;
+    if (submittedDraft?.status === 'in_review' && submittedDraft.manifest) {
+      const manifest = submittedDraft.manifest as Record<string, any>;
+      const checksum = crypto.createHash('sha256').update(JSON.stringify(manifest)).digest('hex');
+      let candidate = await this.prisma.release.findFirst({
+        where: { tenantId, checksum, status: 'pending_review' },
+        orderBy: { buildNumber: 'desc' },
+      });
+      if (!candidate) {
+        const submitted = await this.publishClientManifest(tenantId, { manifest, version: manifest.version });
+        candidate = await this.prisma.release.findUnique({ where: { id: submitted.releaseId } });
+      }
+      if (!candidate) throw new NotFoundException('Submitted release candidate not found');
+      result = await this.activateReviewRelease(tenantId, tenant.slug, candidate.id);
+    } else {
+      const submitted = await this.publishFromDrafts(tenantId, tenant.slug);
+      result = await this.activateReviewRelease(tenantId, tenant.slug, submitted.releaseId);
+    }
 
-    await this.prisma.tenant.update({
-      where: { id: tenantId },
-      data: { status: 'published', publishedAt: new Date() },
+    this.logger.log(`Admin-approved publish v${result.version} (${result.releaseId}) for tenant ${tenantId}`);
+    return result;
+  }
+
+  private async activateReviewRelease(tenantId: string, slug: string, releaseId: string) {
+    const candidate = await this.prisma.release.findFirst({
+      where: { id: releaseId, tenantId, status: { in: ['pending_review', 'published'] } },
+    });
+    if (!candidate?.manifest) throw new NotFoundException('Submitted release candidate not found');
+
+    const publishedAt = new Date();
+    const release = await this.prisma.$transaction(async (tx) => {
+      await tx.release.updateMany({
+        where: { tenantId, status: 'published', channel: 'production', id: { not: candidate.id } },
+        data: { status: 'superseded' },
+      });
+      const approved = candidate.status === 'published'
+        ? candidate
+        : await tx.release.update({
+            where: { id: candidate.id },
+            data: { status: 'published', channel: 'production', publishedAt },
+          });
+      await tx.tenant.update({
+        where: { id: tenantId },
+        data: { status: 'published', publishedAt, activeReleaseId: approved.id },
+      });
+      return approved;
     });
 
-    await this.releases.invalidate(tenantId, tenant.slug);
-
+    await this.releases.invalidate(tenantId, slug);
     this.eventBus.publish({
       type: 'ReleasePublished',
       aggregateId: tenantId,
-      data: {
-        tenantId,
-        version: result.version,
-        releaseId: result.releaseId,
-        checksum: result.checksum,
-      },
+      data: { tenantId, version: release.version, releaseId: release.id, checksum: release.checksum },
     });
-
-    this.logger.log(
-      `Admin-approved publish v${result.version} (${result.releaseId}) for tenant ${tenantId}`,
-    );
-    return result;
+    return {
+      message: 'Published successfully',
+      releaseId: release.id,
+      tenantId,
+      channel: release.channel,
+      version: release.version,
+      buildNumber: release.buildNumber,
+      checksum: release.checksum,
+      publishedAt: release.publishedAt,
+    };
   }
 
   private async publishClientManifest(

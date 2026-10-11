@@ -204,8 +204,12 @@ export class AdminService {
       throw new ConflictException('The app must be submitted for review before it can be approved');
     }
 
-    const draftCount = await this.prisma.draftPage.count({ where: { tenantId, isActive: true } });
-    if (draftCount === 0) {
+    const [draftCount, submittedDraft] = await Promise.all([
+      this.prisma.draftPage.count({ where: { tenantId, isActive: true } }),
+      this.prisma.draft.findUnique({ where: { id: `${tenantId}-draft` } }),
+    ]);
+    const hasSubmittedManifest = submittedDraft?.status === 'in_review' && !!submittedDraft.manifest;
+    if (draftCount === 0 && !hasSubmittedManifest) {
       throw new BadRequestException('No app design submitted for review');
     }
 

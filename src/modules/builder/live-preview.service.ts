@@ -64,6 +64,11 @@ export class LivePreviewService {
       include: {
         theme: true,
         navigation: true,
+        drafts: {
+          where: { status: 'in_review' },
+          orderBy: { updatedAt: 'desc' },
+          take: 1,
+        },
         draftPages: {
           where: { isActive: true },
           orderBy: { sortOrder: 'asc' },
@@ -98,18 +103,26 @@ export class LivePreviewService {
       ? this.themeCompiler.compileForPreview(tenant.theme)
       : undefined;
 
-    let pages = await Promise.all(
-      tenant.draftPages.map((page) => this.renderPage(page, defaultContext)),
-    );
+    const reviewManifest = tenant.appStatus === 'in_review'
+      ? tenant.drafts?.[0]?.manifest as Record<string, any> | undefined
+      : undefined;
+    let pages = reviewManifest
+      ? await this.renderPublishedScreens(reviewManifest, defaultContext)
+      : await Promise.all(tenant.draftPages.map((page) => this.renderPage(page, defaultContext)));
     let previewTheme = theme;
     let navigation = tenant.navigation?.items || [];
     let source: PreviewOutput['source'] = pages.length ? 'draft' : 'empty';
     let releaseVersion: string | undefined;
 
+    if (reviewManifest && pages.length > 0) {
+      previewTheme = reviewManifest.theme || previewTheme;
+      navigation = this.previewNavigation(reviewManifest.navigation) || navigation;
+    }
+
     // Some legacy merchants publish an app before draft pages are initialized.
     // In that case, review the active immutable release instead of showing an
     // empty phone preview while the merchant has a published app.
-    if (pages.length === 0) {
+    if (pages.length === 0 && !reviewManifest) {
       const release = tenant.activeReleaseId
         ? await this.prisma.release.findUnique({ where: { id: tenant.activeReleaseId } })
         : await this.prisma.release.findFirst({

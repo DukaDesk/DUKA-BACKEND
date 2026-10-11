@@ -7,12 +7,17 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma.service';
 import { MediaService } from '../media/media.service';
+import { PublishingService } from '../publishing/publishing.service';
 import { CreateTenantDto } from './dto/create-tenant.dto';
 import { UpdateTenantDto } from './dto/update-tenant.dto';
 
 @Injectable()
 export class MerchantsService {
-  constructor(private prisma: PrismaService, private mediaService: MediaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private mediaService: MediaService,
+    private publishingService: PublishingService,
+  ) {}
 
   async create(userId: string, dto: CreateTenantDto) {
     const existing = await this.prisma.tenant.findUnique({ where: { slug: dto.slug } });
@@ -414,13 +419,17 @@ export class MerchantsService {
   // Stage-2: submit the designed app for admin review. Requires a
   // verified merchant; moves the app into the review queue.
 
-  async submitAppReview(tenantId: string, userId: string) {
+  async submitAppReview(tenantId: string, userId: string, manifest?: any) {
     await this.verifyOwnership(tenantId, userId);
 
     const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId } });
     if (!tenant) throw new NotFoundException({ code: 'MERCHANT_NOT_FOUND', message: 'Merchant not found' });
     if ((tenant as any).verificationStatus !== 'verified') {
       throw new ForbiddenException({ code: 'MERCHANT_NOT_VERIFIED', message: 'Merchant must pass verification before submitting the app for review' });
+    }
+
+    if (manifest !== undefined && manifest !== null) {
+      await this.publishingService.submitForReview(tenantId, userId, manifest);
     }
 
     return this.prisma.tenant.update({

@@ -6,9 +6,10 @@ import { TenantConfigService } from './tenant-config.service';
 import { SubscriptionService } from './subscription.service';
 import { TenantResolverModule } from '../../shared/tenant/tenant-resolver.module';
 import { MediaModule } from '../media/media.module';
+import { PublishingModule } from '../publishing/publishing.module';
 
 @Module({
-  imports: [TenantResolverModule, MediaModule],
+  imports: [TenantResolverModule, MediaModule, PublishingModule],
   controllers: [MerchantsController, MerchantsAppController],
   providers: [MerchantsService, TenantConfigService, SubscriptionService],
   exports: [MerchantsService, TenantConfigService, SubscriptionService],

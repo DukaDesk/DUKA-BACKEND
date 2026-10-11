@@ -6,7 +6,7 @@ import {
   Body,
   UseGuards,
 } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
+import { ApiTags, ApiBearerAuth, ApiOperation, ApiBody } from '@nestjs/swagger';
 import { MerchantsService } from './merchants.service';
 import { TenantConfigService } from './tenant-config.service';
 import { SubscriptionService } from './subscription.service';
@@ -46,7 +46,7 @@ export class MerchantsAppController {
   }
 
   @Post('publish')
-  @ApiOperation({ summary: 'Publish current merchant' })
+  @ApiOperation({ summary: 'Submit current merchant app for admin review' })
   async publish(@CurrentUser('id') userId: string) {
     const tenantId = await this.getTenantId(userId);
     return this.merchantsService.publish(tenantId, userId);
@@ -68,9 +68,20 @@ export class MerchantsAppController {
 
   @Post('review/submit')
   @ApiOperation({ summary: 'Submit designed app for stage-2 admin review' })
-  async submitAppReview(@CurrentUser('id') userId: string) {
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        manifest: {
+          type: 'object',
+          description: 'Client-compiled PublishedApp snapshot to review and later publish after approval',
+        },
+      },
+    },
+  })
+  async submitAppReview(@CurrentUser('id') userId: string, @Body() body?: { manifest?: any }) {
     const tenantId = await this.getTenantId(userId);
-    return this.merchantsService.submitAppReview(tenantId, userId);
+    return this.merchantsService.submitAppReview(tenantId, userId, body?.manifest);
   }
 
   @Get('config')
