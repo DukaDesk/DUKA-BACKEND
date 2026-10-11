@@ -6,12 +6,13 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma.service';
+import { MediaService } from '../media/media.service';
 import { CreateTenantDto } from './dto/create-tenant.dto';
 import { UpdateTenantDto } from './dto/update-tenant.dto';
 
 @Injectable()
 export class MerchantsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService, private mediaService: MediaService) {}
 
   async create(userId: string, dto: CreateTenantDto) {
     const existing = await this.prisma.tenant.findUnique({ where: { slug: dto.slug } });
@@ -361,5 +362,70 @@ export class MerchantsService {
     if (!membership || !['owner', 'manager'].includes(membership.role)) {
       throw new ForbiddenException({ code: 'NOT_OWNER', message: 'Only merchant owners and managers can perform this action' });
     }
+  }
+
+  // ─── Two-stage approval: merchant side ───────────────────────
+  // Stage-1: submit compliance documents for admin verification.
+  // Re-submitting resets a rejection back to pending review.
+
+  async submitKyc(tenantId: string, userId: string, dto: { businessName?: string; regNo?: string; taxId?: string; documents?: any }) {
+    await this.verifyOwnership(tenantId, userId);
+    const documents = await this.mediaService.privatizeComplianceDocuments(tenantId, dto.documents ?? []);
+
+    const submission = await this.prisma.kycSubmission.create({
+      data: {
+        tenantId,
+        businessName: dto.businessName,
+        regNo: dto.regNo,
+        taxId: dto.taxId,
+        documents: documents as any,
+        status: 'pending',
+      },
+    });
+
+    await this.prisma.tenant.update({
+      where: { id: tenantId },
+      data: { verificationStatus: 'pending' },
+    });
+
+    return {
+      ...submission,
+      documents: await this.mediaService.createComplianceDocumentLinks(tenantId, submission.id, documents),
+    };
+  }
+
+  async getMyKyc(tenantId: string, userId: string) {
+    await this.verifyOwnership(tenantId, userId);
+
+    const submissions = await this.prisma.kycSubmission.findMany({
+      where: { tenantId },
+      orderBy: { createdAt: 'desc' },
+    });
+    return Promise.all(submissions.map(async (submission) => ({
+      ...submission,
+      documents: await this.mediaService.createComplianceDocumentLinks(
+        tenantId,
+        submission.id,
+        Array.isArray(submission.documents) ? submission.documents as any : [],
+      ),
+    })));
+  }
+
+  // Stage-2: submit the designed app for admin review. Requires a
+  // verified merchant; moves the app into the review queue.
+
+  async submitAppReview(tenantId: string, userId: string) {
+    await this.verifyOwnership(tenantId, userId);
+
+    const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId } });
+    if (!tenant) throw new NotFoundException({ code: 'MERCHANT_NOT_FOUND', message: 'Merchant not found' });
+    if ((tenant as any).verificationStatus !== 'verified') {
+      throw new ForbiddenException({ code: 'MERCHANT_NOT_VERIFIED', message: 'Merchant must pass verification before submitting the app for review' });
+    }
+
+    return this.prisma.tenant.update({
+      where: { id: tenantId },
+      data: { appStatus: 'in_review', appSubmittedAt: new Date(), appReviewNote: null },
+    });
   }
 }

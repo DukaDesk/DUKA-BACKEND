@@ -1,12 +1,16 @@
 import { Injectable, NotFoundException, ForbiddenException, BadRequestException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma.service';
-import { ActiveReleaseService } from '../../shared/releases/active-release.service';
+import { PublishingService } from '../publishing/publishing.service';
+import { LivePreviewService } from '../builder/live-preview.service';
+import { MediaService } from '../media/media.service';
 
 @Injectable()
 export class AdminService {
   constructor(
     private prisma: PrismaService,
-    private releases: ActiveReleaseService,
+    private publishingService: PublishingService,
+    private livePreviewService: LivePreviewService,
+    private mediaService: MediaService,
   ) {}
 
   async createTenant(adminUserId: string, data: {
@@ -86,120 +90,257 @@ export class AdminService {
     });
   }
 
-  async getMerchantAppReview(tenantId: string, adminUserId: string) {
-    await this.verifyAppReviewer(adminUserId);
-    const tenant = await this.prisma.tenant.findUnique({
-      where: { id: tenantId },
-      select: {
-        id: true,
-        name: true,
-        slug: true,
-        status: true,
-        activeReleaseId: true,
-        releases: {
-          orderBy: { createdAt: 'desc' },
-          take: 20,
-          select: {
-            id: true,
-            version: true,
-            status: true,
-            channel: true,
-            checksum: true,
-            releaseNotes: true,
-            publishedAt: true,
-            createdAt: true,
-          },
-        },
-      },
-    });
+  // ─── Two-stage approval ───────────────────────────────────
+  // Stage-1: merchant identity verification (credentials review).
+  // Leaves legacy TenantStatus untouched so existing filters keep working.
+
+  async verifyMerchant(tenantId: string, adminUserId: string) {
+    await this.verifyAdmin(adminUserId);
+
+    const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId } });
     if (!tenant) throw new NotFoundException({ code: 'MERCHANT_NOT_FOUND', message: 'Merchant not found' });
-
-    const appStatus = tenant.releases[0]?.status === 'pending_review'
-      ? 'in_review'
-      : tenant.releases[0]?.status === 'rejected'
-        ? 'rejected'
-        : tenant.activeReleaseId ? 'approved' : 'none';
-
-    return {
-      tenant: { ...tenant, appStatus },
-      appStatus,
-      releases: tenant.releases,
-      verificationStatus: 'not_implemented',
-    };
-  }
-
-  async getMerchantAppPreview(tenantId: string, adminUserId: string) {
-    await this.verifyAppReviewer(adminUserId);
-    const release = await this.prisma.release.findFirst({
-      where: { tenantId, status: 'pending_review' },
-      orderBy: { createdAt: 'desc' },
-      select: { id: true, version: true, manifest: true, checksum: true, createdAt: true },
+    if (tenant.verificationStatus === 'verified') {
+      return tenant;
+    }
+    const pendingSubmissions = await this.prisma.kycSubmission.count({
+      where: { tenantId, status: 'pending' },
     });
-    if (!release?.manifest) throw new NotFoundException({ code: 'APP_SUBMISSION_NOT_FOUND', message: 'No app submission is awaiting review' });
-    const manifest = release.manifest as any;
-    return {
-      preview: {
-        releaseId: release.id,
-        version: release.version,
-        checksum: release.checksum,
-        submittedAt: release.createdAt,
-        manifest,
-        screens: Object.entries(manifest.screens || {}).map(([id, screen]) => ({ id, ...(screen as object) })),
-      },
-    };
-  }
-
-  async approveMerchantApp(tenantId: string, adminUserId: string) {
-    await this.verifyAppReviewer(adminUserId);
-    const candidate = await this.prisma.release.findFirst({
-      where: { tenantId, status: 'pending_review' },
-      orderBy: { createdAt: 'desc' },
-    });
-    if (!candidate) throw new NotFoundException({ code: 'APP_SUBMISSION_NOT_FOUND', message: 'No app submission is awaiting review' });
-    if (!candidate.manifest) throw new BadRequestException({ code: 'APP_SUBMISSION_INVALID', message: 'Submitted app has no manifest' });
-
-    const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId }, select: { slug: true, status: true } });
-    if (!tenant) throw new NotFoundException({ code: 'MERCHANT_NOT_FOUND', message: 'Merchant not found' });
-    if (tenant.status === 'suspended' || tenant.status === 'rejected') {
-      throw new ForbiddenException('Suspended or rejected merchants cannot be approved for mobile publication');
+    if (pendingSubmissions === 0) {
+      throw new ConflictException('A pending compliance submission is required before verifying this merchant');
     }
 
-    const publishedAt = new Date();
-    await this.prisma.$transaction(async (tx) => {
-      await tx.release.updateMany({
-        where: { tenantId, status: 'published', channel: 'production' },
-        data: { status: 'superseded' },
-      });
-      const promoted = await tx.release.updateMany({
-        where: { id: candidate.id, status: 'pending_review' },
-        data: { status: 'published', channel: 'production', publishedAt },
-      });
-      if (promoted.count !== 1) {
-        throw new ConflictException('This app submission has already been reviewed');
-      }
-      await tx.tenant.update({
+    // One transaction for KYC approvals, the tenant flag, and the audit
+    // trail — they can never drift apart. tenant.update is index 1.
+    // (tenant.update throws P2025 if the row vanished, so no null check.)
+    const [, updated] = await this.prisma.$transaction([
+      this.prisma.kycSubmission.updateMany({
+        where: { tenantId, status: 'pending' },
+        data: { status: 'approved', reviewedBy: adminUserId },
+      }),
+      this.prisma.tenant.update({
         where: { id: tenantId },
-        data: { activeReleaseId: candidate.id, status: 'published', publishedAt },
-      });
-    });
-    await this.releases.invalidate(tenantId, tenant.slug);
-    return { message: 'App approved and published', tenantId, releaseId: candidate.id, version: candidate.version, status: 'published' };
+        data: { verificationStatus: 'verified', verifiedAt: new Date() },
+      }),
+      this.prisma.auditLog.create({
+        data: { tenantId, userId: adminUserId, action: 'merchant.verify', entity: 'tenant', entityId: tenantId },
+      }),
+    ]);
+
+    return updated;
   }
 
-  async rejectMerchantApp(tenantId: string, adminUserId: string, reason?: string) {
-    await this.verifyAppReviewer(adminUserId);
-    if (!reason?.trim()) throw new BadRequestException('A rejection reason is required');
-    const candidate = await this.prisma.release.findFirst({
-      where: { tenantId, status: 'pending_review' },
+  async rejectCredentials(tenantId: string, adminUserId: string, reason?: string) {
+    await this.verifyAdmin(adminUserId);
+
+    const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId } });
+    if (!tenant) throw new NotFoundException({ code: 'MERCHANT_NOT_FOUND', message: 'Merchant not found' });
+    if (tenant.verificationStatus === 'rejected') {
+      const pending = await this.prisma.kycSubmission.count({
+        where: { tenantId, status: 'pending' },
+      });
+      if (pending === 0) return tenant;
+    }
+    const pendingSubmissions = await this.prisma.kycSubmission.count({ where: { tenantId, status: 'pending' } });
+    if (pendingSubmissions === 0) {
+      throw new ConflictException('A pending compliance submission is required before rejecting this merchant');
+    }
+    const trimmedReason = reason?.trim();
+    if (!trimmedReason) throw new BadRequestException('A rejection reason is required');
+
+    // One transaction for KYC rejections, the tenant flag, and the audit
+    // trail. tenant.update is index 1.
+    const [, updated] = await this.prisma.$transaction([
+      this.prisma.kycSubmission.updateMany({
+        where: { tenantId, status: 'pending' },
+        data: { status: 'rejected', reviewNote: trimmedReason, reviewedBy: adminUserId },
+      }),
+      this.prisma.tenant.update({
+        where: { id: tenantId },
+        data: { verificationStatus: 'rejected' },
+      }),
+      this.prisma.auditLog.create({
+        data: { tenantId, userId: adminUserId, action: 'merchant.verify_reject', entity: 'tenant', entityId: tenantId, metadata: { reason: trimmedReason } },
+      }),
+    ]);
+
+    return updated;
+  }
+
+  async getCompliance(tenantId: string, adminUserId: string) {
+    await this.verifyAdmin(adminUserId);
+
+    const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId } });
+    if (!tenant) throw new NotFoundException({ code: 'MERCHANT_NOT_FOUND', message: 'Merchant not found' });
+
+    const submissions = await this.prisma.kycSubmission.findMany({
+      where: { tenantId },
       orderBy: { createdAt: 'desc' },
     });
-    if (!candidate) throw new NotFoundException({ code: 'APP_SUBMISSION_NOT_FOUND', message: 'No app submission is awaiting review' });
-    const outcome = await this.prisma.release.updateMany({
-      where: { id: candidate.id, status: 'pending_review' },
-      data: { status: 'rejected', releaseNotes: reason.trim() },
+    return Promise.all(submissions.map(async (submission) => ({
+      ...submission,
+      documents: await this.mediaService.createComplianceDocumentLinks(
+        tenantId,
+        submission.id,
+        Array.isArray(submission.documents) ? submission.documents as any : [],
+      ),
+    })));
+  }
+
+  // Stage-2: app design review. Approve publishes the drafts (admin bypass
+  // of the owner-only publish guard — the admin IS the approver here).
+
+  async approveApp(tenantId: string, adminUserId: string) {
+    await this.verifyAdmin(adminUserId);
+
+    const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId } });
+    if (!tenant) throw new NotFoundException({ code: 'MERCHANT_NOT_FOUND', message: 'Merchant not found' });
+    if (tenant.verificationStatus !== 'verified') {
+      throw new ForbiddenException('Merchant must pass stage-1 verification before the app can be approved');
+    }
+    if (tenant.appStatus === 'approved') {
+      return tenant;
+    }
+    if (tenant.appStatus !== 'in_review') {
+      throw new ConflictException('The app must be submitted for review before it can be approved');
+    }
+
+    const draftCount = await this.prisma.draftPage.count({ where: { tenantId, isActive: true } });
+    if (draftCount === 0) {
+      throw new BadRequestException('No app design submitted for review');
+    }
+
+    const result = await this.publishingService.publishAsAdmin(tenantId);
+
+    // Bookkeeping atomically: the approval flag and its audit trail land
+    // together, so a failure here can never leave a published release
+    // without its approval record. tenant.update is index 0.
+    const [updated] = await this.prisma.$transaction([
+      this.prisma.tenant.update({
+        where: { id: tenantId },
+        data: { appStatus: 'approved', appReviewedAt: new Date() },
+      }),
+      this.prisma.auditLog.create({
+        data: { tenantId, userId: adminUserId, action: 'merchant.app_approve', entity: 'tenant', entityId: tenantId, metadata: { version: result.version, releaseId: result.releaseId } },
+      }),
+    ]);
+
+    return updated;
+  }
+
+  async rejectApp(tenantId: string, adminUserId: string, reason?: string) {
+    await this.verifyAdmin(adminUserId);
+
+    const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId } });
+    if (!tenant) throw new NotFoundException({ code: 'MERCHANT_NOT_FOUND', message: 'Merchant not found' });
+    if (tenant.appStatus === 'rejected') {
+      return tenant;
+    }
+    if (tenant.verificationStatus !== 'verified' || tenant.appStatus !== 'in_review') {
+      throw new ConflictException('A verified merchant app in review is required before rejecting it');
+    }
+    const trimmedReason = reason?.trim();
+    if (!trimmedReason) throw new BadRequestException('A rejection reason is required');
+
+    const [updated] = await this.prisma.$transaction([
+      this.prisma.tenant.update({
+        where: { id: tenantId },
+        data: { appStatus: 'rejected', appReviewedAt: new Date(), appReviewNote: trimmedReason },
+      }),
+      this.prisma.auditLog.create({
+        data: { tenantId, userId: adminUserId, action: 'merchant.app_reject', entity: 'tenant', entityId: tenantId, metadata: { reason: trimmedReason } },
+      }),
+    ]);
+
+    return updated;
+  }
+
+  // Full review bundle for the admin approval screen (single call).
+
+  async getMerchantReview(tenantId: string, adminUserId: string) {
+    await this.verifyAdmin(adminUserId);
+
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+      include: {
+        users: {
+          where: { role: 'owner' },
+          include: { user: { select: { id: true, firstName: true, lastName: true, email: true, phoneNumber: true, emailVerified: true, phoneVerified: true, status: true, profile: { select: { avatarUrl: true } } } } },
+        },
+        subscription: { include: { plan: true } },
+        theme: true,
+        navigation: true,
+      },
     });
-    if (outcome.count !== 1) throw new ConflictException('This app submission has already been reviewed');
-    return { message: 'App submission rejected', tenantId, release: { id: candidate.id, version: candidate.version, status: 'rejected', releaseNotes: reason.trim() } };
+    if (!tenant) throw new NotFoundException({ code: 'MERCHANT_NOT_FOUND', message: 'Merchant not found' });
+
+    const [compliance, quota, draftPages, releases] = await Promise.all([
+      this.prisma.kycSubmission.findMany({ where: { tenantId }, orderBy: { createdAt: 'desc' }, take: 10 }),
+      this.prisma.apiQuota.findUnique({ where: { tenantId } }),
+      this.prisma.draftPage.findMany({
+        where: { tenantId },
+        select: { id: true, name: true, slug: true, isHome: true, sortOrder: true, createdAt: true, _count: { select: { draftSections: true } } },
+        orderBy: { sortOrder: 'asc' },
+      }),
+      this.prisma.release.findMany({
+        where: { tenantId },
+        select: { id: true, version: true, buildNumber: true, status: true, channel: true, publishedAt: true },
+        orderBy: { buildNumber: 'desc' },
+        take: 5,
+      }),
+    ]);
+
+    const latestComplianceSubmission = compliance[0];
+    const complianceWithDocumentLinks = await Promise.all(compliance.map(async (submission) => ({
+      ...submission,
+      documents: await this.mediaService.createComplianceDocumentLinks(
+        tenantId,
+        submission.id,
+        Array.isArray(submission.documents) ? submission.documents as any : [],
+      ),
+    })));
+    return {
+      tenant: {
+        ...tenant,
+        complianceSubmittedAt: latestComplianceSubmission?.createdAt,
+        owner: tenant.users?.[0]?.user ? {
+          ...tenant.users[0].user,
+          avatarUrl: tenant.users[0].user.profile?.avatarUrl,
+        } : undefined,
+        app: tenant.appStatus !== 'none'
+          ? {
+            name: draftPages.find((page) => page.isHome)?.name ?? draftPages[0]?.name,
+            slug: draftPages.find((page) => page.isHome)?.slug ?? draftPages[0]?.slug,
+            submittedAt: tenant.appSubmittedAt,
+          }
+          : undefined,
+        subscription: tenant.subscription ? {
+          ...tenant.subscription,
+          plan: {
+            ...tenant.subscription.plan,
+            price: Number(tenant.subscription.plan.price),
+          },
+          currentPeriodEnd: tenant.subscription.endDate,
+          renewalDate: tenant.subscription.autoRenew ? tenant.subscription.endDate : undefined,
+        } : undefined,
+      },
+      verificationStatus: tenant.verificationStatus,
+      appStatus: tenant.appStatus,
+      compliance: complianceWithDocumentLinks,
+      quota,
+      draftPages,
+      releases,
+    };
+  }
+
+  // Draft live-preview for admin review (no publish required).
+
+  async getMerchantPreview(tenantId: string, adminUserId: string) {
+    await this.verifyAdmin(adminUserId);
+
+    const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId }, select: { id: true } });
+    if (!tenant) throw new NotFoundException({ code: 'MERCHANT_NOT_FOUND', message: 'Merchant not found' });
+
+    return this.livePreviewService.previewTenant(tenantId);
   }
 
   async getMerchantStats(adminUserId: string) {
@@ -242,12 +383,16 @@ export class AdminService {
     });
   }
 
-  async getTenants(adminUserId: string, status?: string) {
+  async getTenants(adminUserId: string, status?: string, verification?: string, appStatus?: string) {
     await this.verifyAdmin(adminUserId);
 
     const where: any = {};
     const allowedStatuses = ['draft', 'published', 'suspended', 'rejected'];
     if (status && allowedStatuses.includes(status)) where.status = status;
+    const allowedVerification = ['pending', 'verified', 'rejected'];
+    if (verification && allowedVerification.includes(verification)) where.verificationStatus = verification;
+    const allowedApp = ['none', 'in_review', 'approved', 'rejected'];
+    if (appStatus && allowedApp.includes(appStatus)) where.appStatus = appStatus;
 
     return this.prisma.tenant.findMany({
       where,
@@ -276,25 +421,13 @@ export class AdminService {
   }
 
   private async verifyAdmin(userId: string) {
-    const role = await this.prisma.userRole.findFirst({
-      where: {
-        userId,
-        tenantId: null,
-        role: { name: { in: ['super_admin', 'support', 'operations', 'finance'] } },
-      },
+    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
+    if (!user) throw new NotFoundException('User not found');
+    const platformRole = await this.prisma.userRole.findFirst({
+      where: { userId, tenantId: null, role: { name: { in: ['super_admin', 'operations', 'support'] } } },
+      select: { id: true },
     });
-    if (!role) throw new ForbiddenException('Platform admin role required');
-  }
-
-  private async verifyAppReviewer(userId: string) {
-    const role = await this.prisma.userRole.findFirst({
-      where: {
-        userId,
-        tenantId: null,
-        role: { name: { in: ['super_admin', 'operations'] } },
-      },
-    });
-    if (!role) throw new ForbiddenException('App reviewer role required');
+    if (!platformRole) throw new ForbiddenException('Platform admin permissions are required');
   }
 
   async cleanupDeactivatedAccounts() {

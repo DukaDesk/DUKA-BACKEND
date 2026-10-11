@@ -1,9 +1,10 @@
-import { Injectable, BadRequestException, NotFoundException, Logger } from '@nestjs/common';
+import { Injectable, BadRequestException, ForbiddenException, NotFoundException, Logger } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma.service';
 import { RedisService } from '../../common/redis/redis.service';
 import { ImageOptimizer } from './image-optimizer.service';
 import { StorageService } from './storage.service';
 import { randomUUID } from 'crypto';
+import { Prisma } from '@prisma/client';
 
 const ALLOWED_MIME_TYPES = [
   'image/jpeg',
@@ -38,6 +39,7 @@ const VARIANT_MIME: Record<string, string> = {
 @Injectable()
 export class MediaService {
   private readonly logger = new Logger(MediaService.name);
+  private readonly mediaPrivacyMoves = new Map<string, Promise<any>>();
 
   constructor(
     private prisma: PrismaService,
@@ -207,21 +209,29 @@ export class MediaService {
       const resolved = await this.resolveFolderId(tenantId, folderId);
       where.folderId = resolved;
     }
-    return this.prisma.media.findMany({
+    const media = await this.prisma.media.findMany({
       where,
       orderBy: { createdAt: 'desc' },
     });
+    return Promise.all(media.map((item) => this.withTemporaryUrl(item)));
   }
 
-  async findOne(id: string) {
-    const media = await this.prisma.media.findUnique({ where: { id } });
+  async findOne(id: string, tenantId: string) {
+    const media = await this.prisma.media.findFirst({ where: { id, tenantId } });
     if (!media) throw new NotFoundException('Media not found');
-    return media;
+    return this.withTemporaryUrl(media);
   }
 
-  async delete(id: string) {
-    const media = await this.prisma.media.findUnique({ where: { id } });
+  async delete(id: string, tenantId: string) {
+    const media = await this.prisma.media.findFirst({ where: { id, tenantId } });
     if (!media) throw new NotFoundException('Media not found');
+    if (media.url.startsWith('private://')) {
+      const referenced = await this.prisma.kycSubmission.findFirst({
+        where: { tenantId, documents: { array_contains: [{ url: media.url }] } },
+        select: { id: true },
+      });
+      if (referenced) throw new ForbiddenException('A document attached to a compliance submission cannot be deleted');
+    }
 
     await this.storage.delete(media.url);
 
@@ -242,10 +252,14 @@ export class MediaService {
 
   async update(
     id: string,
+    tenantId: string,
     data: { fileName?: string; alt?: string; folderId?: string | null; visibility?: string },
   ) {
-    const media = await this.prisma.media.findUnique({ where: { id } });
+    const media = await this.prisma.media.findFirst({ where: { id, tenantId } });
     if (!media) throw new NotFoundException('Media not found');
+    if (media.url.startsWith('private://') && data.visibility && data.visibility !== 'private') {
+      throw new ForbiddenException('Compliance files cannot be made public');
+    }
 
     let folderId = data.folderId;
     if (folderId != null && folderId !== '') {
@@ -254,15 +268,19 @@ export class MediaService {
       folderId = null;
     }
 
-    return this.prisma.media.update({
+    const updated = await this.prisma.media.update({
       where: { id },
       data: { ...data, folderId: folderId as any },
     });
+    return this.withTemporaryUrl(updated);
   }
 
-  async getCdnUrl(mediaId: string, variant?: string): Promise<string> {
-    const media = await this.prisma.media.findUnique({ where: { id: mediaId } });
+  async getCdnUrl(mediaId: string, tenantId: string, variant?: string): Promise<string> {
+    const media = await this.prisma.media.findFirst({ where: { id: mediaId, tenantId } });
     if (!media) throw new NotFoundException('Media not found');
+    if (media.url.startsWith('private://')) {
+      return this.storage.createTemporaryReadUrl(media.url, media.mimeType);
+    }
     if (!variant || !media.variants) {
       return media.url.startsWith('http')
         ? media.url
@@ -273,6 +291,113 @@ export class MediaService {
     const url = preset?.url || media.url;
     return url.startsWith('http') ? url : `${this.storage.baseUrl}${url}`;
   }
+
+  async privatizeComplianceDocuments(tenantId: string, documents: Array<{ name?: string; url: string; type?: string }>) {
+    const inputUrls = [...new Set(documents.map((document) => document.url))];
+    const canonicalUrls = new Map(inputUrls.map((url) => [url, this.storage.asPrivateReference(url) ?? url]));
+    const lookupUrls = [...new Set([...inputUrls, ...canonicalUrls.values()])];
+    const mediaItems = inputUrls.length
+      ? await this.prisma.media.findMany({ where: { tenantId, url: { in: lookupUrls } } })
+      : [];
+    const byUrl = new Map(mediaItems.map((media) => [media.url, media]));
+    for (const url of inputUrls) {
+      if (!byUrl.has(canonicalUrls.get(url)!)) {
+        throw new BadRequestException('Compliance documents must be uploaded to this merchant’s media library');
+      }
+    }
+
+    const privateUrls = new Map<string, string>();
+    for (const url of inputUrls) {
+      const media = byUrl.get(canonicalUrls.get(url)!);
+      if (!media) continue;
+      const privateMedia = await this.moveMediaToPrivate(media);
+      privateUrls.set(url, privateMedia.url);
+    }
+    return documents.map((document) => ({ ...document, url: privateUrls.get(document.url)! }));
+  }
+
+  async createComplianceDocumentLinks(
+    tenantId: string,
+    submissionId: string,
+    documents: Array<{ name?: string; url: string; type?: string }> = [],
+  ) {
+    const urls = [...new Set(documents.map((document) => document.url))];
+    const mediaItems = urls.length
+      ? await this.prisma.media.findMany({ where: { tenantId, url: { in: urls } } })
+      : [];
+    const byUrl = new Map(mediaItems.map((media) => [media.url, media]));
+    const links = new Map<string, { url: string; privateUrl: string }>();
+
+    for (const url of urls) {
+      const existingMedia = byUrl.get(url);
+      if (!existingMedia) continue;
+      const media = await this.moveMediaToPrivate(existingMedia);
+      links.set(url, {
+        url: await this.storage.createTemporaryReadUrl(media.url, media.mimeType),
+        privateUrl: media.url,
+      });
+    }
+
+    const storedDocuments = documents.map((document) => ({
+      ...document,
+      url: links.get(document.url)?.privateUrl ?? document.url,
+    }));
+    await this.prisma.kycSubmission.update({
+      where: { id: submissionId },
+      data: { documents: storedDocuments as any },
+    });
+    return documents.map((document) => ({
+      ...document,
+      url: links.get(document.url)?.url,
+      unavailable: !links.has(document.url),
+    }));
+  }
+
+  private async moveMediaToPrivate(media: any): Promise<any> {
+    if (media.url.startsWith('private://')) return media;
+    const inProgress = this.mediaPrivacyMoves.get(media.id);
+    if (inProgress) return inProgress;
+    const move = this.performPrivateMove(media);
+    this.mediaPrivacyMoves.set(media.id, move);
+    try {
+      return await move;
+    } finally {
+      this.mediaPrivacyMoves.delete(media.id);
+    }
+  }
+
+  private async performPrivateMove(media: any): Promise<any> {
+    const previousUrl = media.url;
+    const privateUrl = await this.storage.moveToPrivate(media.url);
+    const variants = media.variants as any;
+    if (variants) {
+      const variantUrls = [variants.original?.url, variants.optimized?.url, ...(variants.presets || []).map((item: any) => item.url)];
+      for (const url of new Set(variantUrls.filter((value: any) => value && value !== media.url))) {
+        await this.storage.delete(url);
+      }
+    }
+    const updatedMedia = await this.prisma.media.update({
+      where: { id: media.id },
+      data: { url: privateUrl, visibility: 'private', variants: Prisma.JsonNull },
+    });
+    const priorSubmissions = await this.prisma.kycSubmission.findMany({
+      where: { tenantId: media.tenantId, documents: { array_contains: [{ url: previousUrl }] } },
+    });
+    await Promise.all(priorSubmissions.map((submission: any) => {
+      const docs = Array.isArray(submission.documents) ? submission.documents : [];
+      const documents = docs.map((document: any) => document?.url === previousUrl
+        ? { ...document, url: privateUrl }
+        : document);
+      return this.prisma.kycSubmission.update({ where: { id: submission.id }, data: { documents } });
+    }));
+    return updatedMedia;
+  }
+
+  private async withTemporaryUrl(media: any): Promise<any> {
+    if (!media.url.startsWith('private://')) return media;
+    return { ...media, url: await this.storage.createTemporaryReadUrl(media.url, media.mimeType) };
+  }
+
 
   async createFolder(tenantId: string, name: string, parentId?: string) {
     return this.prisma.assetFolder.create({

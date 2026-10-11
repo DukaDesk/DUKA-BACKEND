@@ -9,7 +9,7 @@ describe('merchant errors', () => {
     expect(response.json).toHaveBeenCalledWith({ success: false, errors: ['Merchant not found'], code: 'MERCHANT_NOT_FOUND' });
   });
   it('uses merchant terminology when an ID is absent', async () => {
-    const service = new MerchantsService({ tenant: { findUnique: jest.fn().mockResolvedValue(null) } } as any);
+    const service = new MerchantsService({ tenant: { findUnique: jest.fn().mockResolvedValue(null) } } as any, {} as any);
     try { await service.findById('missing'); throw new Error('Expected missing merchant'); }
     catch (error) { expect((error as NotFoundException).getResponse()).toEqual({ code: 'MERCHANT_NOT_FOUND', message: 'Merchant not found' }); }
   });

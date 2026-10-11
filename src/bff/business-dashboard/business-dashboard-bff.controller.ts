@@ -3,6 +3,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery, ApiParam } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { BusinessDashboardBffService } from './business-dashboard-bff.service';
 
 @ApiTags('Business Dashboard BFF')
@@ -23,10 +24,12 @@ export class BusinessDashboardBffController {
   @ApiQuery({ name: 'status', required: false })
   @ApiQuery({ name: 'page', required: false })
   @ApiQuery({ name: 'limit', required: false })
-  getTenants(@Query('status') status?: string, @Query('page') page?: string, @Query('limit') limit?: string) {
+  @ApiQuery({ name: 'verification', required: false })
+  @ApiQuery({ name: 'appStatus', required: false })
+  getTenants(@CurrentUser('id') userId: string, @Query('status') status?: string, @Query('page') page?: string, @Query('limit') limit?: string, @Query('verification') verification?: string, @Query('appStatus') appStatus?: string) {
     const p = Number(page) || 1;
     const l = Number(limit) || 20;
-    return this.bff.getTenantsList(status, p, l);
+    return this.bff.getTenantsList(userId, status, p, l, verification, appStatus);
   }
 
   @Get('audit')

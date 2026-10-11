@@ -3,10 +3,12 @@ import { AdminController } from './admin.controller';
 import { AdminService } from './admin.service';
 import { AdminInviteService } from './admin-invite.service';
 import { UsersModule } from '../users/users.module';
-import { ReleasesModule } from '../../shared/releases/releases.module';
+import { PublishingModule } from '../publishing/publishing.module';
+import { BuilderModule } from '../builder/builder.module';
+import { MediaModule } from '../media/media.module';
 
 @Module({
-  imports: [UsersModule, ReleasesModule],
+  imports: [UsersModule, PublishingModule, BuilderModule, MediaModule],
   controllers: [AdminController],
   providers: [AdminService, AdminInviteService],
 })

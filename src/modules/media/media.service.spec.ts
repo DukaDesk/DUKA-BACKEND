@@ -26,9 +26,15 @@ function makeService(opts: {
     media: {
       create: jest.fn().mockImplementation(({ data }: any) => Promise.resolve({ id: 'm1', ...data })),
       findMany: jest.fn().mockResolvedValue([]),
+      findFirst: jest.fn(),
       findUnique: jest.fn(),
-      update: jest.fn(),
+      update: jest.fn().mockImplementation(({ where, data }: any) => Promise.resolve({ id: where.id, ...data })),
       delete: jest.fn(),
+    },
+    kycSubmission: {
+      findMany: jest.fn().mockResolvedValue([]),
+      findFirst: jest.fn().mockResolvedValue(null),
+      update: jest.fn().mockResolvedValue({}),
     },
     assetVersion: { create: jest.fn().mockResolvedValue({}) },
   };
@@ -45,6 +51,9 @@ function makeService(opts: {
       Promise.resolve(key.startsWith('uploads/') ? `/${key}` : key),
     ),
     delete: jest.fn().mockResolvedValue(undefined),
+    moveToPrivate: jest.fn().mockResolvedValue('private://private/kyc/private-file.pdf'),
+    createTemporaryReadUrl: jest.fn().mockResolvedValue('https://api.example/media/private/short-token'),
+    asPrivateReference: jest.fn(),
     baseUrl: '',
   };
   const service = new MediaService(prisma, redis, imageOptimizer, storage);
@@ -147,6 +156,32 @@ describe('MediaService storage URLs (B6)', () => {
     const originalKey = uploads[0];
     expect(originalKey.endsWith('.webp')).toBe(true);
     expect(deletedKeys).not.toContain(originalKey);
+  });
+});
+
+describe('MediaService compliance document privacy', () => {
+  it('rejects document URLs that do not belong to the merchant media library', async () => {
+    const { service, prisma, storage } = makeService();
+    await expect(service.privatizeComplianceDocuments('t1', [{ name: 'ID', url: 'https://example.test/id.pdf' }]))
+      .rejects.toThrow(BadRequestException);
+    expect(storage.moveToPrivate).not.toHaveBeenCalled();
+    expect(prisma.media.findMany).toHaveBeenCalledWith({
+      where: { tenantId: 't1', url: { in: ['https://example.test/id.pdf'] } },
+    });
+  });
+
+  it('moves an owned document to private storage and returns its private reference', async () => {
+    const { service, prisma, storage } = makeService();
+    prisma.media.findMany.mockResolvedValueOnce([{
+      id: 'media-1', tenantId: 't1', url: '/uploads/identity.pdf', mimeType: 'application/pdf', variants: null,
+    }]);
+    const documents = await service.privatizeComplianceDocuments('t1', [{ name: 'ID', url: '/uploads/identity.pdf' }]);
+    expect(storage.moveToPrivate).toHaveBeenCalledWith('/uploads/identity.pdf');
+    expect(prisma.media.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'media-1' },
+      data: expect.objectContaining({ visibility: 'private' }),
+    }));
+    expect(documents[0].url).toBe('private://private/kyc/private-file.pdf');
   });
 });
 

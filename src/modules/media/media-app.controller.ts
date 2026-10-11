@@ -59,27 +59,27 @@ export class MediaAppController {
 
   @Get(':id')
   @ApiOperation({ summary: 'Get media details with versions' })
-  findOne(@Param('id') id: string) {
-    return this.mediaService.findOne(id);
+  async findOne(@CurrentUser('id') userId: string, @Param('id') id: string) {
+    return this.mediaService.findOne(id, await this.getTenantId(userId));
   }
 
   @Patch(':id')
   @ApiOperation({ summary: 'Update media metadata (fileName, alt, folderId, visibility)' })
-  update(@Param('id') id: string, @Body() data: UpdateMediaDto) {
-    return this.mediaService.update(id, data);
+  async update(@CurrentUser('id') userId: string, @Param('id') id: string, @Body() data: UpdateMediaDto) {
+    return this.mediaService.update(id, await this.getTenantId(userId), data);
   }
 
   @Delete(':id')
   @ApiOperation({ summary: 'Delete media file and all variants' })
-  delete(@Param('id') id: string) {
-    return this.mediaService.delete(id);
+  async delete(@CurrentUser('id') userId: string, @Param('id') id: string) {
+    return this.mediaService.delete(id, await this.getTenantId(userId));
   }
 
   @Get(':id/cdn-url')
   @ApiOperation({ summary: 'Get CDN delivery URL, optionally for a variant' })
   @ApiQuery({ name: 'variant', required: false })
-  getCdnUrl(@Param('id') id: string, @Query('variant') variant?: string) {
-    return this.mediaService.getCdnUrl(id, variant);
+  async getCdnUrl(@CurrentUser('id') userId: string, @Param('id') id: string, @Query('variant') variant?: string) {
+    return this.mediaService.getCdnUrl(id, await this.getTenantId(userId), variant);
   }
 
   // ─── Folders ─────────────────────────────────────────────
