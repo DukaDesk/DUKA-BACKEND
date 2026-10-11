@@ -209,7 +209,9 @@ export class PublishingService {
     return { ...submitted, compatibility: { contract: compat.contract, warnings: compat.warnings } };
   }
 
-  private async publishFromDrafts(tenantId: string) {
+  // _slug keeps main-side callers compiling (publishAsAdmin passes the tenant
+  // slug); this path resolves everything it needs from tenantId.
+  private async publishFromDrafts(tenantId: string, _slug?: string) {
     const validation = await this.validationEngine.validateDraft(tenantId);
     if (!validation.passed) {
       throw new BadRequestException({
