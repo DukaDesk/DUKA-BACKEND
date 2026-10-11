@@ -59,6 +59,8 @@ export class CommerceService {
         extendedPricing: data.extendedPricing || undefined,
         stock: data.stock || 0,
         sku: data.sku,
+        badge: data.badge || null,
+        tags: Array.isArray(data.tags) ? data.tags : [],
         categoryId: data.categoryId,
         images: data.images
           ? { create: data.images.map((url: string, i: number) => ({ url, sortOrder: i })) }
