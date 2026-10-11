@@ -1,87 +1,99 @@
-import { ForbiddenException } from '@nestjs/common';
+import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { AdminService } from './admin.service';
 
 function makeService() {
   const tx: any = {
-    release: {
-      updateMany: jest.fn().mockResolvedValue({ count: 1 }),
-    },
-    tenant: { update: jest.fn().mockResolvedValue({}) },
+    tenant: { update: jest.fn(async (args: any) => ({ id: 'tenant-1', ...args.data })) },
   };
   const prisma: any = {
-    userRole: { findFirst: jest.fn().mockResolvedValue({ id: 'role-1' }) },
+    user: { findUnique: jest.fn(async () => ({ id: 'admin-user' })) },
+    userRole: { findFirst: jest.fn(async () => ({ id: 'role-1' })) },
     tenant: {
-      findUnique: jest.fn().mockResolvedValue({
+      findUnique: jest.fn(async () => ({
         id: 'tenant-1',
         slug: 'shop',
         status: 'draft',
+        verificationStatus: 'verified',
+        appStatus: 'in_review',
         activeReleaseId: null,
-        releases: [{ id: 'candidate-1', version: '2.0.0', status: 'pending_review' }],
-      }),
-      update: jest.fn().mockResolvedValue({}),
+      })),
+      update: jest.fn(async (args: any) => ({ id: 'tenant-1', ...args.data })),
     },
-    release: {
-      findFirst: jest.fn().mockResolvedValue({
-        id: 'candidate-1',
-        version: '2.0.0',
-        status: 'pending_review',
-        channel: 'production',
-        manifest: { manifestVersion: '1.0.0' },
-      }),
-      updateMany: jest.fn().mockResolvedValue({ count: 1 }),
-    },
-    $transaction: jest.fn(async (callback: (client: any) => Promise<any>) => callback(tx)),
+    draftPage: { count: jest.fn(async () => 1) },
+    auditLog: { create: jest.fn(async (args: any) => ({ id: 'audit-1', ...args.data })) },
+    $transaction: jest.fn(async (ops: any[]) => Promise.all(ops)),
   };
-  const releases: any = { invalidate: jest.fn().mockResolvedValue(undefined) };
-  return { service: new AdminService(prisma, releases), prisma, releases, tx };
+  const publishingService: any = {
+    publishAsAdmin: jest.fn(async () => ({ version: '2.0.0', releaseId: 'candidate-1' })),
+  };
+  const livePreviewService: any = {
+    previewTenant: jest.fn(async () => ({ tenantId: 'tenant-1', preview: true })),
+  };
+  const mediaService: any = { createComplianceDocumentLinks: jest.fn(async () => []) };
+  const service = new AdminService(prisma, publishingService, livePreviewService, mediaService);
+  return { service, prisma, publishingService, livePreviewService, tx };
 }
 
-describe('AdminService app review', () => {
-  it('restricts app review to platform reviewers', async () => {
+describe('AdminService app review (two-stage)', () => {
+  it('restricts review actions to platform reviewers', async () => {
     const { service, prisma } = makeService();
     prisma.userRole.findFirst.mockResolvedValue(null);
 
-    await expect(service.getMerchantAppReview('tenant-1', 'merchant-user')).rejects.toThrow(ForbiddenException);
+    await expect(service.getMerchantPreview('tenant-1', 'merchant-user')).rejects.toThrow(ForbiddenException);
     expect(prisma.tenant.findUnique).not.toHaveBeenCalled();
   });
 
-  it('exposes the pending candidate for review without reading the live release', async () => {
-    const { service } = makeService();
-    const result = await service.getMerchantAppReview('tenant-1', 'admin-user');
-
-    expect(result).toMatchObject({ appStatus: 'in_review', tenant: { id: 'tenant-1', appStatus: 'in_review' } });
-    expect(result.releases[0]).toMatchObject({ id: 'candidate-1', status: 'pending_review' });
-  });
-
-  it('promotes the exact pending release only after reviewer approval', async () => {
-    const { service, prisma, releases, tx } = makeService();
-    const result = await service.approveMerchantApp('tenant-1', 'admin-user');
-
-    expect(result).toMatchObject({ status: 'published', releaseId: 'candidate-1', version: '2.0.0' });
-    expect(tx.release.updateMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: { tenantId: 'tenant-1', status: 'published', channel: 'production' },
-      data: { status: 'superseded' },
-    }));
-    expect(tx.release.updateMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: { id: 'candidate-1', status: 'pending_review' },
-      data: expect.objectContaining({ status: 'published', channel: 'production' }),
-    }));
-    expect(tx.tenant.update).toHaveBeenCalledWith(expect.objectContaining({
-      where: { id: 'tenant-1' },
-      data: expect.objectContaining({ activeReleaseId: 'candidate-1', status: 'published' }),
-    }));
-    expect(prisma.tenant.update).not.toHaveBeenCalled();
-    expect(releases.invalidate).toHaveBeenCalledWith('tenant-1', 'shop');
-  });
-
-  it('rejects the candidate without changing the current active release', async () => {
+  it('rejects review for unknown users', async () => {
     const { service, prisma } = makeService();
-    await service.rejectMerchantApp('tenant-1', 'admin-user', 'Fix checkout links');
+    prisma.user.findUnique.mockResolvedValue(null);
 
-    expect(prisma.release.updateMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: { id: 'candidate-1', status: 'pending_review' },
-      data: { status: 'rejected', releaseNotes: 'Fix checkout links' },
+    await expect(service.getMerchantPreview('tenant-1', 'ghost')).rejects.toThrow(NotFoundException);
+  });
+
+  it('exposes the draft live-preview without publishing anything', async () => {
+    const { service, livePreviewService } = makeService();
+    const result = await service.getMerchantPreview('tenant-1', 'admin-user');
+
+    expect(result).toEqual({ tenantId: 'tenant-1', preview: true });
+    expect(livePreviewService.previewTenant).toHaveBeenCalledWith('tenant-1');
+  });
+
+  it('approves a verified in-review app via the admin bypass and records the audit trail', async () => {
+    const { service, prisma, publishingService } = makeService();
+    const result = await service.approveApp('tenant-1', 'admin-user');
+
+    expect(publishingService.publishAsAdmin).toHaveBeenCalledWith('tenant-1');
+    expect(prisma.tenant.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'tenant-1' },
+      data: expect.objectContaining({ appStatus: 'approved' }),
     }));
-    expect(prisma.tenant.update).not.toHaveBeenCalled();
+    expect(prisma.auditLog.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ action: 'merchant.app_approve' }),
+    }));
+    expect(result).toMatchObject({ id: 'tenant-1', appStatus: 'approved' });
+  });
+
+  it('refuses approval until stage-1 verification is complete', async () => {
+    const { service, prisma } = makeService();
+    prisma.tenant.findUnique.mockResolvedValue({ id: 'tenant-1', verificationStatus: 'pending', appStatus: 'in_review' });
+
+    await expect(service.approveApp('tenant-1', 'admin-user')).rejects.toThrow(/verification/i);
+  });
+
+  it('rejects the candidate with a reason and without publishing', async () => {
+    const { service, prisma, publishingService } = makeService();
+    const result = await service.rejectApp('tenant-1', 'admin-user', 'Fix checkout links');
+
+    expect(publishingService.publishAsAdmin).not.toHaveBeenCalled();
+    expect(prisma.tenant.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'tenant-1' },
+      data: expect.objectContaining({ appStatus: 'rejected', appReviewNote: 'Fix checkout links' }),
+    }));
+    expect(result).toMatchObject({ appStatus: 'rejected' });
+  });
+
+  it('requires a rejection reason', async () => {
+    const { service } = makeService();
+    await expect(service.rejectApp('tenant-1', 'admin-user', '  ')).rejects.toThrow(/reason/i);
   });
 });
