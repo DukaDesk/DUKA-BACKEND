@@ -15,6 +15,29 @@ export function assertProductCopy(description?: unknown, shortDescription?: unkn
   }
 }
 
+function slugify(value: unknown): string {
+  const slug = String(value || '')
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return slug || 'item';
+}
+
+/** True when Prisma reports a missing column — i.e. a pending migration. */
+function isMissingColumn(err: any): boolean {
+  return err?.code === 'P2022';
+}
+
+/** Strip Phase-0 columns so writes keep working on databases
+ *  where the badges/tags migration has not landed yet. */
+function withoutNewColumns<T extends Record<string, any>>(data: T): T {
+  const { tags, badge, shortDescription, weight, weightUnit, length, width, height, dimensionUnit, ...rest } = data as any;
+  void tags; void badge; void shortDescription; void weight; void weightUnit;
+  void length; void width; void height; void dimensionUnit;
+  return rest as T;
+}
+
 @Injectable()
 export class CommerceService {
   private readonly logger = new Logger(CommerceService.name);
@@ -27,7 +50,19 @@ export class CommerceService {
   // ─── Categories ───────────────────────────────
 
   async createCategory(tenantId: string, data: any) {
-    return this.prisma.category.create({ data: { tenantId, ...data } });
+    // The portal sends names only — slugify server-side and retry on
+    // slug collisions instead of 500ing on missing/duplicate slugs.
+    const base = data.slug || slugify(data.name);
+    for (let attempt = 0; attempt < 5; attempt++) {
+      try {
+        return await this.prisma.category.create({
+          data: { tenantId, ...data, slug: attempt === 0 ? base : `${base}-${attempt + 1}` },
+        });
+      } catch (err: any) {
+        if (err?.code !== 'P2002' || attempt === 4) throw err;
+      }
+    }
+    throw new BadRequestException('Could not create category — please try a different name');
   }
 
   async getCategories(tenantId: string) {
@@ -60,38 +95,64 @@ export class CommerceService {
     }
     assertProductCopy(data.description, data.shortDescription);
 
-    return this.prisma.product.create({
-      data: {
-        tenantId,
-        name: data.name,
-        slug: data.slug,
-        description: data.description,
-        shortDescription: data.shortDescription || null,
-        weight: data.weight ?? null,
-        weightUnit: data.weightUnit || null,
-        length: data.length ?? null,
-        width: data.width ?? null,
-        height: data.height ?? null,
-        dimensionUnit: data.dimensionUnit || null,
-        type,
-        price: data.price,
-        compareAtPrice: data.compareAtPrice,
-        currency: data.currency || 'NGN',
-        extendedPricing: data.extendedPricing || undefined,
-        stock: data.stock || 0,
-        sku: data.sku,
-        badge: data.badge || null,
-        tags: Array.isArray(data.tags) ? data.tags : [],
-        categoryId: data.categoryId,
-        images: data.images
-          ? { create: data.images.map((url: string, i: number) => ({ url, sortOrder: i })) }
-          : undefined,
-        variants: data.variants
-          ? { create: data.variants.map((v: any) => ({ ...v })) }
-          : undefined,
-      },
-      include: { images: true, variants: true },
-    });
+    // The portal sends names only — slugify server-side and retry on
+    // collisions instead of 500ing on missing/duplicate slugs.
+    // stripNew covers databases where the badges/specs migration has not
+    // landed yet (P2022): the product still saves, minus the new fields.
+    const base = data.slug || slugify(data.name);
+    let stripNew = false;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      try {
+        const scalars: any = {
+          tenantId,
+          name: data.name,
+          slug: attempt === 0 ? base : `${base}-${attempt + 1}`,
+          description: data.description,
+          type,
+          price: data.price,
+          compareAtPrice: data.compareAtPrice,
+          currency: data.currency || 'NGN',
+          extendedPricing: data.extendedPricing || undefined,
+          stock: data.stock || 0,
+          sku: data.sku,
+          categoryId: data.categoryId,
+        };
+        if (!stripNew) {
+          Object.assign(scalars, {
+            shortDescription: data.shortDescription || null,
+            weight: data.weight ?? null,
+            weightUnit: data.weightUnit || null,
+            length: data.length ?? null,
+            width: data.width ?? null,
+            height: data.height ?? null,
+            dimensionUnit: data.dimensionUnit || null,
+            badge: data.badge || null,
+            tags: Array.isArray(data.tags) ? data.tags : [],
+          });
+        }
+        return await this.prisma.product.create({
+          data: {
+            ...scalars,
+            images: data.images
+              ? { create: data.images.map((url: string, i: number) => ({ url, sortOrder: i })) }
+              : undefined,
+            variants: data.variants
+              ? { create: data.variants.map((v: any) => ({ ...v })) }
+              : undefined,
+          },
+          include: { images: true, variants: true },
+        });
+      } catch (err: any) {
+        if (isMissingColumn(err) && !stripNew) {
+          this.logger.warn('Product columns missing (pending migration) — saving without badges/specs fields');
+          stripNew = true;
+          attempt -= 1;
+          continue;
+        }
+        if (err?.code !== 'P2002' || attempt === 4) throw err;
+      }
+    }
+    throw new BadRequestException('Could not create product — please try a different name');
   }
 
   async getProducts(tenantId: string, query: any) {
@@ -173,11 +234,22 @@ export class CommerceService {
       });
     }
 
-    return this.prisma.product.update({
-      where: { id: productId },
-      data: productData,
-      include: { images: true, variants: true },
-    });
+    try {
+      return await this.prisma.product.update({
+        where: { id: productId },
+        data: productData,
+        include: { images: true, variants: true },
+      });
+    } catch (err: any) {
+      // Databases missing the badges/specs migration: retry without new fields.
+      if (!isMissingColumn(err)) throw err;
+      this.logger.warn('Product columns missing (pending migration) — updating without badges/specs fields');
+      return this.prisma.product.update({
+        where: { id: productId },
+        data: withoutNewColumns(productData),
+        include: { images: true, variants: true },
+      });
+    }
   }
 
   async deleteProduct(productId: string) {
