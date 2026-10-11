@@ -2031,6 +2031,13 @@ model Product {
   name           String
   slug           String
   description    String?
+  shortDescription String?
+  weight         Decimal?
+  weightUnit     String?
+  length         Decimal?
+  width          Decimal?
+  height         Decimal?
+  dimensionUnit  String?
   type           String   @default("physical")
   price          Decimal  @default(0)
   compareAtPrice Decimal?
