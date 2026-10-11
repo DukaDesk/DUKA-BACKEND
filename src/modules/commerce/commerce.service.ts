@@ -76,7 +76,15 @@ export class CommerceService {
   async getProducts(tenantId: string, query: any) {
     const where: any = { tenantId, isActive: true };
     if (query.categoryId) where.categoryId = query.categoryId;
-    if (query.search) where.name = { contains: query.search, mode: 'insensitive' };
+    if (query.search) {
+      const q = String(query.search);
+      // Name, description and tag search (tags match whole elements).
+      where.OR = [
+        { name: { contains: q, mode: 'insensitive' } },
+        { description: { contains: q, mode: 'insensitive' } },
+        { tags: { has: q } },
+      ];
+    }
     if (query.type) where.type = query.type;
     if (query.minPrice) where.price = { ...where.price, gte: parseFloat(query.minPrice) };
     if (query.maxPrice) where.price = { ...where.price, lte: parseFloat(query.maxPrice) };
