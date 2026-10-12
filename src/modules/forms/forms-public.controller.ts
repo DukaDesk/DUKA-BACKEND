@@ -1,3 +1,5 @@
+import { OptionalJwtAuthGuard } from '../../common/guards/optional-jwt-auth.guard';
+import { DataConsentService } from '../data-consent/data-consent.service';
 import {
   Controller, Get, Post, Body, Param, Query, UseGuards,
 } from '@nestjs/common';
@@ -10,7 +12,7 @@ import { Public } from '../../common/decorators/public.decorator';
 @ApiTags('Forms - Public (Consumer-Facing)')
 @Controller({ path: 'merchants/:merchantId/forms', version: '1' })
 export class FormsPublicController {
-  constructor(private readonly formsService: FormsService) {}
+  constructor(private readonly formsService: FormsService, private readonly consent: DataConsentService) {}
 
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
@@ -30,10 +32,12 @@ export class FormsPublicController {
   }
 
   @Public()
+  @UseGuards(OptionalJwtAuthGuard)
   @Post(':id/submit')
   @ApiOperation({ summary: 'Submit form answers (public)' })
-  submitForm(@Param('merchantId') merchantId: string, @Param('id') id: string, @Body() data: { answers: any; userId?: string; attachments?: string[] }) {
-    return this.formsService.submitForm(id, merchantId, data);
+  async submitForm(@CurrentUser('id') userId: string, @Param('merchantId') merchantId: string, @Param('id') id: string, @Body() data: { answers: any; userId?: string; attachments?: string[] }) {
+    await this.consent.requireFor(userId, merchantId, 'submit_form');
+    return this.formsService.submitForm(id, merchantId, { ...data, userId });
   }
 
   @UseGuards(JwtAuthGuard)

@@ -1,3 +1,4 @@
+import { DataConsentModule } from './modules/data-consent/data-consent.module';
 import { Module, MiddlewareConsumer, NestModule } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
@@ -74,6 +75,7 @@ import { ApiQuotaGuard } from './common/guards/api-quota.guard';
     // Modules
     AuthModule,
     UsersModule,
+    DataConsentModule,
     MerchantsModule,
     TemplatesModule,
     BuilderModule,

@@ -1,3 +1,6 @@
+import { ForbiddenException } from '@nestjs/common';
+import { PrismaService } from '../../common/prisma.service';
+import { DataConsentService } from '../data-consent/data-consent.service';
 import {
   Controller, Get, Post, Put, Patch, Delete, Body, Param, Query,
   UseGuards,
@@ -16,6 +19,8 @@ export class CommerceAppController {
   constructor(
     private readonly commerceService: CommerceService,
     private readonly tenantResolver: TenantResolverService,
+    private readonly prisma: PrismaService,
+    private readonly consent: DataConsentService,
   ) {}
 
   private async getTenantId(userId: string): Promise<string> {
@@ -188,7 +193,10 @@ export class CommerceAppController {
   @UseGuards(JwtAuthGuard) @ApiBearerAuth()
   @Post('cart/:id/checkout')
   @ApiOperation({ summary: 'Convert cart to order' })
-  checkout(@Param('id') id: string, @Body() data: { customerName?: string; customerEmail?: string; customerPhone?: string; notes?: string }) {
+  async checkout(@CurrentUser('id') userId: string, @Param('id') id: string, @Body() data: { customerName?: string; customerEmail?: string; customerPhone?: string; notes?: string }) {
+    const cart = await this.prisma.cart.findUnique({ where: { id } });
+    if (!cart || cart.userId !== userId) throw new ForbiddenException('Cart access denied');
+    await this.consent.requireFor(userId, cart.tenantId, 'checkout');
     return this.commerceService.checkout(id, data);
   }
 

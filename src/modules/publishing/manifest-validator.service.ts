@@ -1,3 +1,4 @@
+import { consentPolicy } from '../data-consent/policy';
 import { UnprocessableEntityException } from '@nestjs/common';
 
 export interface ManifestValidationResult {
@@ -34,6 +35,7 @@ export class ManifestValidator {
       }
     }
 
+    try { consentPolicy(manifest.dataRequest); } catch (error) { errors.push(error instanceof Error ? error.message : "Invalid data request"); }
     const screens = manifest.screens;
     if (screens == null) {
       errors.push('screens is required');

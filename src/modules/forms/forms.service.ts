@@ -86,7 +86,7 @@ export class FormsService {
       where: { id: formId },
       include: { fields: true, workflows: true },
     });
-    if (!form) throw new NotFoundException('Form not found');
+    if (!form || form.tenantId !== tenantId) throw new NotFoundException('Form not found');
 
     const errors = this.validateAnswers(form.fields, data.answers);
     if (errors.length > 0) {

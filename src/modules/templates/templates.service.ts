@@ -57,7 +57,10 @@ export class TemplatesService {
 
     const existingTheme = await this.prisma.theme.findUnique({ where: { tenantId } });
 
-    for (const page of config.pages) {
+    const isProfile = (value: unknown) => /^(profile|my[ _-]?profile|account|my[ _-]?account|profile[ &_-]+settings)$/i.test(String(value || '').replace(/^\//, '').trim());
+    const pages = config.pages.filter((page: any) => !isProfile(page.slug) && !isProfile(page.name));
+    if (!pages.length) throw new BadRequestException('Template has no business pages');
+    for (const page of pages) {
       if (!page.name || !page.slug) {
         throw new BadRequestException(`Template page missing required fields (name, slug)`);
       }
@@ -121,8 +124,8 @@ export class TemplatesService {
     if (config?.navigation) {
       await this.prisma.navigation.upsert({
         where: { tenantId },
-        create: { tenantId, items: config.navigation },
-        update: { items: config.navigation },
+        create: { tenantId, items: config.navigation.filter((item: any) => !isProfile(item.target) && !isProfile(item.label)) },
+        update: { items: config.navigation.filter((item: any) => !isProfile(item.target) && !isProfile(item.label)) },
       });
     }
 
