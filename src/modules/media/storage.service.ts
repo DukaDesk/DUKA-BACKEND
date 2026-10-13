@@ -34,11 +34,13 @@ export class StorageService {
   }
 
   get baseUrl(): string {
+    const cdnUrl = (process.env.CDN_URL || '').replace(/\/+$/, '');
     if (this.useS3) {
+      // Public delivery base (CDN, r2.dev, custom domain) wins over the signed S3 endpoint.
+      if (cdnUrl) return cdnUrl;
       const endpoint = process.env.STORAGE_ENDPOINT || '';
       return endpoint ? `${endpoint}/${this.bucket}` : `https://${this.bucket}.s3.amazonaws.com`;
     }
-    const cdnUrl = process.env.CDN_URL || '';
     return cdnUrl;
   }
 
