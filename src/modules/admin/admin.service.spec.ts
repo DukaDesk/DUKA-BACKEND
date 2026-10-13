@@ -20,6 +20,7 @@ function makeService() {
       update: jest.fn(async (args: any) => ({ id: 'tenant-1', ...args.data })),
     },
     draftPage: { count: jest.fn(async () => 1) },
+    draft: { findUnique: jest.fn(async () => null) },
     auditLog: { create: jest.fn(async (args: any) => ({ id: 'audit-1', ...args.data })) },
     $transaction: jest.fn(async (ops: any[]) => Promise.all(ops)),
   };

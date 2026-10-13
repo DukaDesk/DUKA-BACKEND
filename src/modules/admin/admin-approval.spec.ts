@@ -25,6 +25,7 @@ function makePrisma(overrides: any = {}) {
       count: jest.fn().mockResolvedValue(overrides.pendingKyc ?? 1),
     },
     draftPage: { count: jest.fn().mockResolvedValue(overrides.drafts ?? 2) },
+    draft: { findUnique: jest.fn().mockResolvedValue(overrides.submittedDraft ?? null) },
     auditLog: { create: jest.fn().mockImplementation(async (args: any) => ({ id: 'audit-1', ...args.data })) },
     // Execute the ops in order so array-index destructuring in the service
     // resolves to the same positions as a real $transaction.
