@@ -386,7 +386,7 @@ API at `https://duka-backend-production.up.railway.app/api/v1` — Swagger docs 
 
 The admin merchant review routes are available at `/api/v1/admin/merchants/:id/review` and `/preview`, with verification and app review actions under the same merchant path. The merchant list is `/api/v1/bff/admin/merchants`. These endpoints require a platform `super_admin`, `operations`, or `support` role.
 
-Compliance documents must first be uploaded to the submitting merchant's media library. When submitted through `/api/v1/app/merchants/compliance`, the backend moves each file out of public uploads and records a private reference. Admin and merchant review responses contain links that expire after five minutes. Configure `API_PUBLIC_URL` to the public API origin when the UI and API have different origins. S3-compatible storage uses signed object URLs; local storage uses the protected `/api/v1/media/private/:token` endpoint.
+Compliance documents must first be uploaded to the submitting merchant's media library. When submitted through `/api/v1/app/merchants/compliance`, the backend moves each file out of public uploads and records a private reference. Admin and merchant review responses contain links that expire after five minutes. Configure `API_PUBLIC_URL` to the public API origin when the UI and API have different origins. S3-compatible storage serves public objects through `CDN_URL` (Cloudflare R2 public base) when configured; signed URLs are reserved for private compliance documents. Local storage uses the protected `/api/v1/media/private/:token` endpoint.
 
 To provision the initial super admin, set `SUPER_ADMIN_EMAIL` and a unique `SUPER_ADMIN_PASSWORD` of at least 16 characters in the deployment secret manager, then restart the API or run the database seed. No default super-admin account or password is created. The bootstrap adds the role to that account and never resets an existing password at startup. Only an existing super admin can invite another super admin.
 
@@ -447,10 +447,11 @@ To provision the initial super admin, set `SUPER_ADMIN_EMAIL` and a unique `SUPE
 | v0.3.4 | Merchant reject + stats — TenantStatus +rejected, POST /admin/merchants/:id/reject with rejectionReason, GET /admin/merchants/stats by status | Complete |
 | v0.3.5 | Published logo/release mismatch — S3 StorageService, manifest body publish, body limits, publish creates new Release directly | Complete |
 | v0.3.6 | Publishing defect fixes — screen format normalization, duplicate release prevention, rollback cache invalidation, WebP self-delete guard | Complete |
+| v1.0.1 | Production media storage on Cloudflare R2 — `STORAGE_PROVIDER=s3` + endpoint/region/bucket + `CDN_URL` (r2.dev) on Railway; `storage.service` baseUrl prefers `CDN_URL` in S3 mode (`3bef824`); anonymous GET of uploaded originals + variants → 200 | Complete |
 
 ## Completion Rate
 
-**~91/100** — See `Reigner.md` for detailed breakdown.
+**~93/100** — See `Reigner.md` for detailed breakdown.
 
 ## Response Format
 

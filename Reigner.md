@@ -190,6 +190,7 @@ Other scripts: `npm run build`, `npm run start:prod`, `npm run lint`, `npm test`
 | v0.3.5 | Published logo/release mismatch — S3 StorageService, manifest body publish, body limits, publish creates new Release directly | Complete |
 | v0.3.6 | Publishing defect fixes — screen format normalization, duplicate release prevention, rollback cache invalidation, WebP self-delete guard | Complete |
 | v0.3.7 | Published app delivery B1–B6 — ManifestValidator (1.0.0 object screens), atomic release activation + `activeReleaseId`, ActiveReleaseService shared by renderer/BFF, Idempotency-Key, owner/manager authz on publish/rollback, media folderId resolve + StorageService URLs, default merchant app seed, ApiQuotaGuard, 5 unit suites (38 tests) | Complete (code) / live verify pending |
+| v1.0.1 | Production media storage on Cloudflare R2 — `STORAGE_PROVIDER=s3` + endpoint/region/bucket + `CDN_URL` (r2.dev) on Railway prod, `storage.service` baseUrl prefers `CDN_URL` in S3 mode (`3bef824`, deploy `6261e2ac`), anonymous GET of new uploads (original + variants) → 200 `image/webp` | Complete (new uploads verified) |
 
 ---
 
@@ -197,9 +198,10 @@ Other scripts: `npm run build`, `npm run start:prod`, `npm run lint`, `npm test`
 
 Kept here so this file stays accurate:
 
-- **Unit tests only (38)** — five Jest suites cover manifest validation, publishing activation/idempotency/authz, active-release parity, media folderId/storage, and press-action round-trip. Full HTTP e2e / live B8 evidence is still open. Coverage of other modules remains the biggest gap.
+- **Unit tests only (17 suites)** — Jest suites cover manifest validation, publishing activation/idempotency/authz, active-release parity, media storage/CDN, media folderId, KYC/admin/approval, auth merchants, BFF manifest routes, and more. Full HTTP e2e / live B8 evidence is still open. Coverage of other modules remains a gap.
 - **Provider adapters are simulated** — payments use placeholder keys, notification adapters default to `log`, SendGrid/GoogleCalendar connectors are stubs, AI Mock is manually wired. Real integrations are scaffolded but not production-tested.
-- **Secret handling is casual** — `.env` is committed in the repo, `JWT_SECRET` has a `'super-secret'` fallback, and the seed hash's plaintext password (`Password123!`) is documented. Needs hardening before real deployment.
+- **Secret handling is casual** — `.env` is gitignored (no longer committed) but local plaintext, `JWT_SECRET` has a `'super-secret'` fallback, and the seed hash's plaintext password (`Password123!`) is documented. Needs hardening before real deployment.
+- **Pre-R2 media rows are stale** — uploads created before 2026-10-13 stored the signed S3-endpoint URL in the DB; those URLs 400/404 anonymously. Merchants must re-upload affected media/logos (open precondition for the published-logo live re-test).
 - **Rate limiting partially wired** — global `ThrottlerGuard` + new `ApiQuotaGuard` (platform `checkQuota`/`incrementQuota` on `/app/*` when tenant context exists). Quota defaults and operational docs still need hardening; Redis outage path fails open by design.
 - **Active-release migration** — `prisma/migrations/20260924000000_add_active_release` is written; Railway pre-deploy now runs `npx prisma migrate deploy` (was `db push`, which skips SQL backfill). Runtime fallback still backfills pre-migration rows if the column is null.
 - **SMS adapters are log-only** — Twilio, Termii, Africa's Talking just log and return success (no real HTTP calls).
@@ -212,7 +214,7 @@ Kept here so this file stays accurate:
 - **Swagger incomplete for Builder/Publishing** — Media has full `@ApiProperty()` DTOs; Builder and Publishing have `@ApiOperation` but not full DTO validation decorators.
 - **Docs drift** — README references `*-enhanced/` module folders that don't exist (functionality was folded into parent modules); schema uses `Plan` where docs say `SubscriptionPlan`; `dist/` is committed.
 
-**Completion: ~91/100** — All 32 modules implemented with real business logic and Prisma queries. 85+ models. Three-tier architecture complete. Draft/published split, template versioning, media hardening, P0 admin fixes done. Main gaps: 0% test coverage, rate limiting not wired, adapter stubs.
+**Completion: ~93/100** — All 32 modules implemented with real business logic and Prisma queries. 85+ models. Three-tier architecture complete. Draft/published split, template versioning, media hardening, P0 admin fixes done. Production media now on Cloudflare R2 (verified 2026-10-13). Main gaps: thin e2e coverage, rate limiting not fully wired, adapter stubs, pre-R2 media re-upload.
 
 ---
 
@@ -366,7 +368,7 @@ Merchant `aa0cd445` (Emmanuel Akinyemi) — editor reported v0.0.23 while mobile
 
 | Area | Change | Endpoint Affected |
 |------|--------|-------------------|
-| **S3-compatible storage** | `StorageService` — uploads persist to S3/R2 instead of ephemeral local disk. Activate with `STORAGE_PROVIDER=s3` on Railway. | `POST /app/media/upload` |
+| **S3-compatible storage** | `StorageService` — uploads persist to S3/R2 instead of ephemeral local disk. **Live in production since 2026-10-13**: bucket `dukadesk` on Cloudflare R2 (`https://a846cd1ad03fb3b24935790348aa5d07.r2.cloudflarestorage.com`, region `auto`), public delivery via `CDN_URL=https://pub-7ed3e12a1d58436aa69b237283e39b66.r2.dev`. | `POST /app/media/upload` |
 | **Manifest body publish** | `POST /publishing/publish` now accepts `{ manifest, version }` body. If `manifest.screens` is non-empty, persists directly as a new Release — no draft compilation required. Handles screens as array, object, or string array. | `POST /merchants/{id}/publishing/publish` |
 | **Body size limit** | Express body parser increased to 5MB to accommodate URL-only manifests with many screens. | All POST endpoints |
 | **Duplicate release prevention** | Draft path: compiler creates draft Release → publish promotes to published. Client path: supersedes old published → creates new. No more duplicate records. | `POST /publishing/publish` |
@@ -381,7 +383,7 @@ Merchant `aa0cd445` (Emmanuel Akinyemi) — editor reported v0.0.23 while mobile
    - `GET /api/v1/merchants/{id}/definition` → `data.app.version`
    - `GET /api/v1/bff/mobile/tenant/{slug}/manifest` → `data.app.version`
 
-3. **Verify logo delivery.** Every `identity.logo` or `theme.brand.logo` URL returned in the manifest must return HTTP 200 without authentication. If logos were uploaded before S3 was configured, they need to be re-uploaded.
+3. **Verify logo delivery.** Every `identity.logo` or `theme.brand.logo` URL returned in the manifest must return HTTP 200 without authentication. Logos uploaded before R2 was configured (2026-10-13) stored signed-endpoint URLs that fail anonymously — they must be re-uploaded so manifests reference `r2.dev` URLs.
 
 4. **Handle manifest shapes.** The manifest may contain:
    - `data.config.config.deployed.screens` (nested — older format)
@@ -394,14 +396,16 @@ Merchant `aa0cd445` (Emmanuel Akinyemi) — editor reported v0.0.23 while mobile
 
 ### Railway Environment Variables Required
 
+Set in Railway production (values live since 2026-10-13; keys stay in the secret manager):
+
 ```
 STORAGE_PROVIDER=s3
-STORAGE_ENDPOINT=https://<account-id>.r2.cloudflarestorage.com
+STORAGE_ENDPOINT=https://a846cd1ad03fb3b24935790348aa5d07.r2.cloudflarestorage.com
 STORAGE_REGION=auto
 STORAGE_BUCKET=dukadesk
-STORAGE_ACCESS_KEY=<access-key>
-STORAGE_SECRET_KEY=<secret-key>
-CDN_URL=https://<your-cdn-domain>
+STORAGE_ACCESS_KEY=<R2 access key>
+STORAGE_SECRET_KEY=<R2 secret key>
+CDN_URL=https://pub-7ed3e12a1d58436aa69b237283e39b66.r2.dev
 ```
 
-Until S3 is configured, uploads use local disk (works but ephemeral on Railway deploys).
+Media storage: S3/R2 is configured and verified in production since 2026-10-13 (authenticated upload → `r2.dev` URLs, anonymous GET → 200). Local disk remains the dev fallback when `STORAGE_PROVIDER` is unset.

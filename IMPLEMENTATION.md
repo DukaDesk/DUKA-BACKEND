@@ -245,13 +245,13 @@ Anonymous contract endpoint: `GET /api/v1/compatibility` (machine-readable `duka
 - Webp conversion (quality 90)
 - 5 preset variants: thumbnail (150x150), small (400w), medium (800w), large (1200w), og-image (1200x630)
 - Skips enlargement; skips thumbnail for images < 150px
-- Generates variants on upload, stored in `uploads/variants/`
+- Generates variants on upload; production persists originals + variants to Cloudflare R2 via `StorageService` (local disk fallback writes `uploads/variants/`)
 
 **Key Decisions**:
 - Hash-based dedup via UUID file naming
 - Variant metadata stored as JSON on Media.variants
 - AssetVersion tracks version history per upload
-- CDN_URL env var for delivery URL generation
+- `CDN_URL` env var for delivery URL generation — in S3 mode `StorageService.baseUrl` prefers `CDN_URL` (public base, e.g. `https://pub-...r2.dev`) over the signed endpoint so returned URLs are anonymously readable (`3bef824`)
 
 ---
 
@@ -576,7 +576,12 @@ Error → HttpExceptionFilter → { success, errors: [] }
 | `JWT_REFRESH_EXPIRATION` | 7d | Refresh token TTL |
 | `REDIS_HOST` | localhost | Redis host |
 | `REDIS_PORT` | 6379 | Redis port |
-| `CDN_URL` | (empty) | CDN base URL for media delivery |
+| `CDN_URL` | (empty) | Public base URL for media delivery; in S3 mode it overrides the signed endpoint (`https://pub-...r2.dev` in production) |
+| `STORAGE_PROVIDER` | local | Media storage backend: `local` (disk) or `s3` (production: Cloudflare R2) |
+| `STORAGE_ENDPOINT` | (empty) | S3-compatible endpoint (production: `https://<account>.r2.cloudflarestorage.com`) |
+| `STORAGE_REGION` | us-east-1 | S3 region (`auto` for R2) |
+| `STORAGE_BUCKET` | dukadesk | Object storage bucket |
+| `STORAGE_ACCESS_KEY` / `STORAGE_SECRET_KEY` | (empty) | S3 credentials (R2 API token) |
 | `PAYSTACK_SECRET_KEY` | sk_test_... | Paystack API secret |
 | `FLUTTERWAVE_SECRET_KEY` | FLWSECK_test_... | Flutterwave API secret |
 | `STRIPE_SECRET_KEY` | sk_test_... | Stripe API secret |
