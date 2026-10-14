@@ -222,34 +222,51 @@ export class CommerceService {
 
     if (images) {
       await this.prisma.productImage.deleteMany({ where: { productId } });
-      await this.prisma.productImage.createMany({
-        data: images.map((url: string, i: number) => ({ productId, url, sortOrder: i })),
-      });
+      // createMany rejects an empty array — deleting is enough when the
+      // merchant cleared every image.
+      if (images.length) {
+        await this.prisma.productImage.createMany({
+          data: images.map((url: string, i: number) => ({ productId, url, sortOrder: i })),
+        });
+      }
     }
 
     if (variants) {
       await this.prisma.productVariant.deleteMany({ where: { productId } });
-      await this.prisma.productVariant.createMany({
-        data: variants.map((v: any) => ({ productId, ...v })),
-      });
+      if (variants.length) {
+        await this.prisma.productVariant.createMany({
+          data: variants.map((v: any) => ({ productId, ...v })),
+        });
+      }
     }
 
-    try {
-      return await this.prisma.product.update({
-        where: { id: productId },
-        data: productData,
-        include: { images: true, variants: true },
-      });
-    } catch (err: any) {
-      // Databases missing the badges/specs migration: retry without new fields.
-      if (!isMissingColumn(err)) throw err;
-      this.logger.warn('Product columns missing (pending migration) — updating without badges/specs fields');
-      return this.prisma.product.update({
-        where: { id: productId },
-        data: withoutNewColumns(productData),
-        include: { images: true, variants: true },
-      });
+    // Names may repeat — slugs stay unique per tenant by suffixing on
+    // collision, mirroring createProduct. stripNew covers databases where
+    // the badges/specs migration has not landed yet (P2022).
+    const base = productData.slug || slugify(productData.name);
+    let stripNew = false;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      try {
+        const payload = stripNew ? withoutNewColumns(productData) : productData;
+        return await this.prisma.product.update({
+          where: { id: productId },
+          data: {
+            ...payload,
+            slug: payload.slug ? (attempt === 0 ? payload.slug : `${base}-${attempt + 1}`) : undefined,
+          },
+          include: { images: true, variants: true },
+        });
+      } catch (err: any) {
+        if (isMissingColumn(err) && !stripNew) {
+          this.logger.warn('Product columns missing (pending migration) — updating without badges/specs fields');
+          stripNew = true;
+          attempt -= 1;
+          continue;
+        }
+        if (err?.code !== 'P2002' || attempt === 4) throw err;
+      }
     }
+    throw new BadRequestException('Could not update product — please try again');
   }
 
   async deleteProduct(productId: string) {
