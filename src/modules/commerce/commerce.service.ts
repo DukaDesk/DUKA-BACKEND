@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ConflictException, Logger } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma.service';
 import { EventBusService } from '../../shared/events/event-bus.service';
 
@@ -29,6 +29,12 @@ function isMissingColumn(err: any): boolean {
   return err?.code === 'P2022';
 }
 
+/** True when a Prisma unique violation names the SKU (field or index). */
+function isSkuConflict(err: any): boolean {
+  const target = err?.meta?.target;
+  const text = Array.isArray(target) ? target.join(',') : String(target ?? '');
+  return /sku/i.test(text);
+}
 /** Strip Phase-0 columns so writes keep working on databases
  *  where the badges/tags migration has not landed yet. */
 function withoutNewColumns<T extends Record<string, any>>(data: T): T {
@@ -149,7 +155,18 @@ export class CommerceService {
           attempt -= 1;
           continue;
         }
-        if (err?.code !== 'P2002' || attempt === 4) throw err;
+        if (err?.code === 'P2002') {
+          // A duplicate SKU is the merchant's data to fix — never silently
+          // rewritten, and never a 500. Anything else here is the slug.
+          if (isSkuConflict(err)) {
+            throw new ConflictException('This SKU is already used by another product — change the SKU and try again');
+          }
+          if (attempt === 4) {
+            throw new ConflictException('A product with these details already exists — change the name and try again');
+          }
+          continue;
+        }
+        throw err;
       }
     }
     throw new BadRequestException('Could not create product — please try a different name');
@@ -266,7 +283,16 @@ export class CommerceService {
         if (err?.code === 'P2003') {
           throw new BadRequestException('The selected category is no longer available — pick another category');
         }
-        if (err?.code !== 'P2002' || attempt === 4) throw err;
+        if (err?.code === 'P2002') {
+          if (isSkuConflict(err)) {
+            throw new ConflictException('This SKU is already used by another product — change the SKU and try again');
+          }
+          if (attempt === 4) {
+            throw new ConflictException('A product with these details already exists — change the name and try again');
+          }
+          continue;
+        }
+        throw err;
       }
     }
     throw new BadRequestException('Could not update product — please try again');
