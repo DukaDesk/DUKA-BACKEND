@@ -263,6 +263,9 @@ export class CommerceService {
           attempt -= 1;
           continue;
         }
+        if (err?.code === 'P2003') {
+          throw new BadRequestException('The selected category is no longer available — pick another category');
+        }
         if (err?.code !== 'P2002' || attempt === 4) throw err;
       }
     }
