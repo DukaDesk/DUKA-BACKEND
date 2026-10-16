@@ -90,7 +90,7 @@ export class AdminController {
   @RequirePlatformRoles('super_admin', 'operations')
   @ApiOperation({ summary: 'Stage-2: approve app design and publish live' })
   approveApp(@Param('id') id: string, @CurrentUser('id') userId: string) {
-    return this.adminService.approveApp(id, userId);
+    return this.merchantAppReviewService.approveApp(id, userId);
   }
 
   @Post('merchants/:id/apps/reject')
@@ -99,7 +99,7 @@ export class AdminController {
   @ApiOperation({ summary: 'Stage-2: reject app design with reason' })
   @ApiBody({ schema: { type: 'object', properties: { reason: { type: 'string' } } } })
   rejectApp(@Param('id') id: string, @CurrentUser('id') userId: string, @Body() body: { reason?: string }) {
-    return this.adminService.rejectApp(id, userId, body?.reason);
+    return this.merchantAppReviewService.rejectApp(id, userId, body?.reason);
   }
 
   @Get('merchants/stats')

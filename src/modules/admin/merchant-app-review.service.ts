@@ -1,11 +1,15 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma.service';
+import { PublishingService } from '../publishing/publishing.service';
 
 @Injectable()
 export class MerchantAppReviewService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly publishingService: PublishingService,
+  ) {}
 
-  async getReview(tenantId: string, adminUserId: string) {
+  private async verifyReviewer(adminUserId: string) {
     const reviewer = await this.prisma.userRole.findFirst({
       where: {
         userId: adminUserId,
@@ -15,6 +19,10 @@ export class MerchantAppReviewService {
       select: { id: true },
     });
     if (!reviewer) throw new ForbiddenException('Merchant app review permissions are required');
+  }
+
+  async getReview(tenantId: string, adminUserId: string) {
+    await this.verifyReviewer(adminUserId);
 
     const tenant = await this.prisma.tenant.findUnique({
       where: { id: tenantId },
@@ -46,5 +54,61 @@ export class MerchantAppReviewService {
       draftPages,
       releases,
     };
+  }
+
+  async approveApp(tenantId: string, adminUserId: string) {
+    await this.verifyReviewer(adminUserId);
+
+    const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId } });
+    if (!tenant) throw new NotFoundException({ code: 'MERCHANT_NOT_FOUND', message: 'Merchant not found' });
+    if (tenant.appStatus === 'approved') return tenant;
+    if (tenant.appStatus !== 'in_review') {
+      throw new ConflictException('The app must be submitted for review before it can be approved');
+    }
+
+    const [draftCount, submittedDraft] = await Promise.all([
+      this.prisma.draftPage.count({ where: { tenantId, isActive: true } }),
+      this.prisma.draft.findUnique({ where: { id: `${tenantId}-draft` } }),
+    ]);
+    const hasSubmittedManifest = submittedDraft?.status === 'in_review' && !!submittedDraft.manifest;
+    if (draftCount === 0 && !hasSubmittedManifest) {
+      throw new BadRequestException('No app design submitted for review');
+    }
+
+    const result = await this.publishingService.publishAsAdmin(tenantId);
+    const [updated] = await this.prisma.$transaction([
+      this.prisma.tenant.update({
+        where: { id: tenantId },
+        data: { appStatus: 'approved', appReviewedAt: new Date() },
+      }),
+      this.prisma.auditLog.create({
+        data: { tenantId, userId: adminUserId, action: 'merchant.app_approve', entity: 'tenant', entityId: tenantId, metadata: { version: result.version, releaseId: result.releaseId } },
+      }),
+    ]);
+    return updated;
+  }
+
+  async rejectApp(tenantId: string, adminUserId: string, reason?: string) {
+    await this.verifyReviewer(adminUserId);
+
+    const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId } });
+    if (!tenant) throw new NotFoundException({ code: 'MERCHANT_NOT_FOUND', message: 'Merchant not found' });
+    if (tenant.appStatus === 'rejected') return tenant;
+    if (tenant.appStatus !== 'in_review') {
+      throw new ConflictException('An app in review is required before it can be rejected');
+    }
+    const trimmedReason = reason?.trim();
+    if (!trimmedReason) throw new BadRequestException('A rejection reason is required');
+
+    const [updated] = await this.prisma.$transaction([
+      this.prisma.tenant.update({
+        where: { id: tenantId },
+        data: { appStatus: 'rejected', appReviewedAt: new Date(), appReviewNote: trimmedReason },
+      }),
+      this.prisma.auditLog.create({
+        data: { tenantId, userId: adminUserId, action: 'merchant.app_reject', entity: 'tenant', entityId: tenantId, metadata: { reason: trimmedReason } },
+      }),
+    ]);
+    return updated;
   }
 }
