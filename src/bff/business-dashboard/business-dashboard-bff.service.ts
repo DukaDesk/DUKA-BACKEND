@@ -7,9 +7,19 @@ export class BusinessDashboardBffService {
   constructor(private prisma: PrismaService) {}
 
   async getPlatformOverview() {
-    const [totalTenants, totalUsers, totalProducts, publishedTenants, totalOrders, totalRevenue] = await Promise.all([
+    const [totalTenants, totalUsers, totalPlatformStaff, totalProducts, publishedTenants, totalOrders, totalRevenue] = await Promise.all([
       this.prisma.tenant.count(),
       this.prisma.user.count(),
+      this.prisma.user.count({
+        where: {
+          roles: {
+            some: {
+              tenantId: null,
+              role: { name: { in: ['super_admin', 'support', 'operations', 'finance'] } },
+            },
+          },
+        },
+      }),
       this.prisma.product.count(),
       this.prisma.tenant.count({ where: { status: 'published' } }),
       this.prisma.order.count(),
@@ -21,6 +31,7 @@ export class BusinessDashboardBffService {
       publishedTenants,
       draftTenants: totalTenants - publishedTenants,
       totalUsers,
+      totalPlatformStaff,
       totalProducts,
       totalOrders,
       totalRevenue: totalRevenue._sum.total || 0,

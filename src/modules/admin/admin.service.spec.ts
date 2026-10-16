@@ -6,9 +6,15 @@ function makeService() {
     tenant: { update: jest.fn(async (args: any) => ({ id: 'tenant-1', ...args.data })) },
   };
   const prisma: any = {
-    user: { findUnique: jest.fn(async () => ({ id: 'admin-user' })) },
+    user: {
+      findUnique: jest.fn(async () => ({ id: 'admin-user' })),
+      count: jest.fn()
+        .mockResolvedValueOnce(82)
+        .mockResolvedValueOnce(4),
+    },
     userRole: { findFirst: jest.fn(async () => ({ id: 'role-1' })) },
     tenant: {
+      count: jest.fn(async () => 0),
       findUnique: jest.fn(async () => ({
         id: 'tenant-1',
         slug: 'shop',
@@ -19,6 +25,7 @@ function makeService() {
       })),
       update: jest.fn(async (args: any) => ({ id: 'tenant-1', ...args.data })),
     },
+    product: { count: jest.fn(async () => 0) },
     draftPage: { count: jest.fn(async () => 1) },
     draft: { findUnique: jest.fn(async () => null) },
     auditLog: { create: jest.fn(async (args: any) => ({ id: 'audit-1', ...args.data })) },
@@ -34,6 +41,27 @@ function makeService() {
   const service = new AdminService(prisma, publishingService, livePreviewService, mediaService);
   return { service, prisma, publishingService, livePreviewService, tx };
 }
+
+describe('AdminService platform statistics', () => {
+  it('counts unique users assigned a platform role separately from all users', async () => {
+    const { service, prisma } = makeService();
+
+    const stats = await service.getStats('admin-user');
+
+    expect(prisma.user.count.mock.calls[0]).toEqual([]);
+    expect(prisma.user.count).toHaveBeenNthCalledWith(2, {
+      where: {
+        roles: {
+          some: {
+            tenantId: null,
+            role: { name: { in: ['super_admin', 'support', 'operations', 'finance'] } },
+          },
+        },
+      },
+    });
+    expect(stats).toMatchObject({ totalUsers: 82, totalPlatformStaff: 4 });
+  });
+});
 
 describe('AdminService app review (two-stage)', () => {
   it('restricts review actions to platform reviewers', async () => {

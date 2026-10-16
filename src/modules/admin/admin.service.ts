@@ -408,9 +408,19 @@ export class AdminService {
   async getStats(adminUserId: string) {
     await this.verifyAdmin(adminUserId);
 
-    const [totalTenants, totalUsers, totalProducts, publishedTenants] = await Promise.all([
+    const [totalTenants, totalUsers, totalPlatformStaff, totalProducts, publishedTenants] = await Promise.all([
       this.prisma.tenant.count(),
       this.prisma.user.count(),
+      this.prisma.user.count({
+        where: {
+          roles: {
+            some: {
+              tenantId: null,
+              role: { name: { in: ['super_admin', 'support', 'operations', 'finance'] } },
+            },
+          },
+        },
+      }),
       this.prisma.product.count(),
       this.prisma.tenant.count({ where: { status: 'published' } }),
     ]);
@@ -420,6 +430,7 @@ export class AdminService {
       publishedTenants,
       draftTenants: totalTenants - publishedTenants,
       totalUsers,
+      totalPlatformStaff,
       totalProducts,
     };
   }
