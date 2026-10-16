@@ -6,10 +6,12 @@ import { UsersModule } from '../users/users.module';
 import { PublishingModule } from '../publishing/publishing.module';
 import { BuilderModule } from '../builder/builder.module';
 import { MediaModule } from '../media/media.module';
+import { MerchantAppReviewService } from './merchant-app-review.service';
+import { PlatformRoleGuard } from './platform-role.guard';
 
 @Module({
   imports: [UsersModule, PublishingModule, BuilderModule, MediaModule],
   controllers: [AdminController],
-  providers: [AdminService, AdminInviteService],
+  providers: [AdminService, AdminInviteService, MerchantAppReviewService, PlatformRoleGuard],
 })
 export class AdminModule {}

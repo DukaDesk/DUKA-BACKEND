@@ -5,6 +5,8 @@ import { AdminInviteService } from './admin-invite.service';
 import { CreateInviteDto } from './dto/create-invite.dto';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { MerchantAppReviewService } from './merchant-app-review.service';
+import { PlatformRoleGuard, RequirePlatformRoles } from './platform-role.guard';
 
 @ApiTags('Admin')
 @ApiBearerAuth()
@@ -14,6 +16,7 @@ export class AdminController {
   constructor(
     private readonly adminService: AdminService,
     private readonly adminInviteService: AdminInviteService,
+    private readonly merchantAppReviewService: MerchantAppReviewService,
   ) {}
 
   @Post('merchants/:id/approve')
@@ -51,34 +54,52 @@ export class AdminController {
   }
 
   @Get('merchants/:id/compliance')
+  @UseGuards(PlatformRoleGuard)
+  @RequirePlatformRoles('super_admin', 'platform_operator')
   @ApiOperation({ summary: 'Stage-1: list merchant compliance submissions' })
   getCompliance(@Param('id') id: string, @CurrentUser('id') userId: string) {
     return this.adminService.getCompliance(id, userId);
   }
 
   @Get('merchants/:id/review')
-  @ApiOperation({ summary: 'Full merchant review bundle for the approval screen' })
+  @UseGuards(PlatformRoleGuard)
+  @RequirePlatformRoles('super_admin', 'platform_operator')
+  @ApiOperation({ summary: 'Full merchant review bundle for credential management' })
   getMerchantReview(@Param('id') id: string, @CurrentUser('id') userId: string) {
     return this.adminService.getMerchantReview(id, userId);
   }
 
+  @Get('merchants/:id/apps/review')
+  @UseGuards(PlatformRoleGuard)
+  @RequirePlatformRoles('super_admin', 'operations')
+  @ApiOperation({ summary: 'Stage-2: app-only review details for platform app reviewers' })
+  getMerchantAppReview(@Param('id') id: string, @CurrentUser('id') userId: string) {
+    return this.merchantAppReviewService.getReview(id, userId);
+  }
+
   @Get('merchants/:id/preview')
+  @UseGuards(PlatformRoleGuard)
+  @RequirePlatformRoles('super_admin', 'operations')
   @ApiOperation({ summary: 'Stage-2: draft live-preview of the merchant app for review' })
   getMerchantPreview(@Param('id') id: string, @CurrentUser('id') userId: string) {
     return this.adminService.getMerchantPreview(id, userId);
   }
 
   @Post('merchants/:id/apps/approve')
+  @UseGuards(PlatformRoleGuard)
+  @RequirePlatformRoles('super_admin', 'operations')
   @ApiOperation({ summary: 'Stage-2: approve app design and publish live' })
   approveApp(@Param('id') id: string, @CurrentUser('id') userId: string) {
-    return this.adminService.approveApp(id, userId);
+    return this.merchantAppReviewService.approveApp(id, userId);
   }
 
   @Post('merchants/:id/apps/reject')
+  @UseGuards(PlatformRoleGuard)
+  @RequirePlatformRoles('super_admin', 'operations')
   @ApiOperation({ summary: 'Stage-2: reject app design with reason' })
   @ApiBody({ schema: { type: 'object', properties: { reason: { type: 'string' } } } })
   rejectApp(@Param('id') id: string, @CurrentUser('id') userId: string, @Body() body: { reason?: string }) {
-    return this.adminService.rejectApp(id, userId, body?.reason);
+    return this.merchantAppReviewService.rejectApp(id, userId, body?.reason);
   }
 
   @Get('merchants/stats')
