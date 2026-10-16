@@ -1,4 +1,5 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../common/prisma.service';
 
 @Injectable()
@@ -26,17 +27,53 @@ export class BusinessDashboardBffService {
     };
   }
 
-  async getTenantsList(adminUserId: string, status?: string, page = 1, limit = 20, verification?: string, appStatus?: string) {
+  async getTenantsList(
+    adminUserId: string,
+    status?: string,
+    page = 1,
+    limit = 20,
+    verification?: string,
+    appStatus?: string,
+    search?: string,
+    sort?: string,
+    order?: string,
+  ) {
     await this.verifyAdmin(adminUserId);
-    const where: any = {};
-    const allowedStatuses = ['draft', 'published', 'suspended', 'rejected'];
-    if (status && allowedStatuses.includes(status)) where.status = status;
+    const where: Prisma.TenantWhereInput = {};
+    if (status === 'draft' || status === 'published' || status === 'suspended' || status === 'rejected') {
+      where.status = status;
+    }
     const allowedVerification = ['pending', 'verified', 'rejected'];
     if (verification && allowedVerification.includes(verification)) where.verificationStatus = verification;
     const allowedApp = ['none', 'in_review', 'approved', 'rejected'];
     if (appStatus && allowedApp.includes(appStatus)) where.appStatus = appStatus;
 
-    const skip = (page - 1) * limit;
+    const normalizedSearch = search?.trim();
+    if (normalizedSearch) {
+      where.OR = [
+        { name: { contains: normalizedSearch, mode: 'insensitive' } },
+        { slug: { contains: normalizedSearch, mode: 'insensitive' } },
+        { email: { contains: normalizedSearch, mode: 'insensitive' } },
+        {
+          users: {
+            some: {
+              role: 'owner',
+              user: { email: { contains: normalizedSearch, mode: 'insensitive' } },
+            },
+          },
+        },
+      ];
+    }
+
+    const pageValue = Number.isFinite(page) ? Math.floor(page) : 1;
+    const limitValue = Number.isFinite(limit) ? Math.floor(limit) : 20;
+    const safePage = Math.max(1, pageValue || 1);
+    const safeLimit = Math.min(100, Math.max(1, limitValue || 20));
+    const allowedSortFields = ['name', 'status', 'verificationStatus', 'appStatus', 'createdAt'] as const;
+    const sortField = allowedSortFields.find((field) => field === sort) ?? 'createdAt';
+    const sortOrder: Prisma.SortOrder = order === 'asc' ? 'asc' : 'desc';
+    const orderBy: Prisma.TenantOrderByWithRelationInput = { [sortField]: sortOrder };
+    const skip = (safePage - 1) * safeLimit;
     const [data, total] = await Promise.all([
       this.prisma.tenant.findMany({
         where,
@@ -46,8 +83,8 @@ export class BusinessDashboardBffService {
           subscription: { include: { plan: { select: { name: true } } } },
         },
         skip,
-        take: limit,
-        orderBy: { createdAt: 'desc' },
+        take: safeLimit,
+        orderBy,
       }),
       this.prisma.tenant.count({ where }),
     ]);
@@ -58,7 +95,7 @@ export class BusinessDashboardBffService {
         email: tenant.email ?? tenant.users[0]?.user.email,
         plan: tenant.subscription?.plan?.name,
       })),
-      meta: { page, limit, total, pages: Math.ceil(total / limit) },
+      meta: { page: safePage, limit: safeLimit, total, pages: Math.ceil(total / safeLimit) },
     };
   }
 
