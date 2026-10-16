@@ -416,17 +416,14 @@ export class MerchantsService {
     })));
   }
 
-  // Stage-2: submit the designed app for admin review. Requires a
-  // verified merchant; moves the app into the review queue.
+  // Stage-2 submission is independent of merchant credential verification.
+  // The merchant must explicitly submit a valid app before admin review.
 
   async submitAppReview(tenantId: string, userId: string, manifest?: any) {
     await this.verifyOwnership(tenantId, userId);
 
     const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId } });
     if (!tenant) throw new NotFoundException({ code: 'MERCHANT_NOT_FOUND', message: 'Merchant not found' });
-    if ((tenant as any).verificationStatus !== 'verified') {
-      throw new ForbiddenException({ code: 'MERCHANT_NOT_VERIFIED', message: 'Merchant must pass verification before submitting the app for review' });
-    }
 
     if (manifest !== undefined && manifest !== null) {
       await this.publishingService.submitForReview(tenantId, userId, manifest);

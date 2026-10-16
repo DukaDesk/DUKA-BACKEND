@@ -26,10 +26,23 @@ export class BusinessDashboardBffController {
   @ApiQuery({ name: 'limit', required: false })
   @ApiQuery({ name: 'verification', required: false })
   @ApiQuery({ name: 'appStatus', required: false })
-  getTenants(@CurrentUser('id') userId: string, @Query('status') status?: string, @Query('page') page?: string, @Query('limit') limit?: string, @Query('verification') verification?: string, @Query('appStatus') appStatus?: string) {
+  @ApiQuery({ name: 'search', required: false })
+  @ApiQuery({ name: 'sort', required: false })
+  @ApiQuery({ name: 'order', required: false, enum: ['asc', 'desc'] })
+  getTenants(
+    @CurrentUser('id') userId: string,
+    @Query('status') status?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('verification') verification?: string,
+    @Query('appStatus') appStatus?: string,
+    @Query('search') search?: string,
+    @Query('sort') sort?: string,
+    @Query('order') order?: string,
+  ) {
     const p = Number(page) || 1;
     const l = Number(limit) || 20;
-    return this.bff.getTenantsList(userId, status, p, l, verification, appStatus);
+    return this.bff.getTenantsList(userId, status, p, l, verification, appStatus, search, sort, order);
   }
 
   @Get('audit')
