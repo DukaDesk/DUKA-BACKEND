@@ -4,10 +4,12 @@ import {
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery } from '@nestjs/swagger';
 import { MarketplaceService } from './marketplace.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { PlatformRoleGuard, RequirePlatformRoles } from '../admin/platform-role.guard';
 
 @ApiTags('Marketplace & Plugins')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PlatformRoleGuard)
+@RequirePlatformRoles('super_admin', 'platform_operator')
 @Controller({ version: '1' })
 export class MarketplaceController {
   constructor(private readonly marketplaceService: MarketplaceService) {}

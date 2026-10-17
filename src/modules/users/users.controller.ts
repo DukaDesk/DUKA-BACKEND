@@ -5,13 +5,14 @@ import {
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery, ApiParam } from '@nestjs/swagger';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
-import { RbacGuard } from '../../common/guards/rbac.guard';
+import { PlatformRoleGuard, RequirePlatformRoles } from '../admin/platform-role.guard';
 import { UsersService } from './users.service';
 
 @Controller('admin/users')
 @ApiTags('Admin - User Management')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, RbacGuard)
+@UseGuards(JwtAuthGuard, PlatformRoleGuard)
+@RequirePlatformRoles('super_admin')
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
@@ -23,6 +24,9 @@ export class UsersController {
   @ApiQuery({ name: 'role', required: false })
   @ApiQuery({ name: 'tenantId', required: false })
   @ApiQuery({ name: 'status', required: false })
+  @ApiQuery({ name: 'search', required: false, description: 'Search by email, first name, or last name' })
+  @ApiQuery({ name: 'sort', required: false, enum: ['createdAt', 'email', 'firstName', 'lastName', 'status'] })
+  @ApiQuery({ name: 'order', required: false, enum: ['asc', 'desc'] })
   async listUsers(
     @Query() query: {
       page?: number;
@@ -31,8 +35,10 @@ export class UsersController {
       role?: string;
       tenantId?: string;
       status?: string;
+      search?: string;
+      sort?: string;
+      order?: string;
     },
-    @CurrentUser('id') adminUserId: string,
   ) {
     const page = Number(query.page) || 1;
     const limit = Number(query.limit) || 50;
@@ -44,6 +50,9 @@ export class UsersController {
         role: query.role,
         tenantId: query.tenantId,
         status: query.status,
+        search: query.search,
+        sort: query.sort,
+        order: query.order,
       },
     );
   }
@@ -51,7 +60,7 @@ export class UsersController {
   @Get(':id')
   @ApiOperation({ summary: 'Get user detail: profile, roles, merchant memberships, last login' })
   @ApiParam({ name: 'id', description: 'User ID' })
-  async getUserById(@Param() param: { id: string }, @CurrentUser('id') adminUserId: string) {
+  async getUserById(@Param() param: { id: string }) {
     return this.usersService.getUserById(param.id);
   }
 
@@ -60,7 +69,6 @@ export class UsersController {
   @ApiParam({ name: 'id', description: 'User ID' })
   async approveUser(
     @Param() param: { id: string },
-    @CurrentUser('id') adminUserId: string,
   ) {
     return this.usersService.approveUser(param.id);
   }
@@ -70,7 +78,6 @@ export class UsersController {
   @ApiParam({ name: 'id', description: 'User ID' })
   async rejectUser(
     @Param() param: { id: string },
-    @CurrentUser('id') adminUserId: string,
   ) {
     return this.usersService.rejectUser(param.id);
   }
@@ -100,13 +107,13 @@ export class UsersController {
   @ApiParam({ name: 'id', description: 'User ID' })
   async assignUserRoles(
     @Param() param: { id: string },
-    @Body() body: { role: string; tenantId: string },
+    @Body() body: { role: string; tenantId?: string },
     @CurrentUser('id') adminUserId: string,
   ) {
     return this.usersService.assignUserRoles(param.id, {
       role: body.role,
       tenantId: body.tenantId,
-    });
+    }, adminUserId);
   }
 
   @Delete(':id')
@@ -117,7 +124,7 @@ export class UsersController {
     @CurrentUser('id') adminUserId: string,
     @Query('tenantId') tenantId?: string,
   ) {
-    return this.usersService.removeUser(param.id, tenantId);
+    return this.usersService.removeUser(param.id, tenantId, adminUserId);
   }
 
   @Get('merchant/:merchantId')
@@ -128,7 +135,6 @@ export class UsersController {
   async getMerchantUsers(
     @Param() param: { merchantId: string },
     @Query() query: { page?: number; limit?: number },
-    @CurrentUser('id') adminUserId: string,
   ) {
     const page = Number(query.page) || 1;
     const limit = Number(query.limit) || 50;
@@ -143,7 +149,6 @@ export class UsersController {
   async getTenantUsersAlias(
     @Param() param: { tenantId: string },
     @Query() query: { page?: number; limit?: number },
-    @CurrentUser('id') adminUserId: string,
   ) {
     const page = Number(query.page) || 1;
     const limit = Number(query.limit) || 50;

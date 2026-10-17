@@ -4,11 +4,13 @@ import {
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery, ApiParam } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { PlatformRoleGuard, RequirePlatformRoles } from '../../modules/admin/platform-role.guard';
 import { BusinessDashboardBffService } from './business-dashboard-bff.service';
 
 @ApiTags('Business Dashboard BFF')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PlatformRoleGuard)
+@RequirePlatformRoles('super_admin', 'platform_operator')
 @Controller({ path: 'bff/admin', version: '1' })
 export class BusinessDashboardBffController {
   constructor(private readonly bff: BusinessDashboardBffService) {}
@@ -20,6 +22,7 @@ export class BusinessDashboardBffController {
   }
 
   @Get('merchants')
+  @RequirePlatformRoles('super_admin', 'platform_operator', 'operations')
   @ApiOperation({ summary: 'Get paginated tenant list' })
   @ApiQuery({ name: 'status', required: false })
   @ApiQuery({ name: 'page', required: false })
@@ -46,10 +49,44 @@ export class BusinessDashboardBffController {
   }
 
   @Get('audit')
-  @ApiOperation({ summary: 'Get recent audit logs' })
+  @ApiOperation({ summary: 'Search and paginate platform audit logs' })
+  @ApiQuery({ name: 'page', required: false })
   @ApiQuery({ name: 'limit', required: false })
-  getAuditLogs(@Query('limit') limit?: string) {
-    return this.bff.getRecentAuditLogs(Number(limit) || 20);
+  @ApiQuery({ name: 'search', required: false })
+  @ApiQuery({ name: 'actor', required: false, description: 'Actor user ID or email' })
+  @ApiQuery({ name: 'action', required: false })
+  @ApiQuery({ name: 'resource', required: false })
+  @ApiQuery({ name: 'outcome', required: false, enum: ['success', 'denied', 'failed'] })
+  @ApiQuery({ name: 'from', required: false, description: 'Inclusive date or timestamp' })
+  @ApiQuery({ name: 'to', required: false, description: 'Inclusive date or timestamp' })
+  @ApiQuery({ name: 'sort', required: false, enum: ['timestamp', 'action', 'targetType', 'targetId'] })
+  @ApiQuery({ name: 'order', required: false, enum: ['asc', 'desc'] })
+  getAuditLogs(@Query() query: {
+    page?: string;
+    limit?: string;
+    search?: string;
+    actor?: string;
+    action?: string;
+    resource?: string;
+    outcome?: string;
+    from?: string;
+    to?: string;
+    sort?: string;
+    order?: string;
+  }) {
+    return this.bff.getRecentAuditLogs({
+      page: Number(query.page) || 1,
+      limit: Number(query.limit) || 20,
+      search: query.search,
+      actor: query.actor,
+      action: query.action,
+      resource: query.resource,
+      outcome: query.outcome,
+      from: query.from,
+      to: query.to,
+      sort: query.sort,
+      order: query.order,
+    });
   }
 
   @Get('analytics')

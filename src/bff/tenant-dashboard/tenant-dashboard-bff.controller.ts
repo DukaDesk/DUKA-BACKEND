@@ -2,6 +2,7 @@ import { Controller, Get, Param, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { TenantDashboardBffService } from './tenant-dashboard-bff.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
 
 @ApiTags('Merchant Dashboard BFF')
 @ApiBearerAuth()
@@ -12,19 +13,19 @@ export class TenantDashboardBffController {
 
   @Get(':id/summary')
   @ApiOperation({ summary: 'Get tenant dashboard summary' })
-  getSummary(@Param('id') id: string) {
-    return this.bff.getDashboardSummary(id);
+  getSummary(@Param('id') id: string, @CurrentUser('id') userId: string) {
+    return this.bff.getDashboardSummary(userId, id);
   }
 
   @Get(':id/analytics')
   @ApiOperation({ summary: 'Get tenant analytics (30d)' })
-  getAnalytics(@Param('id') id: string) {
-    return this.bff.getAnalyticsSummary(id);
+  getAnalytics(@Param('id') id: string, @CurrentUser('id') userId: string) {
+    return this.bff.getAnalyticsSummary(userId, id);
   }
 
   @Get(':id/integrations')
   @ApiOperation({ summary: 'Get connected integration status' })
-  getIntegrations(@Param('id') id: string) {
-    return this.bff.getIntegrationStatus(id);
+  getIntegrations(@Param('id') id: string, @CurrentUser('id') userId: string) {
+    return this.bff.getIntegrationStatus(userId, id);
   }
 }

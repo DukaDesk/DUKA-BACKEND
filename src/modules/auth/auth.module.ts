@@ -18,7 +18,7 @@ import { AdminInviteService } from '../admin/admin-invite.service';
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
-        secret: config.get<string>('JWT_SECRET') || 'super-secret',
+        secret: config.getOrThrow<string>('JWT_SECRET'),
         signOptions: { expiresIn: (config.get<string>('JWT_EXPIRATION') || '15m') as any },
       }),
     }),

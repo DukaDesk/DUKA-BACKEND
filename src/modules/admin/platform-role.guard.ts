@@ -22,15 +22,36 @@ export class PlatformRoleGuard implements CanActivate {
     const user = context.switchToHttp().getRequest().user;
     if (!user?.id) throw new ForbiddenException('Authentication required');
 
+    const databaseRoles = [...new Set(roles.flatMap((role) => {
+      if (role === 'platform_operator') return ['platform_operator', 'operations'];
+      if (role === 'support_agent') return ['support_agent', 'support'];
+      return [role];
+    }))];
     const assignment = await this.prisma.userRole.findFirst({
       where: {
         userId: user.id,
         tenantId: null,
-        role: { name: { in: roles } },
+        role: { name: { in: databaseRoles } },
       },
       select: { id: true },
     });
-    if (!assignment) throw new ForbiddenException('Insufficient platform role');
+    if (!assignment) {
+      await this.prisma.auditLog.create({
+        data: {
+          userId: user.id,
+          action: 'access.denied',
+          entity: 'api',
+          entityId: context.switchToHttp().getRequest().route?.path ?? 'unknown',
+          ipAddress: context.switchToHttp().getRequest().ip,
+          metadata: {
+            outcome: 'denied',
+            method: context.switchToHttp().getRequest().method,
+            reason: 'insufficient_platform_role',
+          },
+        },
+      });
+      throw new ForbiddenException('Insufficient platform role');
+    }
 
     return true;
   }

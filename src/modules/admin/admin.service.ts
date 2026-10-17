@@ -122,7 +122,7 @@ export class AdminService {
         data: { verificationStatus: 'verified', verifiedAt: new Date() },
       }),
       this.prisma.auditLog.create({
-        data: { tenantId, userId: adminUserId, action: 'merchant.verify', entity: 'tenant', entityId: tenantId },
+        data: { tenantId, userId: adminUserId, action: 'merchant.verify', entity: 'tenant', entityId: tenantId, metadata: { outcome: 'success' } },
       }),
     ]);
 
@@ -159,7 +159,7 @@ export class AdminService {
         data: { verificationStatus: 'rejected' },
       }),
       this.prisma.auditLog.create({
-        data: { tenantId, userId: adminUserId, action: 'merchant.verify_reject', entity: 'tenant', entityId: tenantId, metadata: { reason: trimmedReason } },
+        data: { tenantId, userId: adminUserId, action: 'merchant.verify_reject', entity: 'tenant', entityId: tenantId, metadata: { outcome: 'success', reason: trimmedReason } },
       }),
     ]);
 
@@ -224,7 +224,7 @@ export class AdminService {
         data: { appStatus: 'approved', appReviewedAt: new Date() },
       }),
       this.prisma.auditLog.create({
-        data: { tenantId, userId: adminUserId, action: 'merchant.app_approve', entity: 'tenant', entityId: tenantId, metadata: { version: result.version, releaseId: result.releaseId } },
+        data: { tenantId, userId: adminUserId, action: 'merchant.app_approve', entity: 'tenant', entityId: tenantId, metadata: { outcome: 'success', version: result.version, releaseId: result.releaseId } },
       }),
     ]);
 
@@ -251,7 +251,7 @@ export class AdminService {
         data: { appStatus: 'rejected', appReviewedAt: new Date(), appReviewNote: trimmedReason },
       }),
       this.prisma.auditLog.create({
-        data: { tenantId, userId: adminUserId, action: 'merchant.app_reject', entity: 'tenant', entityId: tenantId, metadata: { reason: trimmedReason } },
+        data: { tenantId, userId: adminUserId, action: 'merchant.app_reject', entity: 'tenant', entityId: tenantId, metadata: { outcome: 'success', reason: trimmedReason } },
       }),
     ]);
 
@@ -339,7 +339,7 @@ export class AdminService {
   // Draft live-preview for admin review (no publish required).
 
   async getMerchantPreview(tenantId: string, adminUserId: string) {
-    await this.verifyAdmin(adminUserId);
+    await this.verifyAppReviewer(adminUserId);
 
     const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId }, select: { id: true } });
     if (!tenant) throw new NotFoundException({ code: 'MERCHANT_NOT_FOUND', message: 'Merchant not found' });
@@ -439,10 +439,21 @@ export class AdminService {
     const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
     if (!user) throw new NotFoundException('User not found');
     const platformRole = await this.prisma.userRole.findFirst({
-      where: { userId, tenantId: null, role: { name: { in: ['super_admin', 'operations', 'support'] } } },
+      where: { userId, tenantId: null, role: { name: { in: ['super_admin', 'platform_operator'] } } },
       select: { id: true },
     });
     if (!platformRole) throw new ForbiddenException('Platform admin permissions are required');
+  }
+
+  private async verifyAppReviewer(userId: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
+    if (!user) throw new NotFoundException('User not found');
+
+    const reviewer = await this.prisma.userRole.findFirst({
+      where: { userId, tenantId: null, role: { name: { in: ['super_admin', 'operations'] } } },
+      select: { id: true },
+    });
+    if (!reviewer) throw new ForbiddenException('Merchant app review permissions are required');
   }
 
   async cleanupDeactivatedAccounts() {

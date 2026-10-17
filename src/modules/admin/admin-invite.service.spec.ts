@@ -14,9 +14,9 @@ function makeService(actorRoles: string[]) {
 }
 
 describe('AdminInviteService privilege checks', () => {
-  it('blocks platform officers from inviting a super admin', async () => {
+  it('blocks platform officers from creating admin invites', async () => {
     const { service, prisma } = makeService(['operations']);
-    await expect(service.createInvite('officer-1', { email: 'root@example.test', role: 'super_admin' }))
+    await expect(service.createInvite('officer-1', { email: 'operator@example.test', role: 'platform_operator' }))
       .rejects.toBeInstanceOf(ForbiddenException);
     expect(prisma.adminInvite.create).not.toHaveBeenCalled();
   });
@@ -28,9 +28,9 @@ describe('AdminInviteService privilege checks', () => {
     expect(prisma.adminInvite.create).toHaveBeenCalled();
   });
 
-  it('blocks users without platform roles from issuing any invite', async () => {
-    const { service, prisma } = makeService([]);
-    await expect(service.createInvite('merchant-1', { email: 'ops@example.test', role: 'platform_operator' }))
+  it('blocks users without a super-admin role from issuing any invite', async () => {
+    const { service, prisma } = makeService(['platform_operator']);
+    await expect(service.createInvite('operator-1', { email: 'ops@example.test', role: 'support_agent' }))
       .rejects.toBeInstanceOf(ForbiddenException);
     expect(prisma.adminInvite.create).not.toHaveBeenCalled();
   });

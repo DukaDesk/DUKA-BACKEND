@@ -1,11 +1,13 @@
-import { Controller, Post, Get, Put, Body, Query, UseGuards } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiBody, ApiOperation } from '@nestjs/swagger';
+import { Controller, Post, Get, Body, Query, UseGuards } from '@nestjs/common';
+import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { AdminInviteService } from '../admin/admin-invite.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { RefreshDto } from './dto/refresh.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
+import { SendOtpDto } from './dto/send-otp.dto';
+import { VerifyAdminLoginOtpDto } from './dto/verify-admin-login-otp.dto';
 import { GoogleLoginDto, AppleLoginDto } from './dto/social-login.dto';
 import { Public } from '../../common/decorators/public.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -58,20 +60,8 @@ export class AuthController {
   @Public()
   @Post('send-otp')
   @ApiOperation({ summary: 'Send OTP to email' })
-  @ApiBody({
-    schema: {
-      type: 'object',
-      properties: {
-        email: {
-          type: 'string',
-          format: 'email',
-          description: 'The email address to send the OTP to',
-        },
-      },
-    },
-  })
-  sendOtp(@Body('email') email: string) {
-    return this.authService.sendOtp(email);
+  sendOtp(@Body() dto: SendOtpDto) {
+    return this.authService.sendOtp(dto.email, dto.challengeId);
   }
 
   @Public()
@@ -79,6 +69,13 @@ export class AuthController {
   @ApiOperation({ summary: 'Verify OTP code' })
   verifyOtp(@Body() dto: VerifyOtpDto) {
     return this.authService.verifyOtp(dto);
+  }
+
+  @Public()
+  @Post('verify-admin-login')
+  @ApiOperation({ summary: 'Verify an admin login OTP and issue the authenticated session' })
+  verifyAdminLoginOtp(@Body() dto: VerifyAdminLoginOtpDto) {
+    return this.authService.verifyAdminLoginOtp(dto);
   }
 
   @Public()

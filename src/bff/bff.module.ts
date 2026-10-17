@@ -9,6 +9,7 @@ import { WebsiteBffController } from './website/website-bff.controller';
 import { WebsiteBffService } from './website/website-bff.service';
 import { UsersModule } from '../modules/users/users.module';
 import { ReleasesModule } from '../shared/releases/releases.module';
+import { PlatformRoleGuard } from '../modules/admin/platform-role.guard';
 
 @Module({
   imports: [UsersModule, ReleasesModule],
@@ -23,6 +24,7 @@ import { ReleasesModule } from '../shared/releases/releases.module';
     TenantDashboardBffService,
     BusinessDashboardBffService,
     WebsiteBffService,
+    PlatformRoleGuard,
   ],
   exports: [
     MobileBffService,

@@ -2,12 +2,11 @@ import { Module } from '@nestjs/common';
 import { UsersController } from './users.controller';
 import { UsersService } from './users.service';
 import { RbacService } from '../rbac/rbac.service';
-import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
-import { RbacGuard } from '../../common/guards/rbac.guard';
+import { PlatformRoleGuard } from '../admin/platform-role.guard';
 
 @Module({
   controllers: [UsersController],
-  providers: [UsersService, RbacService],
+  providers: [UsersService, RbacService, PlatformRoleGuard],
   exports: [UsersService],
 })
 export class UsersModule {}

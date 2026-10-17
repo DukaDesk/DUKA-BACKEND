@@ -4,6 +4,7 @@ import {
   ConflictException,
   BadRequestException,
   Logger,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
@@ -21,7 +22,7 @@ import { LoginDto } from './dto/login.dto';
 import { RefreshDto } from './dto/refresh.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
 import { GoogleLoginDto, AppleLoginDto } from './dto/social-login.dto';
-import { randomUUID } from 'crypto';
+import { randomInt, randomUUID } from 'crypto';
 
 @Injectable()
 export class AuthService {
@@ -182,11 +183,34 @@ export class AuthService {
     if (!isValid) {
       throw new UnauthorizedException('Invalid email or password');
     }
+    if (user.status !== 'active') {
+      throw new UnauthorizedException('Account is not active');
+    }
 
-    const [tokens, platformRoles] = await Promise.all([
-      this.generateTokens(user.id, user.email),
-      this.getPlatformRoles(user.id),
-    ]);
+    const platformRoles = await this.getPlatformRoles(user.id);
+    if (platformRoles.role) {
+      const challengeId = randomUUID();
+      await this.redis.set(
+        `admin-login:${challengeId}`,
+        JSON.stringify({ userId: user.id, email: user.email }),
+        300,
+      );
+      return {
+        user: {
+          id: user.id,
+          email: user.email,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          status: user.status,
+          role: platformRoles.role,
+          roles: platformRoles.roles,
+        },
+        requiresOtp: true,
+        challengeId,
+      };
+    }
+
+    const tokens = await this.generateTokens(user.id, user.email);
 
     return {
       user: {
@@ -202,7 +226,7 @@ export class AuthService {
     };
   }
 
-  private async getPlatformRoles(userId: string): Promise<{ role: string; roles: string[] }> {
+  private async getPlatformRoles(userId: string): Promise<{ role: string | null; roles: string[] }> {
     const assignments = await this.prisma.userRole.findMany({
       where: { userId, tenantId: null },
       include: { role: { select: { name: true } } },
@@ -214,7 +238,7 @@ export class AuthService {
       return role.name;
     }))];
     const priority = ['super_admin', 'platform_operator', 'support_agent'];
-    const role = priority.find((candidate) => canonicalRoles.includes(candidate)) || canonicalRoles[0] || 'platform_operator';
+    const role = priority.find((candidate) => canonicalRoles.includes(candidate)) || canonicalRoles[0] || null;
     return { role, roles: canonicalRoles };
   }
 
@@ -224,10 +248,11 @@ export class AuthService {
       include: { user: { select: { id: true, email: true, firstName: true, lastName: true, status: true } } },
     });
 
-    if (!stored || stored.revoked || stored.expiresAt < new Date()) {
+    if (!stored || stored.revoked || stored.expiresAt < new Date() || stored.user.status !== 'active') {
       throw new UnauthorizedException('Invalid or expired refresh token');
     }
 
+    const platformRoles = await this.getPlatformRoles(stored.user.id);
     await this.prisma.refreshToken.update({
       where: { id: stored.id },
       data: { revoked: true },
@@ -235,7 +260,10 @@ export class AuthService {
 
     const tokens = await this.generateTokens(stored.user.id, stored.user.email);
 
-    return { user: stored.user, ...tokens };
+    return {
+      user: { ...stored.user, role: platformRoles.role, roles: platformRoles.roles },
+      ...tokens,
+    };
   }
 
   async logout(userId: string) {
@@ -246,15 +274,27 @@ export class AuthService {
     return { message: 'Logged out successfully' };
   }
 
-  async sendOtp(email: string) {
+  async sendOtp(email: string, challengeId?: string) {
     if (!email || typeof email !== 'string') {
       throw new BadRequestException('Email is required and must be a valid string');
     }
 
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    await this.redis.set(`otp:${email}`, otp, 300);
-    this.logger.log(`OTP for ${email}: ${otp}`);
+    if (challengeId) {
+      const challengeValue = await this.redis.get(`admin-login:${challengeId}`);
+      if (!challengeValue) throw new UnauthorizedException('Admin login challenge expired');
+      let challenge: { email?: string };
+      try {
+        challenge = JSON.parse(challengeValue);
+      } catch {
+        await this.redis.del(`admin-login:${challengeId}`);
+        throw new UnauthorizedException('Invalid admin login challenge');
+      }
+      if (challenge.email !== email) throw new UnauthorizedException('Admin login challenge does not match');
+    }
 
+    const otp = randomInt(100000, 1000000).toString();
+    const otpKey = `otp:${email}`;
+    await this.redis.set(otpKey, otp, 300);
     try {
       const result = await this.emailAdapter.send({
         to: email,
@@ -263,13 +303,70 @@ export class AuthService {
         html: `<p>Your verification code is <strong>${otp}</strong>. It expires in 5 minutes.</p>`,
       });
       if (!result.success) {
-        this.logger.warn(`[OTP] Email delivery failed for ${email}. Resend response: ${result.error ?? 'unknown'}. Payload: to=${email}, subject=${'Your DUKADESK login code'}`,);
+        throw new ServiceUnavailableException('Unable to deliver the verification code');
       }
-    } catch (err: any) {
-      this.logger.warn(`[OTP] Email delivery error for ${email}: ${err?.message ?? err}`);
+    } catch (error) {
+      await this.redis.del(otpKey);
+      this.logger.error('[OTP] Email delivery failed');
+      if (error instanceof ServiceUnavailableException) throw error;
+      throw new ServiceUnavailableException('Unable to deliver the verification code');
     }
 
     return { message: 'OTP sent successfully' };
+  }
+
+  async verifyAdminLoginOtp(dto: { email: string; otp: string; challengeId: string }) {
+    const challengeKey = `admin-login:${dto.challengeId}`;
+    const challengeValue = await this.redis.get(challengeKey);
+    if (!challengeValue) throw new UnauthorizedException('Admin login challenge expired');
+
+    let challenge: { userId: string; email: string };
+    try {
+      challenge = JSON.parse(challengeValue);
+    } catch {
+      await this.redis.del(challengeKey);
+      throw new UnauthorizedException('Invalid admin login challenge');
+    }
+    if (!challenge.userId || challenge.email !== dto.email) {
+      throw new UnauthorizedException('Admin login challenge does not match');
+    }
+
+    const otpKey = `otp:${dto.email}`;
+    const storedOtp = await this.redis.get(otpKey);
+    if (!storedOtp || storedOtp !== dto.otp) {
+      const attempts = await this.redis.increment(`admin-login-attempts:${dto.challengeId}`, 300);
+      if (attempts >= 5) {
+        await Promise.all([
+          this.redis.del(otpKey),
+          this.redis.del(challengeKey),
+          this.redis.del(`admin-login-attempts:${dto.challengeId}`),
+        ]);
+        throw new UnauthorizedException('Too many verification attempts. Sign in again.');
+      }
+      throw new BadRequestException('Invalid or expired verification code');
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: challenge.userId },
+      select: { id: true, email: true, firstName: true, lastName: true, status: true },
+    });
+    if (!user || user.email !== dto.email || user.status !== 'active') {
+      throw new UnauthorizedException('Account is not active');
+    }
+
+    const platformRoles = await this.getPlatformRoles(user.id);
+    if (!platformRoles.role) throw new UnauthorizedException('Platform access is no longer available');
+
+    await Promise.all([
+      this.redis.del(otpKey),
+      this.redis.del(challengeKey),
+      this.redis.del(`admin-login-attempts:${dto.challengeId}`),
+    ]);
+    const tokens = await this.generateTokens(user.id, user.email);
+    return {
+      user: { ...user, role: platformRoles.role, roles: platformRoles.roles },
+      ...tokens,
+    };
   }
 
   async verifyOtp(dto: VerifyOtpDto) {

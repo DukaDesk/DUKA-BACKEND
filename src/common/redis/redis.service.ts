@@ -66,6 +66,18 @@ export class RedisService implements OnModuleDestroy {
     await this.client.del(key);
   }
 
+  async increment(key: string, ttlSeconds?: number): Promise<number> {
+    if (this.isMock) {
+      const current = Number(await this.get(key) || 0) + 1;
+      await this.set(key, String(current), ttlSeconds);
+      return current;
+    }
+
+    const current = await this.client.incr(key);
+    if (current === 1 && ttlSeconds) await this.client.expire(key, ttlSeconds);
+    return current;
+  }
+
   async publish(channel: string, message: string): Promise<void> {
     if (this.isMock) return;
     await this.client.publish(channel, message);

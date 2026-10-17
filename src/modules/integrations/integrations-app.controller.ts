@@ -1,5 +1,5 @@
 import {
-  Controller, Get, Post, Put, Delete, Body, Param, Query, UseGuards,
+  Controller, Get, Post, Body, Param, Query, UseGuards,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery } from '@nestjs/swagger';
 import { IntegrationsService } from './integrations.service';
@@ -19,6 +19,12 @@ export class IntegrationsAppController {
 
   private async getTenantId(userId: string): Promise<string> {
     return this.tenantResolver.resolveTenantId(userId);
+  }
+
+  @Get('available')
+  @ApiOperation({ summary: 'List available integration providers' })
+  getAvailableIntegrations() {
+    return this.integrationsService.getAvailableConnectors();
   }
 
   @Post('connect')

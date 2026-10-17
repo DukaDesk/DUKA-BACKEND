@@ -194,7 +194,7 @@ describe('AdminService two-stage approval', () => {
       expect(result).toMatchObject({ id: TENANT_ID, appStatus: 'rejected' });
       expect(result.appReviewNote).toBe('off-brand');
       expect(prisma.auditLog.create).toHaveBeenCalledWith(
-        expect.objectContaining({ data: expect.objectContaining({ metadata: { reason: 'off-brand' } }) }),
+        expect.objectContaining({ data: expect.objectContaining({ metadata: { outcome: 'success', reason: 'off-brand' } }) }),
       );
     });
   });
