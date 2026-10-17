@@ -82,7 +82,7 @@ export class MerchantAppReviewService {
         data: { appStatus: 'approved', appReviewedAt: new Date() },
       }),
       this.prisma.auditLog.create({
-        data: { tenantId, userId: adminUserId, action: 'merchant.app_approve', entity: 'tenant', entityId: tenantId, metadata: { version: result.version, releaseId: result.releaseId } },
+        data: { tenantId, userId: adminUserId, action: 'merchant.app_approve', entity: 'tenant', entityId: tenantId, metadata: { outcome: 'success', version: result.version, releaseId: result.releaseId } },
       }),
     ]);
     return updated;
@@ -106,7 +106,7 @@ export class MerchantAppReviewService {
         data: { appStatus: 'rejected', appReviewedAt: new Date(), appReviewNote: trimmedReason },
       }),
       this.prisma.auditLog.create({
-        data: { tenantId, userId: adminUserId, action: 'merchant.app_reject', entity: 'tenant', entityId: tenantId, metadata: { reason: trimmedReason } },
+        data: { tenantId, userId: adminUserId, action: 'merchant.app_reject', entity: 'tenant', entityId: tenantId, metadata: { outcome: 'success', reason: trimmedReason } },
       }),
     ]);
     return updated;

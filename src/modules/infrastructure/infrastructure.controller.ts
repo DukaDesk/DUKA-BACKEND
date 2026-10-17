@@ -4,10 +4,12 @@ import {
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery } from '@nestjs/swagger';
 import { InfrastructureService } from './infrastructure.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { PlatformRoleGuard, RequirePlatformRoles } from '../admin/platform-role.guard';
 
 @ApiTags('Infrastructure & DevOps')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PlatformRoleGuard)
+@RequirePlatformRoles('super_admin', 'platform_operator')
 @Controller({ version: '1' })
 export class InfrastructureController {
   constructor(private readonly infraService: InfrastructureService) {}
@@ -15,6 +17,7 @@ export class InfrastructureController {
   // ─── Deployments ─────────────────────────────────────────────
 
   @Post('infra/deployments')
+  @RequirePlatformRoles('super_admin')
   @ApiOperation({ summary: 'Create a deployment' })
   createDeployment(@Body() data: {
     tenantId: string; version: string; branch?: string;
@@ -45,6 +48,7 @@ export class InfrastructureController {
   }
 
   @Put('infra/deployments/:id/status')
+  @RequirePlatformRoles('super_admin')
   @ApiOperation({ summary: 'Update deployment status' })
   updateDeploymentStatus(@Param('id') id: string, @Body() data: {
     status: string; buildLog?: string; artifactUrl?: string; completedAt?: string;
@@ -55,6 +59,7 @@ export class InfrastructureController {
   // ─── Environments ────────────────────────────────────────────
 
   @Post('infra/environments')
+  @RequirePlatformRoles('super_admin')
   @ApiOperation({ summary: 'Create environment' })
   createEnvironment(@Body() data: {
     tenantId?: string; name: string; slug: string;
@@ -66,8 +71,18 @@ export class InfrastructureController {
   @Get('infra/environments')
   @ApiOperation({ summary: 'List environments' })
   @ApiQuery({ name: 'tenantId', required: false })
-  getEnvironments(@Query('tenantId') tenantId?: string) {
-    return this.infraService.getEnvironments(tenantId);
+  @ApiQuery({ name: 'page', required: false, type: Number, default: 1 })
+  @ApiQuery({ name: 'limit', required: false, type: Number, default: 20 })
+  getEnvironments(
+    @Query('tenantId') tenantId?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.infraService.getEnvironments(
+      tenantId,
+      page ? parseInt(page, 10) : 1,
+      limit ? parseInt(limit, 10) : 20,
+    );
   }
 
   @Get('infra/environments/:id')
@@ -77,12 +92,14 @@ export class InfrastructureController {
   }
 
   @Put('infra/environments/:id')
+  @RequirePlatformRoles('super_admin')
   @ApiOperation({ summary: 'Update environment' })
   updateEnvironment(@Param('id') id: string, @Body() data: any) {
     return this.infraService.updateEnvironment(id, data);
   }
 
   @Delete('infra/environments/:id')
+  @RequirePlatformRoles('super_admin')
   @ApiOperation({ summary: 'Delete environment' })
   deleteEnvironment(@Param('id') id: string) {
     return this.infraService.deleteEnvironment(id);
@@ -91,6 +108,7 @@ export class InfrastructureController {
   // ─── Health Checks ───────────────────────────────────────────
 
   @Post('infra/health')
+  @RequirePlatformRoles('super_admin')
   @ApiOperation({ summary: 'Record health check' })
   recordHealthCheck(@Body() data: {
     tenantId?: string; service: string; status: string;
@@ -118,6 +136,7 @@ export class InfrastructureController {
   // ─── Backups ─────────────────────────────────────────────────
 
   @Post('infra/backups')
+  @RequirePlatformRoles('super_admin')
   @ApiOperation({ summary: 'Create backup' })
   createBackup(@Body() data: {
     tenantId: string; type?: string; includes?: string[]; excludes?: string[];
@@ -141,6 +160,7 @@ export class InfrastructureController {
   }
 
   @Put('infra/backups/:id/status')
+  @RequirePlatformRoles('super_admin')
   @ApiOperation({ summary: 'Update backup status' })
   updateBackupStatus(@Param('id') id: string, @Body() data: any) {
     return this.infraService.updateBackupStatus(id, data);
@@ -149,6 +169,7 @@ export class InfrastructureController {
   // ─── Cache ───────────────────────────────────────────────────
 
   @Post('infra/cache/clear')
+  @RequirePlatformRoles('super_admin')
   @ApiOperation({ summary: 'Clear cache' })
   clearCache(@Query('tenantId') tenantId?: string) {
     return this.infraService.clearCache(tenantId);

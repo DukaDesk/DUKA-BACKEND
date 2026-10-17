@@ -7,13 +7,15 @@ describe('authenticated merchant references', () => {
   it('refresh returns merchant IDs and limits the query to the authenticated user active memberships', async () => {
     const prisma = {
       tenantUser: { findMany: jest.fn().mockResolvedValue([{ role: 'owner', tenant: { id: 'merchant-1', name: 'Shop', slug: 'shop' } }]) },
-      refreshToken: { findUnique: jest.fn().mockResolvedValue({ id: 'refresh-1', revoked: false, expiresAt: new Date(Date.now() + 60000), user: { id: 'user-1', email: 'a@example.com' } }), update: jest.fn(), create: jest.fn() },
+      refreshToken: { findUnique: jest.fn().mockResolvedValue({ id: 'refresh-1', revoked: false, expiresAt: new Date(Date.now() + 60000), user: { id: 'user-1', email: 'a@example.com', status: 'active' } }), update: jest.fn(), create: jest.fn() },
+      userRole: { findMany: jest.fn().mockResolvedValue([{ role: { name: 'operations' } }]) },
     };
     const service = makeService(prisma);
     const result = await service.refresh({ refreshToken: 'refresh' });
     expect(result.merchants).toEqual([{ id: 'merchant-1', name: 'Shop', slug: 'shop', role: 'owner', category: null }]);
     expect(prisma.tenantUser.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { userId: 'user-1', status: 'active' } }));
     expect(result.accessToken).toBe('access');
+    expect(result.user.role).toBe('platform_operator');
   });
 
   it('self-serve register (no role) provisions an active user plus owned merchant and tokens', async () => {
@@ -67,5 +69,4 @@ describe('authenticated merchant references', () => {
     expect(result.merchants).toEqual([{ id: 'merchant-9', name: "Ada's Kitchen", slug: 'ada-s-kitchen', role: 'owner', category: 'Church' }]);
   });
 });
-
 

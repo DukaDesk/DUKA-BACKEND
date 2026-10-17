@@ -1,4 +1,5 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../common/prisma.service';
 
 @Injectable()
@@ -27,6 +28,10 @@ export class PlatformAdminService {
     const where: any = {};
     if (category) where.category = category;
     return this.prisma.platformSetting.findMany({ where, orderBy: { key: 'asc' } });
+  }
+
+  async getPolicies() {
+    return this.getAllSettings('policy');
   }
 
   async deleteSetting(key: string) {
@@ -230,29 +235,87 @@ export class PlatformAdminService {
 
   // ─── Subscriptions ───────────────────────────────────────────
 
-  async getAllSubscriptions(page = 1, limit = 20) {
+  async getAllSubscriptions(
+    page = 1,
+    limit = 20,
+    filters: { status?: string; plan?: string; search?: string; sort?: string; order?: string } = {},
+  ) {
+    const safePage = Math.max(1, Math.floor(Number(page) || 1));
+    const safeLimit = Math.min(100, Math.max(1, Math.floor(Number(limit) || 20)));
+    const where: Prisma.SubscriptionWhereInput = {};
+    const allowedStatuses = ['active', 'past_due', 'canceled', 'trialing', 'paused', 'incomplete'];
+    const status = filters.status?.toLowerCase();
+    if (status && allowedStatuses.includes(status)) where.status = status;
+    if (filters.plan?.trim()) where.plan = { slug: filters.plan.trim() };
+    if (filters.search?.trim()) {
+      const search = filters.search.trim();
+      where.OR = [
+        { tenant: { name: { contains: search, mode: 'insensitive' } } },
+        { tenant: { email: { contains: search, mode: 'insensitive' } } },
+        { plan: { name: { contains: search, mode: 'insensitive' } } },
+        { plan: { slug: { contains: search, mode: 'insensitive' } } },
+      ];
+    }
+
+    const order: Prisma.SortOrder = filters.order === 'asc' ? 'asc' : 'desc';
+    const orderBy: Record<string, Prisma.SubscriptionOrderByWithRelationInput> = {
+      createdAt: { createdAt: order },
+      status: { status: order },
+      currentPeriodEnd: { endDate: order },
+      merchantName: { tenant: { name: order } },
+      planName: { plan: { name: order } },
+      amount: { plan: { price: order } },
+    };
+    const selectedOrder = orderBy[filters.sort || 'createdAt'] ?? orderBy.createdAt;
     const [data, total] = await Promise.all([
       this.prisma.subscription.findMany({
+        where,
         include: { tenant: true, plan: true },
-        orderBy: { createdAt: 'desc' },
-        skip: (page - 1) * limit,
-        take: limit,
+        orderBy: selectedOrder,
+        skip: (safePage - 1) * safeLimit,
+        take: safeLimit,
       }),
-      this.prisma.subscription.count(),
+      this.prisma.subscription.count({ where }),
     ]);
 
-    return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
+    return { data, total, page: safePage, limit: safeLimit, totalPages: Math.ceil(total / safeLimit) };
   }
 
   async updateSubscription(id: string, data: Partial<{
     planId: string; status: string; endDate: string; autoRenew: boolean;
   }>) {
+    if (!data || typeof data !== 'object' || Array.isArray(data)) {
+      throw new BadRequestException('Subscription update body must be an object');
+    }
+    const update: Prisma.SubscriptionUncheckedUpdateInput = {};
+    if (data.planId !== undefined) {
+      if (typeof data.planId !== 'string' || !data.planId.trim()) {
+        throw new BadRequestException('planId must be a non-empty string');
+      }
+      update.planId = data.planId;
+    }
+    if (data.status !== undefined) {
+      if (typeof data.status !== 'string') throw new BadRequestException('Invalid subscription status');
+      const allowedStatuses = ['active', 'past_due', 'canceled', 'trialing', 'paused', 'incomplete'];
+      const status = data.status.toLowerCase();
+      if (!allowedStatuses.includes(status)) throw new BadRequestException('Invalid subscription status');
+      update.status = status;
+    }
+    if (data.endDate !== undefined) {
+      if (typeof data.endDate !== 'string') throw new BadRequestException('Invalid subscription endDate');
+      const endDate = new Date(data.endDate);
+      if (Number.isNaN(endDate.getTime())) throw new BadRequestException('Invalid subscription endDate');
+      update.endDate = endDate;
+    }
+    if (data.autoRenew !== undefined) {
+      if (typeof data.autoRenew !== 'boolean') throw new BadRequestException('autoRenew must be a boolean');
+      update.autoRenew = data.autoRenew;
+    }
+    if (Object.keys(update).length === 0) throw new BadRequestException('No supported subscription fields provided');
+
     return this.prisma.subscription.update({
       where: { id },
-      data: {
-        ...data,
-        endDate: data.endDate ? new Date(data.endDate) : undefined,
-      } as any,
+      data: update,
     });
   }
 

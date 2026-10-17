@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma.service';
 import { RbacService } from '../rbac/rbac.service';
 
@@ -14,8 +14,20 @@ export class UsersService {
     role?: string;
     tenantId?: string;
     status?: string;
+    search?: string;
+    sort?: string;
+    order?: string;
   }) {
     const where: any = {};
+
+    const search = filters?.search?.trim();
+    if (search) {
+      where.OR = [
+        { email: { contains: search, mode: 'insensitive' } },
+        { firstName: { contains: search, mode: 'insensitive' } },
+        { lastName: { contains: search, mode: 'insensitive' } },
+      ];
+    }
 
     if (filters?.email) {
       where.email = {
@@ -24,14 +36,27 @@ export class UsersService {
       };
     }
 
-    if (filters?.role) {
+    if (filters?.role === 'platform_admin') {
+      where.roles = {
+        some: {
+          tenantId: null,
+          role: {
+            name: {
+              in: ['super_admin', 'platform_operator', 'operations', 'support_agent', 'support', 'finance'],
+            },
+          },
+        },
+      };
+    } else if (filters?.role) {
       where.roles = {
         some: { role: { name: filters.role } },
       };
     }
 
     if (filters?.tenantId) {
-      where.tenantId = filters.tenantId;
+      where.tenants = {
+        some: { tenantId: filters.tenantId },
+      };
     }
 
     if (filters?.status) {
@@ -42,24 +67,33 @@ export class UsersService {
       }
     }
 
+    const safePage = Math.max(1, Math.floor(Number(page) || 1));
+    const safeLimit = Math.min(100, Math.max(1, Math.floor(Number(limit) || 50)));
+    const allowedSortFields = ['createdAt', 'email', 'firstName', 'lastName', 'status'];
+    const requestedSort = filters?.sort;
+    const sortField = requestedSort && allowedSortFields.includes(requestedSort) ? requestedSort : 'createdAt';
+    const sortOrder = filters?.order === 'asc' ? 'asc' : 'desc';
+
     const [users, total] = await Promise.all([
       this.prisma.user.findMany({
         where,
-        include: {
+        select: {
+          id: true,
+          email: true,
+          firstName: true,
+          lastName: true,
+          status: true,
+          createdAt: true,
           roles: {
-            include: {
-              role: true,
-            },
-          },
-          tenants: {
-            include: {
-              tenant: true,
+            select: {
+              tenantId: true,
+              role: { select: { name: true } },
             },
           },
         },
-        skip: (page - 1) * limit,
-        take: limit,
-        orderBy: { createdAt: 'desc' },
+        skip: (safePage - 1) * safeLimit,
+        take: safeLimit,
+        orderBy: { [sortField]: sortOrder },
       }),
       this.prisma.user.count({ where }),
     ]);
@@ -67,23 +101,44 @@ export class UsersService {
     return {
       users,
       total,
-      page,
-      totalPages: Math.ceil(total / limit),
+      page: safePage,
+      limit: safeLimit,
+      totalPages: Math.ceil(total / safeLimit),
     };
   }
 
   async getUserById(userId: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      include: {
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        status: true,
+        emailVerified: true,
+        phoneVerified: true,
+        createdAt: true,
         roles: {
-          include: {
-            role: true,
+          select: {
+            tenantId: true,
+            role: { select: { name: true } },
           },
         },
         tenants: {
-          include: {
-            tenant: true,
+          select: {
+            tenantId: true,
+            role: true,
+            status: true,
+            joinedAt: true,
+            tenant: {
+              select: {
+                id: true,
+                name: true,
+                slug: true,
+                status: true,
+              },
+            },
           },
         },
       },
@@ -145,24 +200,39 @@ export class UsersService {
 
   async assignUserRoles(userId: string, roleData: {
     role: string;
-    tenantId: string;
-  }) {
+    tenantId?: string;
+  }, adminUserId: string) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) {
       throw new NotFoundException('User not found');
     }
 
-    await this.rbacService.assignRole(userId, roleData.role, roleData.tenantId);
+    const tenantId = roleData.tenantId?.trim() || null;
+    let roleName = roleData.role.trim().toLowerCase().replace(/[\s-]+/g, '_');
+    if (!tenantId) {
+      if (!(await this.rbacService.userHasRole(adminUserId, 'super_admin', null))) {
+        throw new ForbiddenException('Only a super admin can assign global platform roles');
+      }
+      const platformRoles: Record<string, string> = {
+        platform_operator: 'operations',
+        support_agent: 'support',
+      };
+      if (roleName in platformRoles) roleName = platformRoles[roleName];
+      if (!['super_admin', 'operations', 'support'].includes(roleName)) {
+        throw new BadRequestException('A valid global platform role is required');
+      }
+    }
 
-    return { message: `Role ${roleData.role} assigned to user ${userId} in tenant ${roleData.tenantId}` };
+    await this.rbacService.assignRole(userId, roleName, tenantId);
+
+    return { message: `Role ${roleName} assigned to user ${userId}${tenantId ? ` in tenant ${tenantId}` : ' on the platform'}` };
   }
 
-  async removeUser(userId: string, tenantId?: string) {
-    const where: any = { userId };
-
-    if (tenantId) {
-      where.tenantId = tenantId;
+  async removeUser(userId: string, tenantId: string | undefined, adminUserId: string) {
+    if (!tenantId && !(await this.rbacService.userHasRole(adminUserId, 'super_admin', null))) {
+      throw new ForbiddenException('Only a super admin can remove a user from the platform');
     }
+    const where: any = { userId, tenantId: tenantId || null };
 
     const deleted = await this.prisma.userRole.deleteMany({ where });
 

@@ -39,21 +39,8 @@ export class AdminInviteService {
     });
     const actorRoles = new Set(assignments.map((assignment) => assignment.role.name));
     const isSuperAdmin = actorRoles.has('super_admin');
-    const isOperations = actorRoles.has('operations');
-    const isSupport = actorRoles.has('support');
 
-    if (!isSuperAdmin && !isOperations && !isSupport) {
-      throw new ForbiddenException('Platform admin permissions are required to create invites');
-    }
-    if (role === 'super_admin' && !isSuperAdmin) {
-      throw new ForbiddenException('Only a super admin can invite another super admin');
-    }
-    if (role === 'finance' && !isSuperAdmin) {
-      throw new ForbiddenException('Only a super admin can invite a finance admin');
-    }
-    if (isSupport && !isSuperAdmin && role !== 'support_agent') {
-      throw new ForbiddenException('Support admins may only invite support agents');
-    }
+    if (!isSuperAdmin) throw new ForbiddenException('Only a super admin can create admin invites');
     const days = dto.expiresInDays ?? DEFAULT_EXPIRY_DAYS;
     const token = randomBytes(INVITE_TOKEN_BYTES).toString('hex');
     const expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000);

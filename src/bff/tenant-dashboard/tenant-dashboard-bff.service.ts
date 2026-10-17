@@ -1,11 +1,20 @@
-import { Injectable } from '@nestjs/common';
+import { ForbiddenException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma.service';
 
 @Injectable()
 export class TenantDashboardBffService {
   constructor(private prisma: PrismaService) {}
 
-  async getDashboardSummary(tenantId: string) {
+  private async assertTenantMembership(userId: string, tenantId: string) {
+    const membership = await this.prisma.tenantUser.findFirst({
+      where: { userId, tenantId, status: 'active' },
+      select: { id: true },
+    });
+    if (!membership) throw new ForbiddenException('Active membership in this tenant is required');
+  }
+
+  async getDashboardSummary(userId: string, tenantId: string) {
+    await this.assertTenantMembership(userId, tenantId);
     const [pages, products, orders, bookings] = await Promise.all([
       this.prisma.page.count({ where: { tenantId, isActive: true } }),
       this.prisma.product.count({ where: { tenantId, isActive: true } }),
@@ -16,7 +25,8 @@ export class TenantDashboardBffService {
     return { pages, products, orders, bookings };
   }
 
-  async getAnalyticsSummary(tenantId: string) {
+  async getAnalyticsSummary(userId: string, tenantId: string) {
+    await this.assertTenantMembership(userId, tenantId);
     const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
 
     const [recentOrders, recentBookings] = await Promise.all([
@@ -46,7 +56,8 @@ export class TenantDashboardBffService {
     };
   }
 
-  async getIntegrationStatus(tenantId: string) {
+  async getIntegrationStatus(userId: string, tenantId: string) {
+    await this.assertTenantMembership(userId, tenantId);
     const accounts = await this.prisma.tenantPaymentAccount.findMany({
       where: { tenantId },
       include: { provider: true },

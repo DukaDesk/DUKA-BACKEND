@@ -10,7 +10,8 @@ import { PlatformRoleGuard, RequirePlatformRoles } from './platform-role.guard';
 
 @ApiTags('Admin')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PlatformRoleGuard)
+@RequirePlatformRoles('super_admin', 'platform_operator')
 @Controller({ path: 'admin', version: '1' })
 export class AdminController {
   constructor(
@@ -148,7 +149,7 @@ export class AdminController {
 
   @Post('cleanup-deactivated')
   @ApiOperation({ summary: 'Permanently delete accounts past 30-day deactivation period' })
-  cleanupDeactivated(@CurrentUser('id') userId: string) {
+  cleanupDeactivated(@CurrentUser('id') _userId: string) {
     return this.adminService.cleanupDeactivatedAccounts();
   }
 
@@ -169,12 +170,14 @@ export class AdminController {
   // ─── Admin Invites (invite-only admin signup) ───────────────────
 
   @Post('invites')
+  @RequirePlatformRoles('super_admin')
   @ApiOperation({ summary: 'Generate a single-use admin invite link (bound to email + role, 7-day expiry)' })
   createInvite(@CurrentUser('id') adminUserId: string, @Body() dto: CreateInviteDto) {
     return this.adminInviteService.createInvite(adminUserId, dto);
   }
 
   @Get('invites')
+  @RequirePlatformRoles('super_admin')
   @ApiOperation({ summary: 'List admin invites (tokens never exposed)' })
   @ApiQuery({ name: 'status', required: false, description: 'Filter: pending | used | expired | revoked' })
   listInvites(@Query('status') status?: string) {
@@ -182,6 +185,7 @@ export class AdminController {
   }
 
   @Delete('invites/:id')
+  @RequirePlatformRoles('super_admin')
   @ApiOperation({ summary: 'Revoke an admin invite' })
   revokeInvite(@Param('id') id: string) {
     return this.adminInviteService.revokeInvite(id);

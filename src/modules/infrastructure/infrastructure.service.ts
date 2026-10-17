@@ -56,10 +56,28 @@ export class InfrastructureService {
     return this.prisma.environment.create({ data: data as any });
   }
 
-  async getEnvironments(tenantId?: string) {
-    const where: any = {};
-    if (tenantId) where.tenantId = tenantId;
-    return this.prisma.environment.findMany({ where, orderBy: { name: 'asc' } });
+  async getEnvironments(tenantId?: string, page = 1, limit = 20) {
+    const pageValue = Number.isFinite(page) ? Math.floor(page) : 1;
+    const limitValue = Number.isFinite(limit) ? Math.floor(limit) : 20;
+    const safePage = Math.max(1, pageValue || 1);
+    const safeLimit = Math.min(100, Math.max(1, limitValue || 20));
+    const where = tenantId ? { tenantId } : {};
+    const [data, total] = await Promise.all([
+      this.prisma.environment.findMany({
+        where,
+        orderBy: { name: 'asc' },
+        skip: (safePage - 1) * safeLimit,
+        take: safeLimit,
+      }),
+      this.prisma.environment.count({ where }),
+    ]);
+    return {
+      data,
+      total,
+      page: safePage,
+      limit: safeLimit,
+      totalPages: Math.ceil(total / safeLimit),
+    };
   }
 
   async getEnvironment(id: string) {

@@ -1,13 +1,15 @@
 import {
-  Controller, Get, Post, Put, Delete, Body, Param, Query, UseGuards,
+  Controller, Get, Post, Put, Delete, Body, Param, Query, UseGuards, NotImplementedException,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery } from '@nestjs/swagger';
 import { PlatformAdminService } from './platform-admin.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { PlatformRoleGuard, RequirePlatformRoles } from '../admin/platform-role.guard';
 
 @ApiTags('Platform Administration')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PlatformRoleGuard)
+@RequirePlatformRoles('super_admin', 'platform_operator')
 @Controller({ version: '1' })
 export class PlatformAdminController {
   constructor(private readonly adminService: PlatformAdminService) {}
@@ -175,13 +177,28 @@ export class PlatformAdminController {
   @ApiOperation({ summary: 'List all subscriptions' })
   @ApiQuery({ name: 'page', required: false, type: Number, default: 1 })
   @ApiQuery({ name: 'limit', required: false, type: Number, default: 20 })
+  @ApiQuery({ name: 'status', required: false })
+  @ApiQuery({ name: 'plan', required: false, description: 'Filter by plan slug' })
+  @ApiQuery({ name: 'search', required: false, description: 'Search merchant and plan names' })
+  @ApiQuery({
+    name: 'sort',
+    required: false,
+    enum: ['createdAt', 'status', 'currentPeriodEnd', 'merchantName', 'planName', 'amount'],
+  })
+  @ApiQuery({ name: 'order', required: false, enum: ['asc', 'desc'] })
   getSubscriptions(
     @Query('page') page?: string,
     @Query('limit') limit?: string,
+    @Query('status') status?: string,
+    @Query('plan') plan?: string,
+    @Query('search') search?: string,
+    @Query('sort') sort?: string,
+    @Query('order') order?: string,
   ) {
     return this.adminService.getAllSubscriptions(
       page ? parseInt(page) : 1,
       limit ? parseInt(limit) : 20,
+      { status, plan, search, sort, order },
     );
   }
 
@@ -199,19 +216,19 @@ export class PlatformAdminController {
     return this.adminService.getPlatformStats();
   }
 
-  // ─── Maintenance (stub) ─────────────────────────────────────
+  // ─── Maintenance ────────────────────────────────────────────
 
   @Get('admin/maintenance')
-  @ApiOperation({ summary: 'Get maintenance windows (stub)' })
+  @ApiOperation({ summary: 'Maintenance scheduling is not implemented' })
   getMaintenance() {
-    return { data: [], meta: { page: 1, limit: 10, total: 0, pages: 0 } };
+    throw new NotImplementedException('Maintenance scheduling is not available yet');
   }
 
-  // ─── Policies (stub) ────────────────────────────────────────
+  // ─── Policies ───────────────────────────────────────────────
 
   @Get('admin/policies')
-  @ApiOperation({ summary: 'Get platform policies (stub)' })
+  @ApiOperation({ summary: 'Get platform policies stored in platform settings' })
   getPolicies() {
-    return { data: [], meta: { page: 1, limit: 10, total: 0, pages: 0 } };
+    return this.adminService.getPolicies();
   }
 }

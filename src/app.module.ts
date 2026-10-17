@@ -1,7 +1,7 @@
 import { Module, MiddlewareConsumer, NestModule } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { PrismaModule } from './common/prisma.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { MerchantsModule } from './modules/merchants/merchants.module';
@@ -45,6 +45,7 @@ import { CorrelationIdMiddleware } from './common/middleware/correlation-id.midd
 import { TenantResolverMiddleware } from './shared/context/tenant-resolver.middleware';
 import { SuperAdminBootstrap } from './common/bootstrap/super-admin.bootstrap';
 import { ApiQuotaGuard } from './common/guards/api-quota.guard';
+import { PlatformAuditInterceptor } from './modules/admin/platform-audit.interceptor';
 
 @Module({
   imports: [
@@ -111,6 +112,10 @@ import { ApiQuotaGuard } from './common/guards/api-quota.guard';
     {
       provide: APP_GUARD,
       useClass: ApiQuotaGuard,
+    },
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: PlatformAuditInterceptor,
     },
     SuperAdminBootstrap,
   ],

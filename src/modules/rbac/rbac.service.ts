@@ -26,14 +26,14 @@ export class RbacService {
     return false;
   }
 
-  async userHasRole(userId: string, roleName: string, tenantId?: string): Promise<boolean> {
+  async userHasRole(userId: string, roleName: string, tenantId?: string | null): Promise<boolean> {
     const where: any = { userId, role: { name: roleName } };
-    if (tenantId) where.tenantId = tenantId;
+    if (tenantId !== undefined) where.tenantId = tenantId;
     const count = await this.prisma.userRole.count({ where });
     return count > 0;
   }
 
-  async assignRole(userId: string, roleName: string, tenantId?: string): Promise<void> {
+  async assignRole(userId: string, roleName: string, tenantId?: string | null): Promise<void> {
     const role = await this.prisma.role.findUnique({ where: { name: roleName } });
     if (!role) throw new Error(`Role '${roleName}' not found`);
 
