@@ -4,6 +4,7 @@ import {
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery } from '@nestjs/swagger';
 import { PlatformAdminService } from './platform-admin.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { PlatformRoleGuard, RequirePlatformRoles } from '../admin/platform-role.guard';
 
 @ApiTags('Platform Administration')
@@ -224,11 +225,157 @@ export class PlatformAdminController {
     throw new NotImplementedException('Maintenance scheduling is not available yet');
   }
 
-  // ─── Policies ───────────────────────────────────────────────
+  // ─── Policies (governed lifecycle) ──────────────────────────
 
   @Get('admin/policies')
-  @ApiOperation({ summary: 'Get platform policies stored in platform settings' })
-  getPolicies() {
-    return this.adminService.getPolicies();
+  @ApiOperation({ summary: 'List platform policies' })
+  @ApiQuery({ name: 'page', required: false, type: Number, default: 1 })
+  @ApiQuery({ name: 'limit', required: false, type: Number, default: 20 })
+  @ApiQuery({ name: 'status', required: false, description: 'draft | in_review | published | archived' })
+  @ApiQuery({ name: 'category', required: false })
+  @ApiQuery({ name: 'search', required: false })
+  getPolicies(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('status') status?: string,
+    @Query('category') category?: string,
+    @Query('search') search?: string,
+  ) {
+    return this.adminService.getPolicies(
+      page ? parseInt(page) : 1,
+      limit ? parseInt(limit) : 20,
+      { status, category, search },
+    );
+  }
+
+  @Post('admin/policies')
+  @ApiOperation({ summary: 'Create a draft platform policy' })
+  createPolicy(@CurrentUser('id') actorId: string, @Body() data: { key: string; title: string; body: string; category?: string; effectiveAt?: string }) {
+    return this.adminService.createPolicy(actorId, data);
+  }
+
+  @Put('admin/policies/:id')
+  @ApiOperation({ summary: 'Update a draft/in-review platform policy' })
+  updatePolicy(@Param('id') id: string, @CurrentUser('id') actorId: string, @Body() data: any) {
+    return this.adminService.updatePolicy(id, actorId, data);
+  }
+
+  @Post('admin/policies/:id/submit')
+  @ApiOperation({ summary: 'Submit a draft policy for review' })
+  submitPolicy(@Param('id') id: string, @CurrentUser('id') actorId: string) {
+    return this.adminService.submitPolicy(id, actorId);
+  }
+
+  @Post('admin/policies/:id/publish')
+  @RequirePlatformRoles('super_admin')
+  @ApiOperation({ summary: 'Publish a reviewed policy (super admin only)' })
+  publishPolicy(@Param('id') id: string, @CurrentUser('id') actorId: string) {
+    return this.adminService.publishPolicy(id, actorId);
+  }
+
+  @Post('admin/policies/:id/archive')
+  @RequirePlatformRoles('super_admin')
+  @ApiOperation({ summary: 'Archive a published policy (super admin only)' })
+  archivePolicy(@Param('id') id: string, @CurrentUser('id') actorId: string) {
+    return this.adminService.archivePolicy(id, actorId);
+  }
+
+  // ─── Operational reports & exports ──────────────────────────
+
+  @Get('admin/reports/:report/export')
+  @RequirePlatformRoles('super_admin', 'platform_operator')
+  @ApiOperation({ summary: 'Export an operational report as CSV (scope-enforced, audited)' })
+  @ApiQuery({ name: 'search', required: false })
+  @ApiQuery({ name: 'status', required: false })
+  @ApiQuery({ name: 'plan', required: false })
+  @ApiQuery({ name: 'priority', required: false })
+  @ApiQuery({ name: 'category', required: false })
+  exportReport(
+    @Param('report') report: string,
+    @CurrentUser('id') actorId: string,
+    @Query() query: Record<string, string>,
+  ) {
+    return this.adminService.exportReport(
+      report,
+      {
+        search: query.search,
+        status: query.status,
+        plan: query.plan,
+        priority: query.priority,
+        category: query.category,
+        assigneeId: query.assigneeId,
+      },
+      actorId,
+    );
+  }
+
+  // ─── Support tickets (case/task workflow) ───────────────────
+
+  @Get('admin/support-tickets')
+  @RequirePlatformRoles('super_admin', 'platform_operator', 'support_agent')
+  @ApiOperation({ summary: 'List support tickets' })
+  @ApiQuery({ name: 'page', required: false, type: Number, default: 1 })
+  @ApiQuery({ name: 'limit', required: false, type: Number, default: 20 })
+  @ApiQuery({ name: 'status', required: false, description: 'open | in_progress | escalated | resolved | closed' })
+  @ApiQuery({ name: 'priority', required: false, description: 'low | normal | high | urgent' })
+  @ApiQuery({ name: 'assigneeId', required: false })
+  @ApiQuery({ name: 'search', required: false })
+  listSupportTickets(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('status') status?: string,
+    @Query('priority') priority?: string,
+    @Query('assigneeId') assigneeId?: string,
+    @Query('search') search?: string,
+  ) {
+    return this.adminService.listSupportTickets(
+      page ? parseInt(page) : 1,
+      limit ? parseInt(limit) : 20,
+      { status, priority, assigneeId, search },
+    );
+  }
+
+  @Post('admin/support-tickets')
+  @ApiOperation({ summary: 'Create a support ticket' })
+  createSupportTicket(@CurrentUser('id') actorId: string, @Body() data: {
+    subject: string; description: string; priority?: string; category?: string;
+    tenantId?: string; reportedBy?: string; assigneeId?: string;
+  }) {
+    return this.adminService.createSupportTicket(actorId, data);
+  }
+
+  @Get('admin/support-tickets/:id')
+  @RequirePlatformRoles('super_admin', 'platform_operator', 'support_agent')
+  @ApiOperation({ summary: 'Get a support ticket with its event trail' })
+  getSupportTicket(@Param('id') id: string) {
+    return this.adminService.getSupportTicket(id);
+  }
+
+  @Post('admin/support-tickets/:id/assign')
+  @RequirePlatformRoles('super_admin', 'platform_operator', 'support_agent')
+  @ApiOperation({ summary: 'Assign a support ticket to an operator' })
+  assignSupportTicket(@Param('id') id: string, @CurrentUser('id') actorId: string, @Body() body: { assigneeId: string }) {
+    return this.adminService.assignSupportTicket(id, actorId, body?.assigneeId);
+  }
+
+  @Post('admin/support-tickets/:id/escalate')
+  @RequirePlatformRoles('super_admin', 'platform_operator', 'support_agent')
+  @ApiOperation({ summary: 'Escalate a support ticket' })
+  escalateSupportTicket(@Param('id') id: string, @CurrentUser('id') actorId: string, @Body() body: { note?: string }) {
+    return this.adminService.escalateSupportTicket(id, actorId, body?.note);
+  }
+
+  @Post('admin/support-tickets/:id/resolve')
+  @RequirePlatformRoles('super_admin', 'platform_operator', 'support_agent')
+  @ApiOperation({ summary: 'Resolve a support ticket (resolution required)' })
+  resolveSupportTicket(@Param('id') id: string, @CurrentUser('id') actorId: string, @Body() body: { resolution: string }) {
+    return this.adminService.resolveSupportTicket(id, actorId, body?.resolution);
+  }
+
+  @Post('admin/support-tickets/:id/comments')
+  @RequirePlatformRoles('super_admin', 'platform_operator', 'support_agent')
+  @ApiOperation({ summary: 'Add a comment to a support ticket' })
+  commentSupportTicket(@Param('id') id: string, @CurrentUser('id') actorId: string, @Body() body: { message: string }) {
+    return this.adminService.commentSupportTicket(id, actorId, body?.message);
   }
 }

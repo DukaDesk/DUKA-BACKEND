@@ -38,7 +38,7 @@ describe('AuthService admin login challenge', () => {
     const redis = { set: jest.fn().mockResolvedValue(undefined) };
     const prisma = {
       user: { findUnique: jest.fn().mockResolvedValue({ ...activeUser, passwordHash }) },
-      userRole: { findMany: jest.fn().mockResolvedValue([{ role: { name: 'operations' } }]) },
+      userRole: { findMany: jest.fn().mockResolvedValue([{ role: { name: 'platform_operator' } }]) },
       refreshToken: { create: jest.fn() },
     };
 
@@ -60,6 +60,26 @@ describe('AuthService admin login challenge', () => {
       300,
     );
     expect(prisma.refreshToken.create).not.toHaveBeenCalled();
+  });
+
+  it('keeps the Operations role distinct from Platform Operator in the session', async () => {
+    const passwordHash = await bcrypt.hash('Pass1234!', 1);
+    const redis = { set: jest.fn().mockResolvedValue(undefined) };
+    const prisma = {
+      user: { findUnique: jest.fn().mockResolvedValue({ ...activeUser, passwordHash }) },
+      userRole: { findMany: jest.fn().mockResolvedValue([{ role: { name: 'operations' } }]) },
+      refreshToken: { create: jest.fn() },
+    };
+
+    const result = await createService({ prisma, redis }).login({
+      email: activeUser.email,
+      password: 'Pass1234!',
+    } as any);
+
+    expect(result).toMatchObject({
+      requiresOtp: true,
+      user: { id: activeUser.id, role: 'operations' },
+    });
   });
 
   it('keeps password-only tokens for non-platform users', async () => {
@@ -93,7 +113,7 @@ describe('AuthService admin login challenge', () => {
     };
     const prisma = {
       user: { findUnique: jest.fn().mockResolvedValue(activeUser) },
-      userRole: { findMany: jest.fn().mockResolvedValue([{ role: { name: 'operations' } }]) },
+      userRole: { findMany: jest.fn().mockResolvedValue([{ role: { name: 'platform_operator' } }]) },
       tenantUser: { findMany: jest.fn().mockResolvedValue([]) },
       refreshToken: { create: jest.fn().mockResolvedValue({}) },
     };

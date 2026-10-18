@@ -31,7 +31,7 @@ describe('UsersService platform role protections', () => {
 
     await service.assignUserRoles('target-user', { role: 'platform_operator' }, 'super-admin-1');
 
-    expect(rbacService.assignRole).toHaveBeenCalledWith('target-user', 'operations', null);
+    expect(rbacService.assignRole).toHaveBeenCalledWith('target-user', 'platform_operator', null);
   });
 
   it('prevents a platform operator from removing all platform roles', async () => {

@@ -4,6 +4,10 @@ import { PrismaService } from '../../common/prisma.service';
 
 @Injectable()
 export class PlatformAdminService {
+  private static readonly POLICY_STATUSES = ['draft', 'in_review', 'published', 'archived'];
+  private static readonly TICKET_STATUSES = ['open', 'in_progress', 'escalated', 'resolved', 'closed'];
+  private static readonly TICKET_PRIORITIES = ['low', 'normal', 'high', 'urgent'];
+
   constructor(private prisma: PrismaService) {}
 
   // ─── Platform Settings ───────────────────────────────────────
@@ -30,8 +34,284 @@ export class PlatformAdminService {
     return this.prisma.platformSetting.findMany({ where, orderBy: { key: 'asc' } });
   }
 
-  async getPolicies() {
-    return this.getAllSettings('policy');
+  async getPolicies(page = 1, limit = 20, filters: { status?: string; category?: string; search?: string } = {}) {
+    const safePage = Math.max(1, Math.floor(Number(page) || 1));
+    const safeLimit = Math.min(100, Math.max(1, Math.floor(Number(limit) || 20)));
+    const where: Prisma.PlatformPolicyWhereInput = {};
+    const status = filters.status?.toLowerCase();
+    if (status && PlatformAdminService.POLICY_STATUSES.includes(status)) where.status = status;
+    if (filters.category?.trim()) where.category = filters.category.trim();
+    if (filters.search?.trim()) {
+      const search = filters.search.trim();
+      where.OR = [
+        { key: { contains: search, mode: 'insensitive' } },
+        { title: { contains: search, mode: 'insensitive' } },
+        { body: { contains: search, mode: 'insensitive' } },
+      ];
+    }
+    const [data, total] = await Promise.all([
+      this.prisma.platformPolicy.findMany({
+        where,
+        orderBy: [{ updatedAt: 'desc' }],
+        skip: (safePage - 1) * safeLimit,
+        take: safeLimit,
+      }),
+      this.prisma.platformPolicy.count({ where }),
+    ]);
+    return { data, total, page: safePage, limit: safeLimit, totalPages: Math.ceil(total / safeLimit) };
+  }
+
+  private async getPolicyOrThrow(id: string) {
+    const policy = await this.prisma.platformPolicy.findUnique({ where: { id } });
+    if (!policy) throw new NotFoundException('Policy not found');
+    return policy;
+  }
+
+  async createPolicy(actorId: string, data: {
+    key: string; title: string; body: string; category?: string; effectiveAt?: string;
+  }) {
+    if (!data?.key?.trim() || !data?.title?.trim() || !data?.body?.trim()) {
+      throw new BadRequestException('key, title, and body are required');
+    }
+    const key = data.key.trim().toLowerCase().replace(/[^a-z0-9._-]+/g, '-').replace(/^[-._]+|[-._]+$/g, '');
+    if (!key) throw new BadRequestException('key must contain at least one alphanumeric character');
+    const existing = await this.prisma.platformPolicy.findUnique({ where: { key } });
+    if (existing) throw new BadRequestException(`A policy with key "${key}" already exists`);
+    return this.prisma.$transaction(async (tx) => {
+      const policy = await tx.platformPolicy.create({
+        data: {
+          key,
+          title: data.title.trim(),
+          body: data.body,
+          category: data.category?.trim() || 'general',
+          effectiveAt: data.effectiveAt ? new Date(data.effectiveAt) : undefined,
+          createdBy: actorId,
+        },
+      });
+      await tx.auditLog.create({
+        data: { userId: actorId, action: 'policy.create', entity: 'platform_policy', entityId: policy.id, metadata: { outcome: 'success', key } },
+      });
+      return policy;
+    });
+  }
+
+  async updatePolicy(id: string, actorId: string, data: Partial<{
+    title: string; body: string; category: string; effectiveAt: string;
+  }>) {
+    const policy = await this.getPolicyOrThrow(id);
+    if (policy.status === 'published' || policy.status === 'archived') {
+      throw new BadRequestException('Published or archived policies cannot be edited — archive or create a new version first');
+    }
+    const update: Prisma.PlatformPolicyUpdateInput = { version: { increment: 1 } };
+    if (data.title !== undefined) {
+      if (!data.title.trim()) throw new BadRequestException('title cannot be empty');
+      update.title = data.title.trim();
+    }
+    if (data.body !== undefined) {
+      if (!data.body.trim()) throw new BadRequestException('body cannot be empty');
+      update.body = data.body;
+    }
+    if (data.category !== undefined) update.category = data.category.trim() || 'general';
+    if (data.effectiveAt !== undefined) {
+      const effectiveAt = new Date(data.effectiveAt);
+      if (Number.isNaN(effectiveAt.getTime())) throw new BadRequestException('Invalid effectiveAt date');
+      update.effectiveAt = effectiveAt;
+    }
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.platformPolicy.update({ where: { id }, data: update });
+      await tx.auditLog.create({
+        data: { userId: actorId, action: 'policy.update', entity: 'platform_policy', entityId: id, metadata: { outcome: 'success', version: updated.version } },
+      });
+      return updated;
+    });
+  }
+
+  async submitPolicy(id: string, actorId: string) {
+    const policy = await this.getPolicyOrThrow(id);
+    if (policy.status !== 'draft') throw new BadRequestException('Only a draft policy can be submitted for review');
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.platformPolicy.update({ where: { id }, data: { status: 'in_review' } });
+      await tx.auditLog.create({
+        data: { userId: actorId, action: 'policy.submit', entity: 'platform_policy', entityId: id, metadata: { outcome: 'success' } },
+      });
+      return updated;
+    });
+  }
+
+  async publishPolicy(id: string, actorId: string) {
+    const policy = await this.getPolicyOrThrow(id);
+    if (policy.status !== 'in_review') throw new BadRequestException('Only a policy in review can be published');
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.platformPolicy.update({
+        where: { id },
+        data: { status: 'published', publishedAt: new Date(), publishedBy: actorId },
+      });
+      await tx.auditLog.create({
+        data: { userId: actorId, action: 'policy.publish', entity: 'platform_policy', entityId: id, metadata: { outcome: 'success', version: updated.version } },
+      });
+      return updated;
+    });
+  }
+
+  async archivePolicy(id: string, actorId: string) {
+    const policy = await this.getPolicyOrThrow(id);
+    if (policy.status !== 'published') throw new BadRequestException('Only a published policy can be archived');
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.platformPolicy.update({ where: { id }, data: { status: 'archived' } });
+      await tx.auditLog.create({
+        data: { userId: actorId, action: 'policy.archive', entity: 'platform_policy', entityId: id, metadata: { outcome: 'success' } },
+      });
+      return updated;
+    });
+  }
+
+  // ─── Support tickets ─────────────────────────────────────────
+
+  async listSupportTickets(page = 1, limit = 20, filters: {
+    status?: string; priority?: string; assigneeId?: string; search?: string;
+  } = {}) {
+    const safePage = Math.max(1, Math.floor(Number(page) || 1));
+    const safeLimit = Math.min(100, Math.max(1, Math.floor(Number(limit) || 20)));
+    const where: Prisma.SupportTicketWhereInput = {};
+    const status = filters.status?.toLowerCase();
+    if (status && PlatformAdminService.TICKET_STATUSES.includes(status)) where.status = status;
+    const priority = filters.priority?.toLowerCase();
+    if (priority && PlatformAdminService.TICKET_PRIORITIES.includes(priority)) where.priority = priority;
+    if (filters.assigneeId?.trim()) where.assigneeId = filters.assigneeId.trim();
+    if (filters.search?.trim()) {
+      const search = filters.search.trim();
+      where.OR = [
+        { subject: { contains: search, mode: 'insensitive' } },
+        { description: { contains: search, mode: 'insensitive' } },
+      ];
+    }
+    const [data, total] = await Promise.all([
+      this.prisma.supportTicket.findMany({
+        where,
+        orderBy: [{ createdAt: 'desc' }],
+        skip: (safePage - 1) * safeLimit,
+        take: safeLimit,
+      }),
+      this.prisma.supportTicket.count({ where }),
+    ]);
+    return { data, total, page: safePage, limit: safeLimit, totalPages: Math.ceil(total / safeLimit) };
+  }
+
+  async getSupportTicket(id: string) {
+    const ticket = await this.prisma.supportTicket.findUnique({
+      where: { id },
+      include: { events: { orderBy: { createdAt: 'asc' } } },
+    });
+    if (!ticket) throw new NotFoundException('Support ticket not found');
+    return ticket;
+  }
+
+  private async getTicketOrThrow(id: string) {
+    const ticket = await this.prisma.supportTicket.findUnique({ where: { id } });
+    if (!ticket) throw new NotFoundException('Support ticket not found');
+    return ticket;
+  }
+
+  async createSupportTicket(actorId: string, data: {
+    subject: string; description: string; priority?: string; category?: string;
+    tenantId?: string; reportedBy?: string; assigneeId?: string;
+  }) {
+    if (!data?.subject?.trim() || !data?.description?.trim()) {
+      throw new BadRequestException('subject and description are required');
+    }
+    const priority = (data.priority || 'normal').toLowerCase();
+    if (!PlatformAdminService.TICKET_PRIORITIES.includes(priority)) {
+      throw new BadRequestException('Invalid ticket priority');
+    }
+    const assigneeId = data.assigneeId?.trim() || undefined;
+    return this.prisma.$transaction(async (tx) => {
+      const ticket = await tx.supportTicket.create({
+        data: {
+          subject: data.subject.trim(),
+          description: data.description.trim(),
+          priority,
+          category: data.category?.trim() || 'general',
+          tenantId: data.tenantId?.trim() || undefined,
+          reportedBy: data.reportedBy?.trim() || undefined,
+          assigneeId,
+          status: assigneeId ? 'in_progress' : 'open',
+          createdBy: actorId,
+        },
+      });
+      await tx.supportTicketEvent.create({
+        data: { ticketId: ticket.id, type: 'created', actorId, message: 'Ticket created' },
+      });
+      await tx.auditLog.create({
+        data: { userId: actorId, tenantId: ticket.tenantId, action: 'support.ticket_create', entity: 'support_ticket', entityId: ticket.id, metadata: { outcome: 'success', priority } },
+      });
+      return ticket;
+    });
+  }
+
+  async assignSupportTicket(id: string, actorId: string, assigneeId: string) {
+    const ticket = await this.getTicketOrThrow(id);
+    if (!assigneeId?.trim()) throw new BadRequestException('assigneeId is required');
+    const assignee = assigneeId.trim();
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.supportTicket.update({
+        where: { id },
+        data: { assigneeId: assignee, status: ticket.status === 'open' ? 'in_progress' : ticket.status },
+      });
+      await tx.supportTicketEvent.create({
+        data: { ticketId: id, type: 'assigned', actorId, metadata: { assigneeId: assignee } },
+      });
+      await tx.auditLog.create({
+        data: { userId: actorId, tenantId: ticket.tenantId, action: 'support.ticket_assign', entity: 'support_ticket', entityId: id, metadata: { outcome: 'success', assigneeId: assignee } },
+      });
+      return updated;
+    });
+  }
+
+  async escalateSupportTicket(id: string, actorId: string, note?: string) {
+    const ticket = await this.getTicketOrThrow(id);
+    if (ticket.status === 'resolved' || ticket.status === 'closed') {
+      throw new BadRequestException('A resolved or closed ticket cannot be escalated');
+    }
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.supportTicket.update({
+        where: { id },
+        data: { status: 'escalated', escalatedAt: new Date() },
+      });
+      await tx.supportTicketEvent.create({
+        data: { ticketId: id, type: 'escalated', actorId, message: note?.trim() || undefined },
+      });
+      await tx.auditLog.create({
+        data: { userId: actorId, tenantId: ticket.tenantId, action: 'support.ticket_escalate', entity: 'support_ticket', entityId: id, metadata: { outcome: 'success' } },
+      });
+      return updated;
+    });
+  }
+
+  async resolveSupportTicket(id: string, actorId: string, resolution: string) {
+    const ticket = await this.getTicketOrThrow(id);
+    if (!resolution?.trim()) throw new BadRequestException('A resolution is required');
+    const trimmed = resolution.trim();
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.supportTicket.update({
+        where: { id },
+        data: { status: 'resolved', resolvedAt: new Date(), resolution: trimmed },
+      });
+      await tx.supportTicketEvent.create({
+        data: { ticketId: id, type: 'resolved', actorId, message: trimmed },
+      });
+      await tx.auditLog.create({
+        data: { userId: actorId, tenantId: ticket.tenantId, action: 'support.ticket_resolve', entity: 'support_ticket', entityId: id, metadata: { outcome: 'success' } },
+      });
+      return updated;
+    });
+  }
+
+  async commentSupportTicket(id: string, actorId: string, message: string) {
+    await this.getTicketOrThrow(id);
+    if (!message?.trim()) throw new BadRequestException('A comment is required');
+    return this.prisma.supportTicketEvent.create({
+      data: { ticketId: id, type: 'comment', actorId, message: message.trim() },
+    });
   }
 
   async deleteSetting(key: string) {
@@ -317,6 +597,93 @@ export class PlatformAdminService {
       where: { id },
       data: update,
     });
+  }
+
+  // ─── Operational Reports & Exports ───────────────────────────
+
+  private static readonly REPORT_KEYS = ['subscriptions', 'support-tickets', 'policies'];
+  private static readonly EXPORT_ROW_CAP = 5000;
+
+  private static readonly REPORT_COLUMNS: Record<string, { header: string; get: (row: any) => unknown }[]> = {
+    subscriptions: [
+      { header: 'Subscription ID', get: (r) => r.id },
+      { header: 'Merchant', get: (r) => r.tenant?.name ?? '' },
+      { header: 'Plan', get: (r) => r.plan?.name ?? r.plan?.slug ?? '' },
+      { header: 'Status', get: (r) => r.status },
+      { header: 'Amount', get: (r) => r.plan?.price ?? '' },
+      { header: 'Currency', get: (r) => r.plan?.currency ?? r.currency ?? '' },
+      { header: 'Auto Renew', get: (r) => (r.autoRenew ? 'yes' : 'no') },
+      { header: 'Period End', get: (r) => (r.endDate ? new Date(r.endDate).toISOString() : '') },
+      { header: 'Started', get: (r) => (r.createdAt ? new Date(r.createdAt).toISOString() : '') },
+    ],
+    'support-tickets': [
+      { header: 'Ticket ID', get: (r) => r.id },
+      { header: 'Subject', get: (r) => r.subject },
+      { header: 'Status', get: (r) => r.status },
+      { header: 'Priority', get: (r) => r.priority },
+      { header: 'Category', get: (r) => r.category },
+      { header: 'Assignee', get: (r) => r.assigneeId ?? '' },
+      { header: 'Merchant', get: (r) => r.tenantId ?? '' },
+      { header: 'Opened', get: (r) => (r.createdAt ? new Date(r.createdAt).toISOString() : '') },
+      { header: 'Resolved', get: (r) => (r.resolvedAt ? new Date(r.resolvedAt).toISOString() : '') },
+    ],
+    policies: [
+      { header: 'Key', get: (r) => r.key },
+      { header: 'Title', get: (r) => r.title },
+      { header: 'Status', get: (r) => r.status },
+      { header: 'Version', get: (r) => r.version },
+      { header: 'Category', get: (r) => r.category },
+      { header: 'Effective', get: (r) => (r.effectiveAt ? new Date(r.effectiveAt).toISOString() : '') },
+      { header: 'Published', get: (r) => (r.publishedAt ? new Date(r.publishedAt).toISOString() : '') },
+      { header: 'Updated', get: (r) => (r.updatedAt ? new Date(r.updatedAt).toISOString() : '') },
+    ],
+  };
+
+  async exportReport(report: string, filters: Record<string, any> = {}, actorId?: string) {
+    const key = String(report || '').toLowerCase();
+    if (!PlatformAdminService.REPORT_KEYS.includes(key)) {
+      throw new BadRequestException('Unsupported report');
+    }
+    const rows = await this.collectReportRows(key, filters);
+    const columns = PlatformAdminService.REPORT_COLUMNS[key];
+    const csv = this.toCsv(columns.map((c) => c.header), rows.map((row) => columns.map((c) => c.get(row))));
+    if (actorId) {
+      await this.prisma.auditLog.create({
+        data: { userId: actorId, action: 'report.export', entity: 'report', entityId: key, metadata: { outcome: 'success', rows: rows.length } },
+      });
+    }
+    return { report: key, filename: `${key}-${new Date().toISOString().slice(0, 10)}.csv`, rows: rows.length, csv };
+  }
+
+  private async collectReportRows(key: string, filters: Record<string, any>): Promise<any[]> {
+    const pageSize = 100;
+    const cap = PlatformAdminService.EXPORT_ROW_CAP;
+    const collected: any[] = [];
+    let page = 1;
+    let total = Infinity;
+    while (collected.length < cap && collected.length < total) {
+      const result = key === 'subscriptions'
+        ? await this.getAllSubscriptions(page, pageSize, filters)
+        : key === 'support-tickets'
+          ? await this.listSupportTickets(page, pageSize, filters)
+          : await this.getPolicies(page, pageSize, filters);
+      total = result.total;
+      if (!result.data?.length) break;
+      collected.push(...result.data);
+      page += 1;
+    }
+    return collected.slice(0, cap);
+  }
+
+  private toCsv(headers: string[], rows: unknown[][]): string {
+    const escape = (value: unknown): string => {
+      const raw = value === null || value === undefined ? '' : String(value);
+      // Guard against spreadsheet formula injection, then quote per RFC 4180.
+      const safe = /^[=+\-@\t\r]/.test(raw) ? `'${raw}` : raw;
+      return `"${safe.replace(/"/g, '""')}"`;
+    };
+    const lines = [headers.map(escape).join(','), ...rows.map((row) => row.map(escape).join(','))];
+    return lines.join('\r\n');
   }
 
   // ─── Platform Stats ──────────────────────────────────────────

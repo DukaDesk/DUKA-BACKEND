@@ -54,12 +54,34 @@ describe('AdminService platform statistics', () => {
         roles: {
           some: {
             tenantId: null,
-            role: { name: { in: ['super_admin', 'support', 'operations', 'finance'] } },
+            role: { name: { in: ['super_admin', 'platform_operator', 'support', 'operations', 'finance'] } },
           },
         },
       },
     });
     expect(stats).toMatchObject({ totalUsers: 82, totalPlatformStaff: 4 });
+  });
+});
+
+describe('AdminService platform role separation', () => {
+  it('lets a platform operator manage merchants but not review apps', async () => {
+    const { service, prisma } = makeService();
+    prisma.userRole.findFirst.mockImplementation(async ({ where }: any) =>
+      where.role.name.in.includes('platform_operator') ? { id: 'role-op' } : null);
+
+    await expect(service.suspendTenant('tenant-1', 'operator-1')).resolves.toBeDefined();
+    await expect(service.getMerchantPreview('tenant-1', 'operator-1')).rejects.toThrow(ForbiddenException);
+  });
+
+  it('lets the Operations role review apps but not manage merchants', async () => {
+    const { service, prisma } = makeService();
+    prisma.userRole.findFirst.mockImplementation(async ({ where }: any) => {
+      const names: string[] = where.role.name.in;
+      return names.includes('operations') && !names.includes('platform_operator') ? { id: 'role-review' } : null;
+    });
+
+    await expect(service.getMerchantPreview('tenant-1', 'reviewer-1')).resolves.toBeDefined();
+    await expect(service.suspendTenant('tenant-1', 'reviewer-1')).rejects.toThrow(ForbiddenException);
   });
 });
 

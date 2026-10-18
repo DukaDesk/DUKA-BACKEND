@@ -2196,3 +2196,72 @@ model Notification {
   @@index([tenantId])
   @@map("notifications")
 }
+
+// ─── Platform support tickets (case/task workflow) ─────────────
+// Minimal canonical case store: assignment + escalation + resolution,
+// with an append-only event trail for auditability.
+
+model SupportTicket {
+  id          String    @id @default(uuid())
+  subject     String
+  description String
+  status      String    @default("open")    // open | in_progress | escalated | resolved | closed
+  priority    String    @default("normal")  // low | normal | high | urgent
+  category    String    @default("general")
+  tenantId    String?
+  reportedBy  String?
+  assigneeId  String?
+  escalatedAt DateTime?
+  resolvedAt  DateTime?
+  resolution  String?
+  createdBy   String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  events SupportTicketEvent[]
+
+  @@index([status])
+  @@index([assigneeId])
+  @@index([tenantId])
+  @@index([priority])
+  @@map("support_tickets")
+}
+
+model SupportTicketEvent {
+  id        String   @id @default(uuid())
+  ticketId  String
+  type      String   // created | comment | assigned | escalated | resolved | status_changed
+  actorId   String?
+  message   String?
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  ticket SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId])
+  @@map("support_ticket_events")
+}
+
+// ─── Governed platform policies ────────────────────────────────
+// Draft → in_review → published → archived. Publication is the only
+// path that makes a policy version effective.
+
+model PlatformPolicy {
+  id          String    @id @default(uuid())
+  key         String    @unique
+  title       String
+  body        String
+  category    String    @default("general")
+  status      String    @default("draft")   // draft | in_review | published | archived
+  version     Int       @default(1)
+  effectiveAt DateTime?
+  publishedAt DateTime?
+  createdBy   String?
+  publishedBy String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([status])
+  @@index([category])
+  @@map("platform_policies")
+}

@@ -8,7 +8,7 @@ describe('authenticated merchant references', () => {
     const prisma = {
       tenantUser: { findMany: jest.fn().mockResolvedValue([{ role: 'owner', tenant: { id: 'merchant-1', name: 'Shop', slug: 'shop' } }]) },
       refreshToken: { findUnique: jest.fn().mockResolvedValue({ id: 'refresh-1', revoked: false, expiresAt: new Date(Date.now() + 60000), user: { id: 'user-1', email: 'a@example.com', status: 'active' } }), update: jest.fn(), create: jest.fn() },
-      userRole: { findMany: jest.fn().mockResolvedValue([{ role: { name: 'operations' } }]) },
+      userRole: { findMany: jest.fn().mockResolvedValue([{ role: { name: 'platform_operator' } }]) },
     };
     const service = makeService(prisma);
     const result = await service.refresh({ refreshToken: 'refresh' });

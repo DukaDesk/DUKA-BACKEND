@@ -18,7 +18,9 @@ function normalizeRole(raw: string): string {
     .trim()
     .replace(/\s+/g, '_')
     .replace(/-/g, '_');
-  if (r === 'platform_operator' || r === 'platformoperator' || r === 'admin' || r === 'administrator' || r === 'operations' || r === 'operator') return 'platform_operator';
+  if (r === 'platform_operator' || r === 'platformoperator' || r === 'admin' || r === 'administrator' || r === 'operator') return 'platform_operator';
+  // 'operations' is the app-review-only platform role — kept distinct from platform_operator.
+  if (r === 'operations' || r === 'operation') return 'operations';
   if (r === 'support_agent' || r === 'supportagent' || r === 'support') return 'support_agent';
   if (r === 'super_admin' || r === 'superadmin') return 'super_admin';
   return r;

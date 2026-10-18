@@ -416,7 +416,7 @@ export class AdminService {
           roles: {
             some: {
               tenantId: null,
-              role: { name: { in: ['super_admin', 'support', 'operations', 'finance'] } },
+              role: { name: { in: ['super_admin', 'platform_operator', 'support', 'operations', 'finance'] } },
             },
           },
         },

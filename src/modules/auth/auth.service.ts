@@ -41,16 +41,21 @@ export class AuthService {
 
   private normalizeRole(raw: string): string {
     const r = String(raw || '').toLowerCase().trim().replace(/\s+/g, '_').replace(/-/g, '_');
-    if (r === 'platform_operator' || r === 'platformoperator' || r === 'admin' || r === 'administrator' || r === 'operations' || r === 'operator') return 'platform_operator';
+    if (r === 'platform_operator' || r === 'platformoperator' || r === 'admin' || r === 'administrator' || r === 'operator') return 'platform_operator';
+    // 'operations' is a distinct, app-review-only platform role (SEC-0002 SR-08/AC-05).
+    // It must never be conflated with platform_operator.
+    if (r === 'operations' || r === 'operation') return 'operations';
     if (r === 'support_agent' || r === 'supportagent' || r === 'support') return 'support_agent';
     if (r === 'super_admin' || r === 'superadmin') return 'super_admin';
     return r;
   }
 
   private mapRoleToDbName(canonical: string): string {
-    // DB PlatformRole enum: super_admin, support, operations, finance
+    // DB role rows: super_admin, platform_operator, operations, support, finance.
+    // Platform Operator and Operations are distinct platform roles.
     if (canonical === 'super_admin') return 'super_admin';
-    if (canonical === 'platform_operator') return 'operations';
+    if (canonical === 'platform_operator') return 'platform_operator';
+    if (canonical === 'operations') return 'operations';
     if (canonical === 'support_agent') return 'support';
     if (canonical === 'finance') return 'finance';
     return canonical;
@@ -233,11 +238,12 @@ export class AuthService {
     });
     const canonicalRoles = [...new Set(assignments.map(({ role }) => {
       if (role.name === 'super_admin') return 'super_admin';
-      if (role.name === 'operations' || role.name === 'platform_operator') return 'platform_operator';
+      if (role.name === 'platform_operator') return 'platform_operator';
+      if (role.name === 'operations') return 'operations';
       if (role.name === 'support' || role.name === 'support_agent') return 'support_agent';
       return role.name;
     }))];
-    const priority = ['super_admin', 'platform_operator', 'support_agent'];
+    const priority = ['super_admin', 'platform_operator', 'operations', 'support_agent'];
     const role = priority.find((candidate) => canonicalRoles.includes(candidate)) || canonicalRoles[0] || null;
     return { role, roles: canonicalRoles };
   }

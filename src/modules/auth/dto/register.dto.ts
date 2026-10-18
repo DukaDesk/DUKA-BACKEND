@@ -28,14 +28,14 @@ export class RegisterDto {
 
   @ApiProperty({
     example: 'platform_operator',
-    enum: ['super_admin', 'platform_operator', 'support_agent'],
+    enum: ['super_admin', 'platform_operator', 'operations', 'support_agent'],
     required: false,
     description: 'Requested platform role — omit for merchant self-serve signup (provisions an owned merchant and signs in immediately); when present the account stays pending admin approval',
   })
   @IsOptional()
   @IsString()
   @IsIn(['super_admin', 'platform_operator', 'support_agent', 'admin', 'support', 'operations', 'finance'], {
-    message: 'Role must be one of super_admin, platform_operator, support_agent',
+    message: 'Role must be one of super_admin, platform_operator, operations, support_agent',
   })
   role?: string;
 
