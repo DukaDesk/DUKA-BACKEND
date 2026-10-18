@@ -23,7 +23,10 @@ export class PlatformRoleGuard implements CanActivate {
     if (!user?.id) throw new ForbiddenException('Authentication required');
 
     const databaseRoles = [...new Set(roles.flatMap((role) => {
-      if (role === 'platform_operator') return ['platform_operator', 'operations'];
+      // Platform Operator and Operations are distinct roles: Operations is
+      // app-review-only and must never satisfy a platform_operator guard.
+      if (role === 'platform_operator') return ['platform_operator'];
+      if (role === 'operations') return ['operations'];
       if (role === 'support_agent') return ['support_agent', 'support'];
       return [role];
     }))];

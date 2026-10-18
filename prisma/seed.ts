@@ -7,8 +7,9 @@ async function main() {
   // Seed RBAC: Platform Roles
   const platformRoles = [
     { name: 'super_admin', description: 'Full platform access', isSystem: true },
+    { name: 'platform_operator', description: 'Platform operator — merchants, marketplace, platform configuration', isSystem: true },
+    { name: 'operations', description: 'Operations — merchant app submission review', isSystem: true },
     { name: 'support', description: 'Customer support access', isSystem: true },
-    { name: 'operations', description: 'Platform operations', isSystem: true },
     { name: 'finance', description: 'Financial reports access', isSystem: true },
   ];
 
@@ -33,6 +34,7 @@ async function main() {
     { name: 'analytics:read', resource: 'analytics', action: 'read' },
     { name: 'settings:read', resource: 'settings', action: 'read' },
     { name: 'settings:update', resource: 'settings', action: 'update' },
+    { name: 'merchant-apps:review', resource: 'merchant-apps', action: 'review' },
   ];
 
   for (const role of platformRoles) {
@@ -64,6 +66,17 @@ async function main() {
         });
       }
     }
+  }
+
+  // Super admins receive every permission; Operations is granted app-submission review.
+  const reviewPermission = await prisma.permission.findUnique({ where: { name: 'merchant-apps:review' } });
+  const operationsRole = await prisma.role.findUnique({ where: { name: 'operations' } });
+  if (operationsRole && reviewPermission) {
+    await prisma.rolePermission.upsert({
+      where: { roleId_permissionId: { roleId: operationsRole.id, permissionId: reviewPermission.id } },
+      update: {},
+      create: { roleId: operationsRole.id, permissionId: reviewPermission.id },
+    });
   }
 
   // Provision a bootstrap super admin only when both secrets are explicitly set.

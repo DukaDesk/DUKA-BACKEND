@@ -8,10 +8,10 @@ export class CreateInviteDto {
 
   @ApiProperty({
     example: 'platform_operator',
-    enum: ['super_admin', 'platform_operator', 'support_agent'],
+    enum: ['super_admin', 'platform_operator', 'operations', 'support_agent'],
   })
   @IsIn(['super_admin', 'platform_operator', 'support_agent', 'admin', 'support', 'operations', 'finance'], {
-    message: 'Role must be one of super_admin, platform_operator, support_agent',
+    message: 'Role must be one of super_admin, platform_operator, operations, support_agent',
   })
   role: string;
 

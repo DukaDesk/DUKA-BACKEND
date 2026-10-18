@@ -34,9 +34,31 @@ describe('PlatformRoleGuard', () => {
     await expect(guard.canActivate(makeContext({ id: 'admin-1' }))).resolves.toBe(true);
     expect(reflector.getAllAndOverride).toHaveBeenCalledWith(PLATFORM_ROLES_KEY, expect.any(Array));
     expect(findFirst).toHaveBeenCalledWith({
-      where: { userId: 'admin-1', tenantId: null, role: { name: { in: ['super_admin', 'platform_operator', 'operations'] } } },
+      where: { userId: 'admin-1', tenantId: null, role: { name: { in: ['super_admin', 'platform_operator'] } } },
       select: { id: true },
     });
+  });
+
+  it('does not let the app-review Operations role satisfy a platform_operator guard', async () => {
+    reflector.getAllAndOverride.mockReturnValue(['super_admin', 'platform_operator']);
+    findFirst.mockResolvedValue({ id: 'assignment-1' });
+
+    await expect(guard.canActivate(makeContext({ id: 'ops-1' }))).resolves.toBe(true);
+
+    const [{ where }] = findFirst.mock.calls[0];
+    expect(where.role.name.in).toEqual(['super_admin', 'platform_operator']);
+    expect(where.role.name.in).not.toContain('operations');
+  });
+
+  it('resolves Operations routes to the distinct operations DB role only', async () => {
+    reflector.getAllAndOverride.mockReturnValue(['super_admin', 'operations']);
+    findFirst.mockResolvedValue({ id: 'assignment-1' });
+
+    await expect(guard.canActivate(makeContext({ id: 'ops-1' }))).resolves.toBe(true);
+
+    const [{ where }] = findFirst.mock.calls[0];
+    expect(where.role.name.in).toEqual(['super_admin', 'operations']);
+    expect(where.role.name.in).not.toContain('platform_operator');
   });
 
   it('denies users without the required global role', async () => {

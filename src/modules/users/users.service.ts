@@ -214,11 +214,12 @@ export class UsersService {
         throw new ForbiddenException('Only a super admin can assign global platform roles');
       }
       const platformRoles: Record<string, string> = {
-        platform_operator: 'operations',
+        platform_operator: 'platform_operator',
+        operations: 'operations',
         support_agent: 'support',
       };
       if (roleName in platformRoles) roleName = platformRoles[roleName];
-      if (!['super_admin', 'operations', 'support'].includes(roleName)) {
+      if (!['super_admin', 'platform_operator', 'operations', 'support'].includes(roleName)) {
         throw new BadRequestException('A valid global platform role is required');
       }
     }
