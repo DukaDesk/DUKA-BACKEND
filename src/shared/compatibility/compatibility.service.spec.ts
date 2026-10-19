@@ -218,6 +218,16 @@ describe('current mobile shell compatibility', () => {
     expect(report.errors).toEqual([]);
     expect(report.counts.components).toBe(5);
   });
+  it('accepts the builder image_block rendered by the shell registry', async () => {
+    const report = await makeService().service.evaluate({ screens: { home: {
+      layout: { kind: 'scroll', children: [
+        { type: 'image_block', props: { source: 'https://cdn.example.com/a.png', alt: 'Banner' } },
+      ] }
+    } } });
+    expect(report.errors).toEqual([]);
+    expect(report.compatible).toBe(true);
+    expect(report.counts.components).toBe(1);
+  });
   it('still rejects unknown children inside a supported container', async () => {
     const report = await makeService().service.evaluate({ screens: { home: {
       type: 'nested_section', children: [{ type: 'unsupported_widget', props: {} }]
