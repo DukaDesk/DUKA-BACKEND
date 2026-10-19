@@ -30,6 +30,7 @@ export const SUPPORTED_COMPONENT_TYPES: readonly string[] = [
   'form',
   'header',
   'image',
+  'image_block',
   'map',
   'product_grid',
   'service_list',
