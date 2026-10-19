@@ -12,6 +12,8 @@ describe('MerchantAppReviewService', () => {
   let draftPageFindMany: jest.Mock;
   let draftFindUnique: jest.Mock;
   let releaseFindMany: jest.Mock;
+  let releaseFindFirst: jest.Mock;
+  let releaseUpdateMany: jest.Mock;
   let transaction: jest.Mock;
   let publishAsAdmin: jest.Mock;
 
@@ -23,6 +25,8 @@ describe('MerchantAppReviewService', () => {
     draftPageFindMany = jest.fn().mockResolvedValue([]);
     draftFindUnique = jest.fn().mockResolvedValue(null);
     releaseFindMany = jest.fn().mockResolvedValue([]);
+    releaseFindFirst = jest.fn().mockResolvedValue({ id: 'rel-1' });
+    releaseUpdateMany = jest.fn().mockResolvedValue({ count: 1 });
     transaction = jest.fn().mockImplementation((operations) => Promise.all(operations));
     publishAsAdmin = jest.fn().mockResolvedValue({ version: '1.0.0', releaseId: 'release-1' });
 
@@ -32,7 +36,11 @@ describe('MerchantAppReviewService', () => {
         tenant: { findUnique: tenantFindUnique, update: tenantUpdate },
         draftPage: { count: draftPageCount, findMany: draftPageFindMany },
         draft: { findUnique: draftFindUnique },
-        release: { findMany: releaseFindMany },
+        release: {
+          findMany: releaseFindMany,
+          findFirst: releaseFindFirst,
+          updateMany: releaseUpdateMany,
+        },
         auditLog: { create: jest.fn().mockResolvedValue({}) },
         $transaction: transaction,
       } as unknown as PrismaService,
@@ -76,9 +84,9 @@ describe('MerchantAppReviewService', () => {
     expect(publishAsAdmin).not.toHaveBeenCalled();
   });
 
-  it('refuses approval when the in-review app has no submitted design', async () => {
+  it('refuses approval when no staged release is available', async () => {
     tenantFindUnique.mockResolvedValueOnce({ id: 'tenant-1', appStatus: 'in_review' });
-    draftPageCount.mockResolvedValueOnce(0);
+    releaseFindFirst.mockResolvedValueOnce(null);
 
     await expect(service.approveApp('tenant-1', 'admin-1')).rejects.toBeInstanceOf(BadRequestException);
     expect(publishAsAdmin).not.toHaveBeenCalled();
@@ -90,6 +98,10 @@ describe('MerchantAppReviewService', () => {
 
     await expect(service.rejectApp('tenant-1', 'admin-1', 'Fix checkout')).resolves.toMatchObject({ appStatus: 'rejected' });
     expect(publishAsAdmin).not.toHaveBeenCalled();
+    expect(releaseUpdateMany).toHaveBeenCalledWith({
+      where: { tenantId: 'tenant-1', status: 'pending_review' },
+      data: { status: 'rejected', releaseNotes: 'Fix checkout' },
+    });
 
     tenantFindUnique.mockResolvedValueOnce({ id: 'tenant-1', appStatus: 'in_review' });
     await expect(service.rejectApp('tenant-1', 'admin-1', '  ')).rejects.toBeInstanceOf(BadRequestException);

@@ -82,34 +82,60 @@ export class PublishingService {
     const compat = await this.compatibility.assertCompatible(manifest, { tenantId });
     const checksum = crypto.createHash('sha256').update(JSON.stringify(manifest)).digest('hex');
 
+    const release = await this.publishClientManifest(tenantId, {
+      manifest,
+      version: manifest.version,
+    });
+    if (release.status !== 'pending_review' && release.status !== 'published') {
+      throw new ConflictException({
+        code: 'VERSION_ALREADY_REVIEWED',
+        message: `Version ${release.version} was already reviewed; increment the version before resubmitting`,
+      });
+    }
     const savedDraft = await this.prisma.draft.upsert({
       where: { id: `${tenantId}-draft` },
       create: { id: `${tenantId}-draft`, tenantId, version: 1, manifest, status: 'in_review' },
       update: { version: { increment: 1 }, manifest, status: 'in_review' },
     });
-    const release = await this.publishClientManifest(tenantId, {
-      manifest,
-      version: manifest.version,
-    });
-    this.eventBus.publish({
-      type: 'ReleaseSubmittedForReview',
-      aggregateId: tenantId,
-      data: {
-        tenantId,
-        version: release.version,
-        releaseId: release.releaseId,
-        checksum,
-        status: 'pending_review',
-      },
-    });
+    if (release.status === 'pending_review') {
+      await this.supersedePendingCandidates(tenantId, release.releaseId);
+      await this.markSubmittedForReview(tenantId);
+      this.eventBus.publish({
+        type: 'ReleaseSubmittedForReview',
+        aggregateId: tenantId,
+        data: {
+          tenantId,
+          version: release.version,
+          releaseId: release.releaseId,
+          checksum,
+          status: 'pending_review',
+        },
+      });
+    }
 
     return {
       ...release,
-      status: 'in_review',
+      status: release.status === 'published' ? 'published' : 'in_review',
       checksum,
       submittedAt: savedDraft.updatedAt,
       compatibility: { contract: compat.contract, warnings: compat.warnings },
     };
+  }
+
+  /** Compile the saved drafts, then stage that exact snapshot for admin review. */
+  async submitDraftsForReview(tenantId: string, userId: string) {
+    await this.verifyPublishingPermission(tenantId, userId);
+
+    const validation = await this.validationEngine.validateDraft(tenantId);
+    if (!validation.passed) {
+      throw new BadRequestException({
+        message: 'Validation failed',
+        errors: validation.errors,
+      });
+    }
+
+    const compiled = await this.manifestCompiler.compile(tenantId, { persist: false });
+    return this.submitForReview(tenantId, userId, compiled.manifest);
   }
 
   /** Store a private candidate. Public activation is reserved for
@@ -139,25 +165,13 @@ export class PublishingService {
     let result: any;
 
     if (body?.manifest !== undefined && body?.manifest !== null) {
-      result = await this.publishClientManifest(tenantId, {
-        manifest: body.manifest,
-        version: body.version,
-      });
+      const manifest = body.version && body.manifest?.version !== body.version
+        ? { ...body.manifest, version: body.version }
+        : body.manifest;
+      result = await this.submitForReview(tenantId, userId, manifest);
     } else {
-      result = await this.publishFromDrafts(tenantId);
+      result = await this.submitDraftsForReview(tenantId, userId);
     }
-
-    this.eventBus.publish({
-      type: 'ReleaseSubmittedForReview',
-      aggregateId: tenantId,
-      data: {
-        tenantId,
-        version: result.version,
-        releaseId: result.releaseId,
-        checksum: result.checksum,
-        status: 'pending_review',
-      },
-    });
 
     if (idemKey) {
       await this.redis.set(this.idemKey(tenantId, idemKey), JSON.stringify(result), 86400);
@@ -177,28 +191,17 @@ export class PublishingService {
     });
     if (!tenant) throw new NotFoundException({ code: 'MERCHANT_NOT_FOUND', message: 'Merchant not found' });
 
-    const submittedDraft = await this.prisma.draft.findUnique({
-      where: { id: `${tenantId}-draft` },
+    // The release is the immutable submitted artifact. The editable draft may
+    // have changed since submission and must never replace what was reviewed.
+    const candidate = await this.prisma.release.findFirst({
+      where: { tenantId, status: 'pending_review' },
+      orderBy: { buildNumber: 'desc' },
     });
-    let result: any;
-    if (submittedDraft?.status === 'in_review' && submittedDraft.manifest) {
-      const manifest = submittedDraft.manifest as Record<string, any>;
-      const checksum = crypto.createHash('sha256').update(JSON.stringify(manifest)).digest('hex');
-      let candidate = await this.prisma.release.findFirst({
-        where: { tenantId, checksum, status: 'pending_review' },
-        orderBy: { buildNumber: 'desc' },
-      });
-      if (!candidate) {
-        const submitted = await this.publishClientManifest(tenantId, { manifest, version: manifest.version });
-        candidate = await this.prisma.release.findUnique({ where: { id: submitted.releaseId } });
-      }
-      if (!candidate) throw new NotFoundException('Submitted release candidate not found');
-      result = await this.activateReviewRelease(tenantId, tenant.slug, candidate.id);
-    } else {
-      const submitted = await this.publishFromDrafts(tenantId, tenant.slug);
-      result = await this.activateReviewRelease(tenantId, tenant.slug, submitted.releaseId);
+    if (!candidate?.manifest) {
+      throw new ConflictException('No app submission is awaiting review');
     }
 
+    const result = await this.activateReviewRelease(tenantId, tenant.slug, candidate.id);
     this.logger.log(`Admin-approved publish v${result.version} (${result.releaseId}) for tenant ${tenantId}`);
     return result;
   }
@@ -215,6 +218,10 @@ export class PublishingService {
         where: { tenantId, status: 'published', channel: 'production', id: { not: candidate.id } },
         data: { status: 'superseded' },
       });
+      await tx.release.updateMany({
+        where: { tenantId, status: 'pending_review', id: { not: candidate.id } },
+        data: { status: 'superseded' },
+      });
       const approved = candidate.status === 'published'
         ? candidate
         : await tx.release.update({
@@ -223,7 +230,14 @@ export class PublishingService {
           });
       await tx.tenant.update({
         where: { id: tenantId },
-        data: { status: 'published', publishedAt, activeReleaseId: approved.id },
+        data: {
+          status: 'published',
+          publishedAt,
+          activeReleaseId: approved.id,
+          appStatus: 'approved',
+          appReviewedAt: publishedAt,
+          appReviewNote: null,
+        },
       });
       return approved;
     });
@@ -283,35 +297,28 @@ export class PublishingService {
     return { ...submitted, compatibility: { contract: compat.contract, warnings: compat.warnings } };
   }
 
-  // _slug keeps main-side callers compiling (publishAsAdmin passes the tenant
-  // slug); this path resolves everything it needs from tenantId.
-  private async publishFromDrafts(tenantId: string, _slug?: string) {
-    const validation = await this.validationEngine.validateDraft(tenantId);
-    if (!validation.passed) {
-      throw new BadRequestException({
-        message: 'Validation failed',
-        errors: validation.errors,
-      });
-    }
-
-    // Compiler no longer creates a competing draft Release (B2).
-    const compiled = await this.manifestCompiler.compile(tenantId);
-
-    // B7: draft-compiled manifests must satisfy the same runtime contract.
-    const compat = await this.compatibility.assertCompatible(compiled.manifest, { tenantId });
-
-    const submitted = await this.createReviewRelease({
-      tenantId,
-      version: compiled.version,
-      buildNumber: compiled.buildNumber,
-      manifest: compiled.manifest,
-      checksum: compiled.checksum,
-      themeBundle: compiled.themeBundle ?? null,
-      capabilityMeta: compiled.capabilityMeta ?? null,
-      assetManifest: compiled.assetManifest ?? null,
+  private async markSubmittedForReview(tenantId: string) {
+    await this.prisma.tenant.update({
+      where: { id: tenantId },
+      data: {
+        appStatus: 'in_review',
+        appSubmittedAt: new Date(),
+        appReviewNote: null,
+      },
     });
+  }
 
-    return { ...submitted, compatibility: { contract: compat.contract, warnings: compat.warnings } };
+  /** Only the newest submission should be actionable; superseded candidates
+   * must never be activated by a later admin approval. */
+  private async supersedePendingCandidates(tenantId: string, keepReleaseId: string) {
+    await this.prisma.release.updateMany({
+      where: {
+        tenantId,
+        status: 'pending_review',
+        id: { not: keepReleaseId },
+      },
+      data: { status: 'superseded' },
+    });
   }
 
   /**
@@ -498,7 +505,12 @@ export class PublishingService {
     const [tenant, latest] = await Promise.all([
       this.prisma.tenant.findUnique({
         where: { id: tenantId },
-        select: { activeReleaseId: true },
+        select: {
+          activeReleaseId: true,
+          appStatus: true,
+          appReviewNote: true,
+          appSubmittedAt: true,
+        },
       }),
       this.prisma.release.findFirst({
         where: { tenantId },
@@ -507,16 +519,31 @@ export class PublishingService {
       }),
     ]);
     if (!tenant) throw new NotFoundException({ code: 'MERCHANT_NOT_FOUND', message: 'Merchant not found' });
-    const status = latest?.status === 'pending_review'
+    const status = tenant.appStatus === 'in_review'
       ? 'in_review'
-      : latest?.status === 'rejected'
+      : tenant.appStatus === 'rejected'
         ? 'rejected'
-        : latest && latest.id === tenant.activeReleaseId && latest.status === 'published'
-          ? 'live'
-          : 'draft';
+        : latest?.status === 'pending_review'
+          ? 'in_review'
+          : latest?.status === 'rejected'
+            ? 'rejected'
+            : latest && latest.id === tenant.activeReleaseId && latest.status === 'published'
+              ? 'live'
+              : tenant.activeReleaseId
+                ? 'live'
+                : 'draft';
     return {
       status,
-      release: latest ? { ...latest, rollbackFrom: (latest.capabilityMeta as any)?.rollbackFrom } : null,
+      appStatus: tenant.appStatus,
+      reviewNote: tenant.appReviewNote,
+      submittedAt: tenant.appSubmittedAt,
+      release: latest
+        ? {
+            ...latest,
+            rollbackFrom: (latest.capabilityMeta as any)?.rollbackFrom,
+            releaseNotes: latest.releaseNotes || tenant.appReviewNote,
+          }
+        : null,
       activeReleaseId: tenant.activeReleaseId,
     };
   }
@@ -562,6 +589,14 @@ export class PublishingService {
       capabilityMeta: { ...((target.capabilityMeta as any) || {}), rollbackFrom: target.version, contract: compat.contract },
       assetManifest: target.assetManifest ?? this.buildAssetManifest(manifest),
     });
+
+    await this.prisma.draft.upsert({
+      where: { id: `${tenantId}-draft` },
+      create: { id: `${tenantId}-draft`, tenantId, version: 1, manifest, status: 'in_review' },
+      update: { version: { increment: 1 }, manifest, status: 'in_review' },
+    });
+    await this.supersedePendingCandidates(tenantId, submission.releaseId);
+    await this.markSubmittedForReview(tenantId);
 
     this.eventBus.publish({
       type: 'ReleaseSubmittedForReview',

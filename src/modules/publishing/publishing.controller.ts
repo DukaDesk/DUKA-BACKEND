@@ -1,5 +1,5 @@
 import {
-  Controller, Get, Post, Param, UseGuards, Body,
+  Controller, Get, Post, Param, UseGuards, Body, Headers,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiBody } from '@nestjs/swagger';
 import { PublishingService } from './publishing.service';
@@ -55,8 +55,14 @@ export class PublishingController {
   publish(
     @Param('id') id: string,
     @CurrentUser('id') userId: string,
+    @Body() body?: { manifest?: any; version?: string },
+    @Headers('idempotency-key') idempotencyKey?: string,
   ) {
-    return this.publishingService.publish(id, userId);
+    return this.publishingService.publish(id, userId, {
+      manifest: body?.manifest,
+      version: body?.version,
+      idempotencyKey,
+    });
   }
 
   @Get('releases')
