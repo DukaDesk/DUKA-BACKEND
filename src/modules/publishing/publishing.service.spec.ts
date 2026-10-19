@@ -1,7 +1,13 @@
+import * as crypto from 'crypto';
 import { PublishingService } from './publishing.service';
 import { ManifestValidator } from './manifest-validator.service';
 import { CompatibilityService } from '../../shared/compatibility/compatibility.service';
-import { BadRequestException, ForbiddenException, UnprocessableEntityException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  UnprocessableEntityException,
+} from '@nestjs/common';
 
 const fixtureManifest = {
   manifestVersion: '1.0.0',
@@ -59,7 +65,15 @@ function createService(overrides: Partial<Record<string, any>> = {}) {
     draftPage: { deleteMany: jest.fn() },
     draftSection: { deleteMany: jest.fn() },
     draftComponent: { deleteMany: jest.fn() },
-    draft: { findUnique: jest.fn(), upsert: jest.fn() },
+    draft: {
+      findUnique: jest.fn().mockResolvedValue(null),
+      upsert: jest.fn().mockResolvedValue({
+        id: 't1-draft',
+        status: 'in_review',
+        manifest: fixtureManifest,
+        updatedAt: new Date(),
+      }),
+    },
     media: { findMany: jest.fn().mockResolvedValue([]) },
     $transaction: jest.fn(async (fn: any) => fn(prisma)),
     ...overrides,
@@ -128,7 +142,7 @@ describe('PublishingService', () => {
         releaseId: 'rel-1',
         tenantId: 't1',
         channel: 'production',
-        status: 'pending_review',
+        status: 'in_review',
         version: expect.any(String),
         checksum: expect.any(String),
       });
@@ -170,16 +184,192 @@ describe('PublishingService', () => {
       );
       expect(prisma.release.create).not.toHaveBeenCalled();
     });
+
+    it('refuses to silently resubmit an already reviewed version', async () => {
+      const { service, prisma } = createService();
+      const checksum = crypto.createHash('sha256').update(JSON.stringify(fixtureManifest)).digest('hex');
+      const existing = {
+        id: 'old-release',
+        tenantId: 't1',
+        version: fixtureManifest.version,
+        buildNumber: 1,
+        checksum,
+        status: 'rejected',
+        channel: 'production',
+        manifest: fixtureManifest,
+        publishedAt: new Date(),
+      };
+      prisma.release.findUnique.mockResolvedValueOnce(existing);
+      prisma.release.create.mockRejectedValueOnce({ code: 'P2002' });
+      prisma.release.findFirst
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(existing);
+
+      await expect(service.publish('t1', 'u1', { manifest: fixtureManifest }))
+        .rejects.toMatchObject({ response: { code: 'VERSION_ALREADY_REVIEWED' } });
+      expect(prisma.draft.upsert).not.toHaveBeenCalled();
+    });
   });
 
   describe('B2 — review submission', () => {
-    it('stores a private candidate without changing the active release', async () => {
+    it('stores a private candidate and queues the tenant for admin review', async () => {
       const { service, prisma } = createService();
       await service.publish('t1', 'u1', { manifest: fixtureManifest });
 
       expect(prisma.$transaction).not.toHaveBeenCalled();
-      expect(prisma.release.updateMany).not.toHaveBeenCalled();
-      expect(prisma.tenant.update).not.toHaveBeenCalled();
+      expect(prisma.release.updateMany).toHaveBeenCalledWith({
+        where: { tenantId: 't1', status: 'pending_review', id: { not: 'rel-1' } },
+        data: { status: 'superseded' },
+      });
+      expect(prisma.tenant.update).toHaveBeenCalledWith({
+        where: { id: 't1' },
+        data: expect.objectContaining({
+          appStatus: 'in_review',
+          appReviewNote: null,
+        }),
+      });
+    });
+
+    it('supersedes an older pending candidate on a newer submission', async () => {
+      const { service, prisma, redis } = createService();
+      redis.get.mockResolvedValue(null);
+      prisma.release.create.mockResolvedValueOnce({
+        id: 'rel-2',
+        version: '1.2.4',
+        buildNumber: 2,
+        checksum: 'new-checksum',
+        status: 'pending_review',
+        channel: 'production',
+        publishedAt: new Date(),
+      });
+
+      const result = await service.submitForReview('t1', 'u1', fixtureManifest);
+
+      expect(result.status).toBe('in_review');
+      expect(prisma.release.updateMany).toHaveBeenCalledWith({
+        where: { tenantId: 't1', status: 'pending_review', id: { not: 'rel-2' } },
+        data: { status: 'superseded' },
+      });
+      expect(prisma.tenant.update).toHaveBeenCalledWith({
+        where: { id: 't1' },
+        data: expect.objectContaining({ appStatus: 'in_review' }),
+      });
+    });
+
+    it('compiles saved drafts and stages the exact snapshot without persisting a competing draft', async () => {
+      const { service, manifestCompiler, prisma } = createService();
+
+      const result = await service.submitDraftsForReview('t1', 'u1');
+
+      expect(manifestCompiler.compile).toHaveBeenCalledWith('t1', { persist: false });
+      expect(prisma.release.create).toHaveBeenCalledWith(expect.objectContaining({
+        data: expect.objectContaining({ status: 'pending_review' }),
+      }));
+      expect(result.status).toBe('in_review');
+    });
+  });
+
+  describe('admin activation', () => {
+    it('activates the exact pending candidate and records approval', async () => {
+      const { service, prisma } = createService();
+      const candidate = {
+        id: 'rel-1',
+        tenantId: 't1',
+        version: '1.2.3',
+        buildNumber: 1,
+        status: 'pending_review',
+        channel: 'production',
+        manifest: fixtureManifest,
+        checksum: 'candidate-checksum',
+        publishedAt: new Date(),
+      };
+      prisma.draft.findUnique.mockResolvedValue({
+        status: 'in_review',
+        manifest: fixtureManifest,
+      });
+      prisma.release.findFirst
+        .mockResolvedValueOnce(candidate)
+        .mockResolvedValueOnce(candidate);
+      prisma.release.update.mockResolvedValue({
+        ...candidate,
+        status: 'published',
+        publishedAt: new Date(),
+      });
+
+      const result = await service.publishAsAdmin('t1');
+
+      expect(prisma.release.create).not.toHaveBeenCalled();
+      expect(result).toMatchObject({ releaseId: 'rel-1', version: '1.2.3' });
+      expect(prisma.tenant.update).toHaveBeenCalledWith({
+        where: { id: 't1' },
+        data: expect.objectContaining({ appStatus: 'approved' }),
+      });
+    });
+
+    it('refuses activation when no staged candidate matches the submitted manifest', async () => {
+      const { service, prisma } = createService();
+      prisma.draft.findUnique.mockResolvedValue({
+        status: 'in_review',
+        manifest: fixtureManifest,
+      });
+      prisma.release.findFirst.mockResolvedValue(null);
+
+      await expect(service.publishAsAdmin('t1')).rejects.toBeInstanceOf(ConflictException);
+      expect(prisma.release.create).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('submission status', () => {
+    it('reports a rejected submission with the review note even when an older release is live', async () => {
+      const { service, prisma } = createService();
+      prisma.tenant.findUnique.mockResolvedValue({
+        activeReleaseId: 'live-release',
+        appStatus: 'rejected',
+        appReviewNote: 'Fix checkout links',
+        appSubmittedAt: new Date(),
+      });
+      prisma.release.findFirst.mockResolvedValue({
+        id: 'submitted-release',
+        version: '3.0.0',
+        status: 'rejected',
+        releaseNotes: 'Fix checkout links',
+        capabilityMeta: null,
+        createdAt: new Date(),
+      });
+
+      const result = await service.getSubmissionStatus('t1', 'u1');
+
+      expect(result).toMatchObject({
+        status: 'rejected',
+        activeReleaseId: 'live-release',
+        reviewNote: 'Fix checkout links',
+        release: {
+          version: '3.0.0',
+          releaseNotes: 'Fix checkout links',
+        },
+      });
+    });
+
+    it('reports in_review while the previous approved release stays live', async () => {
+      const { service, prisma } = createService();
+      prisma.tenant.findUnique.mockResolvedValue({
+        activeReleaseId: 'live-release',
+        appStatus: 'in_review',
+        appReviewNote: null,
+        appSubmittedAt: new Date(),
+      });
+      prisma.release.findFirst.mockResolvedValue({
+        id: 'submitted-release',
+        version: '3.0.0',
+        status: 'pending_review',
+        releaseNotes: null,
+        capabilityMeta: null,
+        createdAt: new Date(),
+      });
+
+      const result = await service.getSubmissionStatus('t1', 'u1');
+
+      expect(result).toMatchObject({ status: 'in_review', activeReleaseId: 'live-release' });
     });
   });
 
@@ -257,7 +447,10 @@ describe('PublishingService', () => {
       expect(prisma.release.create).toHaveBeenCalledWith(expect.objectContaining({
         data: expect.objectContaining({ status: 'pending_review' }),
       }));
-      expect(prisma.tenant.update).not.toHaveBeenCalled();
+      expect(prisma.tenant.update).toHaveBeenCalledWith({
+        where: { id: 't1' },
+        data: expect.objectContaining({ appStatus: 'in_review' }),
+      });
     });
   });
 

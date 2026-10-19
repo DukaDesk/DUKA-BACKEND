@@ -103,8 +103,14 @@ export class LivePreviewService {
       ? this.themeCompiler.compileForPreview(tenant.theme)
       : undefined;
 
+    const pendingRelease = tenant.appStatus === 'in_review'
+      ? await this.prisma.release.findFirst({
+          where: { tenantId, status: 'pending_review' },
+          orderBy: { buildNumber: 'desc' },
+        })
+      : null;
     const reviewManifest = tenant.appStatus === 'in_review'
-      ? tenant.drafts?.[0]?.manifest as Record<string, any> | undefined
+      ? (pendingRelease?.manifest ?? tenant.drafts?.[0]?.manifest) as Record<string, any> | undefined
       : undefined;
     let pages = reviewManifest
       ? await this.renderPublishedScreens(reviewManifest, defaultContext)

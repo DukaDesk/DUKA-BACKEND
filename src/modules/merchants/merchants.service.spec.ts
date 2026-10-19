@@ -19,6 +19,7 @@ function makeService() {
   };
   const publishingService: any = {
     submitForReview: jest.fn().mockResolvedValue({ id: 'draft-1' }),
+    submitDraftsForReview: jest.fn().mockResolvedValue({ id: 'draft-1' }),
   };
   const service = new MerchantsService(prisma, {} as any, publishingService);
   return { service, prisma, publishingService };
@@ -39,6 +40,27 @@ describe('MerchantsService.submitAppReview', () => {
         appReviewNote: null,
       }),
     });
+    expect(result).toMatchObject({ appStatus: 'in_review' });
+  });
+
+  it('stages the current drafts when no client manifest is supplied', async () => {
+    const { service, publishingService } = makeService();
+
+    const result = await service.submitAppReview('tenant-1', 'owner-1');
+
+    expect(publishingService.submitDraftsForReview)
+      .toHaveBeenCalledWith('tenant-1', 'owner-1');
+    expect(publishingService.submitForReview).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ appStatus: 'in_review' });
+  });
+
+  it('legacy publish route stages drafts instead of failing', async () => {
+    const { service, publishingService } = makeService();
+
+    const result = await service.publish('tenant-1', 'owner-1');
+
+    expect(publishingService.submitDraftsForReview)
+      .toHaveBeenCalledWith('tenant-1', 'owner-1');
     expect(result).toMatchObject({ appStatus: 'in_review' });
   });
 

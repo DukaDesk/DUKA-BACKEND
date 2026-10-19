@@ -1,7 +1,6 @@
 import {
   Injectable,
   NotFoundException,
-  BadRequestException,
   ConflictException,
   ForbiddenException,
 } from '@nestjs/common';
@@ -287,12 +286,10 @@ export class MerchantsService {
     return updated;
   }
 
+  /** Legacy merchant publish route. It stages the current drafts for admin
+   * review instead of ever activating a release directly. */
   async publish(id: string, userId: string) {
-    await this.verifyOwnership(id, userId);
-    throw new BadRequestException({
-      code: 'APPROVAL_REQUIRED',
-      message: 'Submit an app through the publishing review flow; apps become public after admin approval',
-    });
+    return this.submitAppReview(id, userId);
   }
 
   async getMyTenants(userId: string) {
@@ -427,6 +424,8 @@ export class MerchantsService {
 
     if (manifest !== undefined && manifest !== null) {
       await this.publishingService.submitForReview(tenantId, userId, manifest);
+    } else {
+      await this.publishingService.submitDraftsForReview(tenantId, userId);
     }
 
     return this.prisma.tenant.update({

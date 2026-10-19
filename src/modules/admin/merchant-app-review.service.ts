@@ -66,13 +66,13 @@ export class MerchantAppReviewService {
       throw new ConflictException('The app must be submitted for review before it can be approved');
     }
 
-    const [draftCount, submittedDraft] = await Promise.all([
-      this.prisma.draftPage.count({ where: { tenantId, isActive: true } }),
-      this.prisma.draft.findUnique({ where: { id: `${tenantId}-draft` } }),
-    ]);
-    const hasSubmittedManifest = submittedDraft?.status === 'in_review' && !!submittedDraft.manifest;
-    if (draftCount === 0 && !hasSubmittedManifest) {
-      throw new BadRequestException('No app design submitted for review');
+    const submittedRelease = await this.prisma.release.findFirst({
+      where: { tenantId, status: 'pending_review' },
+      orderBy: { buildNumber: 'desc' },
+      select: { id: true },
+    });
+    if (!submittedRelease) {
+      throw new BadRequestException('No app release submitted for review');
     }
 
     const result = await this.publishingService.publishAsAdmin(tenantId);
@@ -104,6 +104,10 @@ export class MerchantAppReviewService {
       this.prisma.tenant.update({
         where: { id: tenantId },
         data: { appStatus: 'rejected', appReviewedAt: new Date(), appReviewNote: trimmedReason },
+      }),
+      this.prisma.release.updateMany({
+        where: { tenantId, status: 'pending_review' },
+        data: { status: 'rejected', releaseNotes: trimmedReason },
       }),
       this.prisma.auditLog.create({
         data: { tenantId, userId: adminUserId, action: 'merchant.app_reject', entity: 'tenant', entityId: tenantId, metadata: { outcome: 'success', reason: trimmedReason } },
