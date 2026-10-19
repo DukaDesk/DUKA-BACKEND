@@ -280,6 +280,22 @@ export class AuthService {
     return { message: 'Logged out successfully' };
   }
 
+  /** Re-authenticate the signed-in user for a sensitive action (e.g. approving
+   * an unverified merchant's app). Never issues new tokens. */
+  async verifyPassword(userId: string, password: string) {
+    if (!password || typeof password !== 'string') {
+      throw new BadRequestException('Password is required');
+    }
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, passwordHash: true, status: true },
+    });
+    if (!user?.passwordHash) throw new UnauthorizedException('Incorrect password');
+    const isValid = await bcrypt.compare(password, user.passwordHash);
+    if (!isValid) throw new UnauthorizedException('Incorrect password');
+    return { ok: true };
+  }
+
   async sendOtp(email: string, challengeId?: string) {
     if (!email || typeof email !== 'string') {
       throw new BadRequestException('Email is required and must be a valid string');

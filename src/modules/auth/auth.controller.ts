@@ -57,6 +57,14 @@ export class AuthController {
     return this.authService.logout(userId);
   }
 
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @Post('verify-password')
+  @ApiOperation({ summary: 'Re-authenticate the signed-in user with their password for a sensitive action' })
+  verifyPassword(@CurrentUser('id') userId: string, @Body() body: { password?: string }) {
+    return this.authService.verifyPassword(userId, body?.password || '');
+  }
+
   @Public()
   @Post('send-otp')
   @ApiOperation({ summary: 'Send OTP to email' })

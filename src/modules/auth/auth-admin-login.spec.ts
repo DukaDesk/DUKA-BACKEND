@@ -202,6 +202,28 @@ describe('AuthService admin login challenge', () => {
       .rejects.toBeInstanceOf(UnauthorizedException);
   });
 
+  it('verifies the signed-in user password for sensitive actions', async () => {
+    const passwordHash = await bcrypt.hash('Pass1234!', 1);
+    const prisma = {
+      user: { findUnique: jest.fn().mockResolvedValue({ id: activeUser.id, status: 'active', passwordHash }) },
+    };
+
+    await expect(createService({ prisma }).verifyPassword(activeUser.id, 'Pass1234!')).resolves.toEqual({ ok: true });
+  });
+
+  it('rejects a sensitive action when the password is wrong', async () => {
+    const passwordHash = await bcrypt.hash('Pass1234!', 1);
+    const prisma = {
+      user: { findUnique: jest.fn().mockResolvedValue({ id: activeUser.id, status: 'active', passwordHash }) },
+    };
+
+    await expect(createService({ prisma }).verifyPassword(activeUser.id, 'nope')).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+
+  it('requires a password to re-authenticate', async () => {
+    await expect(createService({}).verifyPassword(activeUser.id, '')).rejects.toBeInstanceOf(BadRequestException);
+  });
+
   it('revokes all active refresh tokens on logout', async () => {
     const updateMany = jest.fn().mockResolvedValue({ count: 2 });
     const service = createService({ prisma: { refreshToken: { updateMany } } });
