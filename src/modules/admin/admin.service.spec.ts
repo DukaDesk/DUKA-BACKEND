@@ -38,8 +38,9 @@ function makeService() {
     previewTenant: jest.fn(async () => ({ tenantId: 'tenant-1', preview: true })),
   };
   const mediaService: any = { createComplianceDocumentLinks: jest.fn(async () => []) };
-  const service = new AdminService(prisma, publishingService, livePreviewService, mediaService);
-  return { service, prisma, publishingService, livePreviewService, tx };
+  const releases: any = { invalidate: jest.fn(async () => undefined) };
+  const service = new AdminService(prisma, publishingService, livePreviewService, mediaService, releases);
+  return { service, prisma, publishingService, livePreviewService, releases, tx };
 }
 
 describe('AdminService platform statistics', () => {
@@ -65,11 +66,12 @@ describe('AdminService platform statistics', () => {
 
 describe('AdminService platform role separation', () => {
   it('lets a platform operator manage merchants but not review apps', async () => {
-    const { service, prisma } = makeService();
+    const { service, prisma, releases } = makeService();
     prisma.userRole.findFirst.mockImplementation(async ({ where }: any) =>
       where.role.name.in.includes('platform_operator') ? { id: 'role-op' } : null);
 
     await expect(service.suspendTenant('tenant-1', 'operator-1')).resolves.toBeDefined();
+    expect(releases.invalidate).toHaveBeenCalledWith('tenant-1', 'shop');
     await expect(service.getMerchantPreview('tenant-1', 'operator-1')).rejects.toThrow(ForbiddenException);
   });
 

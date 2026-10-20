@@ -170,6 +170,15 @@ export class ActiveReleaseService {
       if (release?.manifest && release.status === 'published' && release.channel === 'production') {
         await this.redis.set(snapKey, JSON.stringify(release), 3600);
         await this.cacheActiveId(tenant.id, release.id);
+        // Self-heal drifted rows: the redis pointer served a release the
+        // tenant row never pointed at (e.g. published by a legacy path).
+        // Persist it so the BFF's stricter activeReleaseId gate converges.
+        if (tenant.activeReleaseId !== release.id) {
+          await this.prisma.tenant.update({
+            where: { id: tenant.id },
+            data: { activeReleaseId: release.id },
+          }).catch(() => undefined);
+        }
         return release;
       }
     }
