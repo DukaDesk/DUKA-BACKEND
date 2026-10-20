@@ -150,6 +150,8 @@ export const SUPPORTED_ACTION_TYPES: readonly string[] = [
   'scroll_to',
   'send_email',
   'share',
+  // Mobile predefined product tap (views the product detail screen).
+  'view_item',
 ];
 
 /** Platform capabilities. Required + unknown → block; optional + unknown → warn. */
