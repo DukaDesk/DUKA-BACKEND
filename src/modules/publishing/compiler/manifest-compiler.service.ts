@@ -64,8 +64,9 @@ export class ManifestCompiler {
     });
 
     const buildNumber = (latestRelease?.buildNumber || 0) + 1;
-    const major = latestRelease ? parseInt(latestRelease.version.split('.')[0], 10) || 1 : 1;
-    const version = `${major}.0.${buildNumber}`;
+    const version = latestRelease
+      ? this.incrementPatchVersion(latestRelease.version)
+      : '1.0.0';
 
     const assetReferences: string[] = [];
 
@@ -172,6 +173,16 @@ export class ManifestCompiler {
       capabilityMeta,
       assetManifest,
     };
+  }
+
+  private incrementPatchVersion(version: string): string {
+    const match = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.exec(version);
+    if (!match) {
+      throw new BadRequestException(
+        `Stored app version "${version}" is not MAJOR.MINOR.PATCH`,
+      );
+    }
+    return `${match[1]}.${match[2]}.${Number(match[3]) + 1}`;
   }
 
   private normalizeNavigation(items: any, pages: any[]) {

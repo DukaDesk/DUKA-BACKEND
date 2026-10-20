@@ -80,12 +80,13 @@ export class PublishingService {
     await this.verifyPublishingPermission(tenantId, userId);
     const manifest = ManifestValidator.assertValid(submittedManifest);
     const compat = await this.compatibility.assertCompatible(manifest, { tenantId });
-    const checksum = crypto.createHash('sha256').update(JSON.stringify(manifest)).digest('hex');
 
     const release = await this.publishClientManifest(tenantId, {
       manifest,
       version: manifest.version,
     });
+    const { manifest: versionedManifest, ...releaseResult } = release;
+    const checksum = releaseResult.checksum;
     if (release.status !== 'pending_review' && release.status !== 'published') {
       throw new ConflictException({
         code: 'VERSION_ALREADY_REVIEWED',
@@ -94,8 +95,8 @@ export class PublishingService {
     }
     const savedDraft = await this.prisma.draft.upsert({
       where: { id: `${tenantId}-draft` },
-      create: { id: `${tenantId}-draft`, tenantId, version: 1, manifest, status: 'in_review' },
-      update: { version: { increment: 1 }, manifest, status: 'in_review' },
+      create: { id: `${tenantId}-draft`, tenantId, version: 1, manifest: versionedManifest, status: 'in_review' },
+      update: { version: { increment: 1 }, manifest: versionedManifest, status: 'in_review' },
     });
     if (release.status === 'pending_review') {
       await this.supersedePendingCandidates(tenantId, release.releaseId);
@@ -114,7 +115,7 @@ export class PublishingService {
     }
 
     return {
-      ...release,
+      ...releaseResult,
       status: release.status === 'published' ? 'published' : 'in_review',
       checksum,
       submittedAt: savedDraft.updatedAt,
@@ -265,19 +266,17 @@ export class PublishingService {
     body: { manifest: any; version?: string },
   ) {
     // B1: invalid manifest → 422, never fall through to draft compilation.
-    const manifest = ManifestValidator.assertValid(body.manifest, {
+    const submittedManifest = ManifestValidator.assertValid(body.manifest, {
       requestedVersion: body.version,
     });
 
     // B7: reject anything the shell cannot render before allocating a version.
-    const compat = await this.compatibility.assertCompatible(manifest, { tenantId });
-
-    const checksum = crypto
-      .createHash('sha256')
-      .update(JSON.stringify(manifest))
-      .digest('hex');
-
-    const { version, buildNumber } = await this.allocateVersion(tenantId, checksum, body.version);
+    const compat = await this.compatibility.assertCompatible(submittedManifest, { tenantId });
+    const { version, buildNumber, manifest, checksum } = await this.allocateVersion(
+      tenantId,
+      submittedManifest,
+      body.version,
+    );
 
     const submitted = await this.createReviewRelease({
       tenantId,
@@ -294,7 +293,11 @@ export class PublishingService {
       assetManifest: this.buildAssetManifest(manifest),
     });
 
-    return { ...submitted, compatibility: { contract: compat.contract, warnings: compat.warnings } };
+    return {
+      ...submitted,
+      manifest,
+      compatibility: { contract: compat.contract, warnings: compat.warnings },
+    };
   }
 
   private async markSubmittedForReview(tenantId: string) {
@@ -364,6 +367,7 @@ export class PublishingService {
         buildNumber: release.buildNumber,
         checksum: release.checksum,
         publishedAt: release.publishedAt,
+        manifest,
       };
     } catch (err: any) {
       // Unique tenantId/version race — recover if our bytes already landed (idempotent retry).
@@ -382,6 +386,7 @@ export class PublishingService {
             buildNumber: existing.buildNumber,
             checksum: existing.checksum,
             publishedAt: existing.publishedAt,
+            manifest: existing.manifest,
           };
         }
         throw new ConflictException({
@@ -395,34 +400,68 @@ export class PublishingService {
 
   private async allocateVersion(
     tenantId: string,
-    checksum: string,
+    submittedManifest: any,
     requested?: string,
-  ): Promise<{ version: string; buildNumber: number }> {
+  ): Promise<{ version: string; buildNumber: number; manifest: any; checksum: string }> {
     const latest = await this.prisma.release.findFirst({
       where: { tenantId },
       orderBy: { buildNumber: 'desc' },
     });
     const buildNumber = (latest?.buildNumber || 0) + 1;
-    const major = latest ? parseInt(latest.version.split('.')[0], 10) || 1 : 1;
+    const nextVersion = latest ? this.incrementPatchVersion(latest.version) : '1.0.0';
+    const requestedVersion = requested ?? submittedManifest.version;
+    const version = requestedVersion || nextVersion;
 
-    if (requested) {
-      const clash = await this.prisma.release.findUnique({
-        where: { tenantId_version: { tenantId, version: requested } },
-      });
-      if (clash) {
-        if (clash.checksum === checksum) {
-          // Same bytes already stored — activate path will reconcile.
-          return { version: requested, buildNumber: clash.buildNumber };
-        }
-        throw new ConflictException({
-          code: 'VERSION_CONFLICT',
-          message: `Version ${requested} already exists`,
-        });
-      }
-      return { version: requested, buildNumber };
+    if (typeof version !== 'string' || !/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(version)) {
+      throw new BadRequestException('App version must use semantic version format MAJOR.MINOR.PATCH');
     }
 
-    return { version: `${major}.0.${buildNumber}`, buildNumber };
+    const clash = await this.prisma.release.findUnique({
+      where: { tenantId_version: { tenantId, version } },
+    });
+    const manifest = {
+      ...submittedManifest,
+      version,
+      ...(submittedManifest.metadata
+        ? { metadata: { ...submittedManifest.metadata, version } }
+        : {}),
+      ...(submittedManifest.app
+        ? { app: { ...submittedManifest.app, version, buildNumber: clash?.buildNumber ?? buildNumber } }
+        : {}),
+    };
+    const checksum = crypto.createHash('sha256').update(JSON.stringify(manifest)).digest('hex');
+
+    if (clash) {
+      if (clash.checksum === checksum) {
+        // Same bytes already stored — activation path can reconcile it.
+        return { version, buildNumber: clash.buildNumber, manifest, checksum };
+      }
+      throw new ConflictException({
+        code: 'VERSION_CONFLICT',
+        message: `Version ${version} already exists with different content`,
+      });
+    }
+
+    if (latest && version !== nextVersion) {
+      throw new ConflictException({
+        code: 'VERSION_SEQUENCE',
+        message: `The next app version must be ${nextVersion}`,
+        expectedVersion: nextVersion,
+      });
+    }
+
+    return { version, buildNumber, manifest, checksum };
+  }
+
+  private incrementPatchVersion(version: string): string {
+    const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(version);
+    if (!match) {
+      throw new ConflictException({
+        code: 'INVALID_STORED_VERSION',
+        message: `Stored app version "${version}" is not MAJOR.MINOR.PATCH`,
+      });
+    }
+    return `${match[1]}.${match[2]}.${Number(match[3]) + 1}`;
   }
 
   private countScreens(screens: any): number {
@@ -571,11 +610,10 @@ export class PublishingService {
     }
 
     const manifest = JSON.parse(JSON.stringify(target.manifest));
-    const provisionalChecksum = crypto.createHash('sha256').update(JSON.stringify(manifest)).digest('hex');
-    const allocation = await this.allocateVersion(tenantId, provisionalChecksum);
-    manifest.version = allocation.version;
-    const checksum = crypto.createHash('sha256').update(JSON.stringify(manifest)).digest('hex');
-    const compat = await this.compatibility.assertCompatible(manifest, { tenantId });
+    delete manifest.version;
+    const allocation = await this.allocateVersion(tenantId, manifest);
+    const versionedManifest = allocation.manifest;
+    const compat = await this.compatibility.assertCompatible(versionedManifest, { tenantId });
     const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId }, select: { slug: true } });
     if (!tenant) throw new NotFoundException({ code: 'MERCHANT_NOT_FOUND', message: 'Merchant not found' });
 
@@ -583,17 +621,17 @@ export class PublishingService {
       tenantId,
       version: allocation.version,
       buildNumber: allocation.buildNumber,
-      manifest,
-      checksum,
-      themeBundle: manifest.theme ?? null,
+      manifest: versionedManifest,
+      checksum: allocation.checksum,
+      themeBundle: versionedManifest.theme ?? null,
       capabilityMeta: { ...((target.capabilityMeta as any) || {}), rollbackFrom: target.version, contract: compat.contract },
-      assetManifest: target.assetManifest ?? this.buildAssetManifest(manifest),
+      assetManifest: target.assetManifest ?? this.buildAssetManifest(versionedManifest),
     });
 
     await this.prisma.draft.upsert({
       where: { id: `${tenantId}-draft` },
-      create: { id: `${tenantId}-draft`, tenantId, version: 1, manifest, status: 'in_review' },
-      update: { version: { increment: 1 }, manifest, status: 'in_review' },
+      create: { id: `${tenantId}-draft`, tenantId, version: 1, manifest: versionedManifest, status: 'in_review' },
+      update: { version: { increment: 1 }, manifest: versionedManifest, status: 'in_review' },
     });
     await this.supersedePendingCandidates(tenantId, submission.releaseId);
     await this.markSubmittedForReview(tenantId);
