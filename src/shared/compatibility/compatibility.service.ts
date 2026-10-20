@@ -138,7 +138,7 @@ export class CompatibilityService {
           counts.actions += 1;
           if (!SUPPORTED_ACTION_TYPES.includes(actionType)) {
             warnings.add(
-              `action: "${actionType}" is not in the published action contract and will be ignored by the shell`,
+              `action: "${actionType}" is not in the published action contract — the shell degrades gracefully, but check GET /api/v1/compatibility`,
             );
           }
         }
