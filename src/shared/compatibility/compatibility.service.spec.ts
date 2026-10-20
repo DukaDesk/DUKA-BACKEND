@@ -74,6 +74,25 @@ describe('CompatibilityService (B7)', () => {
     expect(report.errors.join(' ')).toContain('"holo_deck" is not supported');
   });
 
+  it('accepts the laundry template booking form the shell can render', async () => {
+    const { service } = makeService();
+    const manifest = JSON.parse(JSON.stringify(supportedManifest));
+    manifest.screens.home.layout.children.push({
+      type: 'laundry_booking',
+      props: {
+        service: 'Wash & Fold',
+        price: 2500,
+        unitLabel: 'kg',
+        services: [{ name: 'Wash & Fold', price: 2500, unitLabel: 'kg' }],
+      },
+      actions: { confirm: { type: 'navigate', payload: { push: '/orders' } } },
+    });
+
+    const report = await service.evaluate(manifest, { tenantId: 't1' });
+    expect(report.errors).toEqual([]);
+    expect(report.compatible).toBe(true);
+  });
+
   it('warns (does not block) on an unknown action type', async () => {
     const { service } = makeService();
     const manifest = JSON.parse(JSON.stringify(supportedManifest));
