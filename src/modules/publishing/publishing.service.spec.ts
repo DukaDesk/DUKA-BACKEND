@@ -126,6 +126,66 @@ function createService(overrides: Partial<Record<string, any>> = {}) {
 
 describe('PublishingService', () => {
   describe('B1 — client manifest path', () => {
+    it('defaults the first app version to 1.0.0 and synchronizes manifest version fields', async () => {
+      const { service, prisma } = createService();
+      const manifest = {
+        ...fixtureManifest,
+        version: undefined,
+        metadata: { version: '0.0.1', schemaVersion: '1.0' },
+        app: { version: '0.0.1' },
+      };
+
+      const result = await service.publish('t1', 'u1', { manifest });
+      const stored = prisma.release.create.mock.calls[0][0].data.manifest;
+
+      expect(result.version).toBe('1.0.0');
+      expect(stored).toMatchObject({
+        version: '1.0.0',
+        metadata: { version: '1.0.0' },
+        app: { version: '1.0.0', buildNumber: 1 },
+      });
+      expect(prisma.draft.upsert.mock.calls[0][0].create.manifest).toEqual(stored);
+    });
+
+    it('increments the latest release patch version on every new submission', async () => {
+      const { service, prisma } = createService();
+      prisma.release.findFirst.mockResolvedValueOnce({
+        version: '2.4.9',
+        buildNumber: 8,
+      });
+      const manifest = {
+        ...fixtureManifest,
+        version: '2.4.10',
+        metadata: { version: '2.4.9', schemaVersion: '1.0' },
+        app: { version: '2.4.9' },
+      };
+
+      const result = await service.publish('t1', 'u1', { manifest });
+      const stored = prisma.release.create.mock.calls[0][0].data.manifest;
+
+      expect(result).toMatchObject({ version: '2.4.10', buildNumber: 9 });
+      expect(stored).toMatchObject({
+        version: '2.4.10',
+        metadata: { version: '2.4.10' },
+        app: { version: '2.4.10', buildNumber: 9 },
+      });
+    });
+
+    it('rejects a stale requested app version instead of publishing a duplicate', async () => {
+      const { service, prisma } = createService();
+      prisma.release.findFirst.mockResolvedValueOnce({
+        version: '1.0.2',
+        buildNumber: 3,
+      });
+
+      await expect(
+        service.publish('t1', 'u1', { manifest: { ...fixtureManifest, version: '1.0.2' } }),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({ code: 'VERSION_SEQUENCE', expectedVersion: '1.0.3' }),
+      });
+      expect(prisma.release.create).not.toHaveBeenCalled();
+    });
+
     it('persists the submitted PublishedApp without invoking the compiler', async () => {
       const { service, manifestCompiler, prisma } = createService();
 
@@ -233,6 +293,10 @@ describe('PublishingService', () => {
     it('supersedes an older pending candidate on a newer submission', async () => {
       const { service, prisma, redis } = createService();
       redis.get.mockResolvedValue(null);
+      prisma.release.findFirst.mockResolvedValueOnce({
+        version: '1.2.3',
+        buildNumber: 1,
+      });
       prisma.release.create.mockResolvedValueOnce({
         id: 'rel-2',
         version: '1.2.4',
@@ -243,7 +307,10 @@ describe('PublishingService', () => {
         publishedAt: new Date(),
       });
 
-      const result = await service.submitForReview('t1', 'u1', fixtureManifest);
+      const result = await service.submitForReview('t1', 'u1', {
+        ...fixtureManifest,
+        version: '1.2.4',
+      });
 
       expect(result.status).toBe('in_review');
       expect(prisma.release.updateMany).toHaveBeenCalledWith({
@@ -271,7 +338,7 @@ describe('PublishingService', () => {
 
   describe('admin activation', () => {
     it('activates the exact pending candidate and records approval', async () => {
-      const { service, prisma } = createService();
+      const { service, prisma, releases } = createService();
       const candidate = {
         id: 'rel-1',
         tenantId: 't1',
@@ -300,10 +367,17 @@ describe('PublishingService', () => {
 
       expect(prisma.release.create).not.toHaveBeenCalled();
       expect(result).toMatchObject({ releaseId: 'rel-1', version: '1.2.3' });
+      // Approval refreshes every tenant flag so the BFF/definition gates
+      // agree with the activated release (and old caches drop immediately).
       expect(prisma.tenant.update).toHaveBeenCalledWith({
         where: { id: 't1' },
-        data: expect.objectContaining({ appStatus: 'approved' }),
+        data: expect.objectContaining({
+          status: 'published',
+          activeReleaseId: 'rel-1',
+          appStatus: 'approved',
+        }),
       });
+      expect(releases.invalidate).toHaveBeenCalledWith('t1', 'published-fixture');
     });
 
     it('refuses activation when no staged candidate matches the submitted manifest', async () => {
@@ -432,14 +506,18 @@ describe('PublishingService', () => {
 
     it('submits an approved rollback target as a new review candidate', async () => {
       const { service, prisma } = createService();
-      prisma.release.findUnique.mockResolvedValue({
+      prisma.release.findFirst.mockResolvedValue({
+        version: '1.0.0',
+        buildNumber: 1,
+      });
+      prisma.release.findUnique.mockResolvedValueOnce({
         id: 'previous-release',
         version: '1.0.0',
         status: 'superseded',
         manifest: fixtureManifest,
         capabilityMeta: {},
         assetManifest: {},
-      });
+      }).mockResolvedValueOnce(null);
 
       const result = await service.rollback('t1', '1.0.0', 'u1');
 

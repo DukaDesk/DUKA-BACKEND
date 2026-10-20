@@ -22,6 +22,7 @@ export interface RenderedComponent {
   props: Record<string, any>;
   actions?: ActionConfig[];
   children?: RenderedComponent[];
+  layout?: Record<string, any> & { children?: RenderedComponent[] };
 }
 
 export interface RenderedSection {
@@ -36,6 +37,9 @@ export interface RenderedPage {
   slug: string;
   isHome: boolean;
   sections: RenderedSection[];
+  layout?: Record<string, any>;
+  header?: RenderedComponent[];
+  footer?: RenderedComponent[];
 }
 
 export interface PreviewOutput {
@@ -43,7 +47,7 @@ export interface PreviewOutput {
   theme: any;
   navigation: any;
   pages: RenderedPage[];
-  source: 'draft' | 'published' | 'empty';
+  source: 'draft' | 'review' | 'published' | 'empty';
   releaseVersion?: string;
 }
 
@@ -123,6 +127,8 @@ export class LivePreviewService {
     if (reviewManifest && pages.length > 0) {
       previewTheme = reviewManifest.theme || previewTheme;
       navigation = this.previewNavigation(reviewManifest.navigation) || navigation;
+      source = 'review';
+      releaseVersion = reviewManifest.version;
     }
 
     // Some legacy merchants publish an app before draft pages are initialized.
@@ -174,8 +180,18 @@ export class LivePreviewService {
         slug: screen?.slug || screen?.screenId || screenId,
         isHome: Boolean(screen?.isHome || screenId === initialScreen),
         sections: renderedSections.filter((section): section is RenderedSection => section !== null),
+        layout: this.pageLayout(screen),
+        header: await this.renderNodeList(screen?.fixedTop, context),
+        footer: await this.renderNodeList(screen?.fixedBottom, context),
       };
     }));
+  }
+
+  private pageLayout(screen: any): Record<string, any> | undefined {
+    const layout = screen?.layout;
+    if (!layout || typeof layout !== 'object') return undefined;
+    const { children: _children, ...rest } = layout;
+    return Object.keys(rest).length ? rest : undefined;
   }
 
   private publishedScreenSections(screen: any): any[] {
@@ -194,13 +210,22 @@ export class LivePreviewService {
       const sectionLayout = node?.layout;
       const components = sectionLayout?.children || node?.components || node?.children ||
         (node?.type && node.type !== 'layout' ? [node] : []);
+      // Keep the section's own styling (background, padding, gap, alignment) so
+      // the preview matches the submitted design instead of a default shell.
+      const { children: _layoutChildren, ...layoutStyle } = sectionLayout || {};
       return {
-        id: node?.id || `${screen?.screenId || 'screen'}-section-${index}`,
+        id: node?.id || node?.key || `${screen?.screenId || 'screen'}-section-${index}`,
         type: node?.type || sectionLayout?.kind || 'section',
-        config: sectionLayout?.config || node?.config || {},
+        config: { ...(node?.config || {}), ...layoutStyle },
         draftComponents: components,
       };
     });
+  }
+
+  private async renderNodeList(nodes: any, context: PreviewContext): Promise<RenderedComponent[]> {
+    if (!Array.isArray(nodes)) return [];
+    const rendered = await Promise.all(nodes.map((node) => this.renderComponent(node, context)));
+    return rendered.filter((node): node is RenderedComponent => node !== null);
   }
 
   private previewNavigation(navigation: any): any[] | undefined {
@@ -284,14 +309,21 @@ export class LivePreviewService {
 
     const resolvedProps = await this.resolveComponentProps(component.type, props, context);
 
-    const def = this.componentRegistry.get(component.type);
+    const renderedChildren = await this.renderNodeList(component.children, context);
+
+    let layout: RenderedComponent['layout'];
+    if (component.layout && typeof component.layout === 'object') {
+      const { children: layoutChildren, ...layoutStyle } = component.layout as Record<string, any>;
+      layout = { ...layoutStyle, children: await this.renderNodeList(layoutChildren, context) };
+    }
 
     return {
-      id: component.id,
+      id: component.id || component.key,
       type: component.type,
       props: resolvedProps,
       actions: props.actions as ActionConfig[] | undefined,
-      children: undefined,
+      children: renderedChildren.length ? renderedChildren : undefined,
+      layout,
     };
   }
 
