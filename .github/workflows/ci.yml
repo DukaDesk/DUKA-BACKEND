@@ -56,3 +56,8 @@ jobs:
           REDIS_PORT: 6379
           JWT_SECRET: ci-test-secret
           NODE_ENV: test
+
+      - run: npm run test:e2e
+        env:
+          JWT_SECRET: ci-test-secret
+          NODE_ENV: test

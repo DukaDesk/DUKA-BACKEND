@@ -5,5 +5,11 @@
   "testRegex": ".e2e-spec.ts$",
   "transform": {
     "^.+\\.(t|j)s$": "ts-jest"
-  }
+  },
+  "moduleNameMapper": {
+    "^uuid$": "<rootDir>/uuid-mock.js"
+  },
+  "transformIgnorePatterns": ["/node_modules/(?!(uuid)/)"],
+  "forceExit": true,
+  "testTimeout": 15000
 }
