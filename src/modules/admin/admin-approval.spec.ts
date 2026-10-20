@@ -36,9 +36,11 @@ function makePrisma(overrides: any = {}) {
 
 function makeService(prisma: any, publishing: any = {}) {
   const publishingService = { publishAsAdmin: jest.fn().mockResolvedValue({ version: '1.0.0', releaseId: 'rel-1', checksum: 'abc' }), ...publishing };
+  const releases = { invalidate: jest.fn().mockResolvedValue(undefined) };
   return {
-    service: new AdminService(prisma, publishingService as any, {} as any, {} as any),
+    service: new AdminService(prisma, publishingService as any, {} as any, {} as any, releases as any),
     publishingService,
+    releases,
   };
 }
 

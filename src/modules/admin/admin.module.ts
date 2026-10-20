@@ -8,9 +8,10 @@ import { BuilderModule } from '../builder/builder.module';
 import { MediaModule } from '../media/media.module';
 import { MerchantAppReviewService } from './merchant-app-review.service';
 import { PlatformRoleGuard } from './platform-role.guard';
+import { ReleasesModule } from '../../shared/releases/releases.module';
 
 @Module({
-  imports: [UsersModule, PublishingModule, BuilderModule, MediaModule],
+  imports: [UsersModule, PublishingModule, BuilderModule, MediaModule, ReleasesModule],
   controllers: [AdminController],
   providers: [AdminService, AdminInviteService, MerchantAppReviewService, PlatformRoleGuard],
 })

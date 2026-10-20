@@ -338,7 +338,7 @@ describe('PublishingService', () => {
 
   describe('admin activation', () => {
     it('activates the exact pending candidate and records approval', async () => {
-      const { service, prisma } = createService();
+      const { service, prisma, releases } = createService();
       const candidate = {
         id: 'rel-1',
         tenantId: 't1',
@@ -367,10 +367,17 @@ describe('PublishingService', () => {
 
       expect(prisma.release.create).not.toHaveBeenCalled();
       expect(result).toMatchObject({ releaseId: 'rel-1', version: '1.2.3' });
+      // Approval refreshes every tenant flag so the BFF/definition gates
+      // agree with the activated release (and old caches drop immediately).
       expect(prisma.tenant.update).toHaveBeenCalledWith({
         where: { id: 't1' },
-        data: expect.objectContaining({ appStatus: 'approved' }),
+        data: expect.objectContaining({
+          status: 'published',
+          activeReleaseId: 'rel-1',
+          appStatus: 'approved',
+        }),
       });
+      expect(releases.invalidate).toHaveBeenCalledWith('t1', 'published-fixture');
     });
 
     it('refuses activation when no staged candidate matches the submitted manifest', async () => {

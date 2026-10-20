@@ -133,6 +133,67 @@ describe('ActiveReleaseService (B3 — one canonical public reader)', () => {
       response: expect.objectContaining({ code: 'APP_NOT_APPROVED' }),
     });
     expect(prisma.release.findUnique).not.toHaveBeenCalled();
+    expect(prisma.tenant.update).not.toHaveBeenCalled();
+  });
+
+  it('never resurrects a suspended tenant via the release path', async () => {
+    const { service, prisma } = makeService({
+      tenant: { id: 't1', slug: 'acme', status: 'suspended', activeReleaseId: null },
+    });
+    await expect(service.getActiveRelease('t1')).rejects.toMatchObject({
+      response: expect.objectContaining({ code: 'APP_NOT_APPROVED' }),
+    });
+    expect(prisma.release.findUnique).not.toHaveBeenCalled();
+    expect(prisma.tenant.update).not.toHaveBeenCalled();
+  });
+
+  it('self-heals a drifted active release pointer discovered via the redis cache', async () => {
+    const release = {
+      id: 'rel-b',
+      version: '1.0.2',
+      buildNumber: 2,
+      checksum: 'abc',
+      channel: 'production',
+      status: 'published',
+      publishedAt: new Date(),
+      manifest: manifestB,
+      tenantId: 't1',
+    };
+    const { service, prisma, redisStore } = makeService({
+      tenant: { id: 't1', slug: 'acme', status: 'published', activeReleaseId: null },
+      releases: { 'rel-b': release },
+    });
+    redisStore.set('active:release:t1', 'rel-b');
+
+    const result = await service.getActiveRelease('t1');
+
+    expect(result.release.id).toBe('rel-b');
+    expect(prisma.tenant.update).toHaveBeenCalledWith({
+      where: { id: 't1' },
+      data: { activeReleaseId: 'rel-b' },
+    });
+  });
+
+  it('does not rewrite the pointer when the tenant row is already aligned', async () => {
+    const release = {
+      id: 'rel-b',
+      version: '1.0.2',
+      buildNumber: 2,
+      checksum: 'abc',
+      channel: 'production',
+      status: 'published',
+      publishedAt: new Date(),
+      manifest: manifestB,
+      tenantId: 't1',
+    };
+    const { service, prisma } = makeService({
+      activeReleaseId: 'rel-b',
+      releases: { 'rel-b': release },
+    });
+
+    await service.getActiveRelease('t1');
+
+    expect(prisma.tenant.update).not.toHaveBeenCalled();
   });
 
   it('does not serve draft releases via explicit version pin', async () => {

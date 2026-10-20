@@ -3,6 +3,7 @@ import { PrismaService } from '../../common/prisma.service';
 import { PublishingService } from '../publishing/publishing.service';
 import { LivePreviewService } from '../builder/live-preview.service';
 import { MediaService } from '../media/media.service';
+import { ActiveReleaseService } from '../../shared/releases/active-release.service';
 
 @Injectable()
 export class AdminService {
@@ -11,6 +12,7 @@ export class AdminService {
     private publishingService: PublishingService,
     private livePreviewService: LivePreviewService,
     private mediaService: MediaService,
+    private releases: ActiveReleaseService,
   ) {}
 
   async createTenant(adminUserId: string, data: {
@@ -47,10 +49,14 @@ export class AdminService {
     const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId } });
     if (!tenant) throw new NotFoundException({ code: 'MERCHANT_NOT_FOUND', message: 'Merchant not found' });
 
-    return this.prisma.tenant.update({
+    const updated = await this.prisma.tenant.update({
       where: { id: tenantId },
       data: { status: 'suspended' },
     });
+    // Drop cached releases/manifests so the suspension takes effect on both
+    // public readers immediately instead of after their cache TTLs expire.
+    await this.releases.invalidate(tenantId, tenant.slug).catch(() => undefined);
+    return updated;
   }
 
   async rejectTenant(tenantId: string, adminUserId: string, reason?: string) {
