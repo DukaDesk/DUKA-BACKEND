@@ -237,6 +237,9 @@ export class ManifestCompiler {
             id: c.id,
             type: c.type,
             props: c.props,
+            // Mirror layout children: keep component-level actions verbatim
+            // (blocks are metadata consumed outside the layout tree).
+            ...(c.actions != null ? { actions: c.actions } : {}),
           })),
         })),
       };
