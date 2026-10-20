@@ -26,7 +26,7 @@ export class MerchantAppReviewService {
 
     const tenant = await this.prisma.tenant.findUnique({
       where: { id: tenantId },
-      select: { id: true, name: true, slug: true, appStatus: true, appSubmittedAt: true },
+      select: { id: true, name: true, slug: true, appStatus: true, appSubmittedAt: true, verificationStatus: true },
     });
     if (!tenant) throw new NotFoundException({ code: 'MERCHANT_NOT_FOUND', message: 'Merchant not found' });
 
