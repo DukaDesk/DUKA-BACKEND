@@ -115,6 +115,8 @@ export const SUPPORTED_COMPONENT_TYPES: readonly string[] = [
   'service_picker',
   'booking_card',
   'booking_summary',
+  // Laundry template booking form (merchant TemplateComponents.jsx).
+  'laundry_booking',
   // Shell overlay/modal nodes (KB: overlays preserve props/actions)
   'modal',
   'overlay',
