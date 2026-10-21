@@ -74,6 +74,25 @@ describe('CompatibilityService (B7)', () => {
     expect(report.errors.join(' ')).toContain('"holo_deck" is not supported');
   });
 
+  it('accepts the laundry template booking form the shell can render', async () => {
+    const { service } = makeService();
+    const manifest = JSON.parse(JSON.stringify(supportedManifest));
+    manifest.screens.home.layout.children.push({
+      type: 'laundry_booking',
+      props: {
+        service: 'Wash & Fold',
+        price: 2500,
+        unitLabel: 'kg',
+        services: [{ name: 'Wash & Fold', price: 2500, unitLabel: 'kg' }],
+      },
+      actions: { confirm: { type: 'navigate', payload: { push: '/orders' } } },
+    });
+
+    const report = await service.evaluate(manifest, { tenantId: 't1' });
+    expect(report.errors).toEqual([]);
+    expect(report.compatible).toBe(true);
+  });
+
   it('warns (does not block) on an unknown action type', async () => {
     const { service } = makeService();
     const manifest = JSON.parse(JSON.stringify(supportedManifest));
@@ -85,6 +104,34 @@ describe('CompatibilityService (B7)', () => {
     const report = await service.evaluate(manifest, { tenantId: 't1' });
     expect(report.compatible).toBe(true);
     expect(report.warnings.join(' ')).toContain('"mind_meld"');
+  });
+
+  it('covers every action type the mobile shell implements (no drift)', async () => {
+    const shellActionTypes = [
+      'navigate', 'replace', 'push', 'pop', 'switch_screen',
+      'filter', 'search', 'open_modal', 'close_modal',
+      'api_request', 'api_call', 'submit_form',
+      'add_to_cart', 'remove_from_cart', 'checkout', 'view_item',
+      'book_service',
+      'open_url', 'open_maps', 'call_phone', 'email', 'send_email',
+      'download', 'share',
+      'scan_qr', 'authenticate', 'logout', 'switch_tenant', 'exit_tenant',
+      'open_form', 'scroll_to',
+    ];
+    const { service } = makeService();
+    const manifest = JSON.parse(JSON.stringify(supportedManifest));
+    // One real component carrying every shell action in its event map —
+    // unknown actions warn, known ones must stay silent.
+    manifest.screens.details.layout.children = [{
+      type: 'button',
+      key: 'action-carrier',
+      props: {},
+      actions: Object.fromEntries(shellActionTypes.map((type) => [type, { type, payload: {} }])),
+    }];
+
+    const report = await service.evaluate(manifest, { tenantId: 't1' });
+    expect(report.warnings.join(' ')).not.toMatch(/"(?:navigate|replace|push|pop|switch_screen|filter|search|open_modal|close_modal|api_request|api_call|submit_form|add_to_cart|remove_from_cart|checkout|view_item|book_service|open_url|open_maps|call_phone|email|send_email|download|share|scan_qr|authenticate|logout|switch_tenant|exit_tenant|open_form|scroll_to)"/);
+    expect(report.compatible).toBe(true);
   });
 
   it('counts a standalone action definition once', async () => {

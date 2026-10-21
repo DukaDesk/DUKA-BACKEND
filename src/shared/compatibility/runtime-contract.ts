@@ -115,6 +115,8 @@ export const SUPPORTED_COMPONENT_TYPES: readonly string[] = [
   'service_picker',
   'booking_card',
   'booking_summary',
+  // Laundry template booking form (merchant TemplateComponents.jsx).
+  'laundry_booking',
   // Shell overlay/modal nodes (KB: overlays preserve props/actions)
   'modal',
   'overlay',
@@ -134,20 +136,54 @@ export const SUPPORTED_COMPONENT_TYPES: readonly string[] = [
   'video',
 ];
 
-/** Action types registered in ActionBuilderService. Unknown → warn (reported). */
+/**
+ * Action types the mobile shell implements end-to-end (ActionEngine +
+ * PublishedAppShell navigation/guest/consent layers). Authored types outside
+ * this list still only WARN — the shell degrades gracefully (EventBus +
+ * console) — but this list must stay truthful since it drives merchant
+ * preflight warnings and GET /api/v1/compatibility consumers.
+ */
 export const SUPPORTED_ACTION_TYPES: readonly string[] = [
-  'add_to_cart',
-  'api_call',
-  'api_request',
-  'submit_form',
-  'book_service',
-  'call_phone',
+  // Navigation (shell-level stack + merchant payload shapes screenId/push/screen)
   'navigate',
-  'open_form',
+  'push',
+  'replace',
+  'pop',
+  'switch_screen',
+  // Filter/search widgets
+  'filter',
+  'search',
+  // Modals
+  'open_modal',
+  'close_modal',
+  // Commerce flow
+  'add_to_cart',
+  'remove_from_cart',
+  'checkout',
+  'view_item',
+  // Forms + generic HTTP
+  'submit_form',
+  'api_request',
+  'api_call', // alias of api_request (ActionEngine registration)
+  // Booking flow
+  'book_service',
+  // Contact / external
   'open_url',
-  'scroll_to',
-  'send_email',
+  'open_maps',
+  'call_phone',
+  'email',
+  'send_email', // alias of email (ActionEngine registration)
+  'download',
   'share',
+  // Device / session
+  'scan_qr',
+  'authenticate',
+  'logout',
+  'switch_tenant',
+  'exit_tenant',
+  // Forms + viewport
+  'open_form',
+  'scroll_to',
 ];
 
 /** Platform capabilities. Required + unknown → block; optional + unknown → warn. */
