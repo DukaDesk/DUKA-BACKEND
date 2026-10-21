@@ -51,7 +51,7 @@ export class MobileBffService {
   }
 
   async getDiscoveryFeed() {
-    const [featured, categories] = await Promise.all([
+    const [featured, categories, grouped] = await Promise.all([
       this.prisma.tenant.findMany({
         where: { status: 'published', activeReleaseId: { not: null } },
         select: { id: true, name: true, slug: true, logo: true },
@@ -59,9 +59,61 @@ export class MobileBffService {
         orderBy: { publishedAt: 'desc' },
       }),
       this.getCategories(),
+      this.prisma.tenant.groupBy({
+        by: ['category'],
+        _count: { id: true },
+        where: { status: 'published', activeReleaseId: { not: null } },
+      }),
     ]);
+    const countByValue = new Map(grouped.map(row => [row.category ?? '', row._count.id]));
+    // Categories render with live counts of the tenants they will actually surface.
+    const withCounts = categories.map(category => {
+      const values = this.tenantCategoryValues(category.id) ?? [];
+      const count = values.reduce((sum, value) => sum + (countByValue.get(value) ?? 0), 0);
+      return { ...category, count };
+    });
+    return { featured, categories: withCounts };
+  }
 
-    return { featured, categories };
+  async getTenantsByCategory(categoryId: string) {
+    const categories = await this.getCategories();
+    const canonical = categories.find(
+      category => category.id.toLowerCase() === categoryId.toLowerCase(),
+    );
+    const values = this.tenantCategoryValues(categoryId);
+    if (!values) {
+      // Unknown vertical — public consumers render "No apps yet" for empty lists.
+      return { category: categoryId, categoryLabel: canonical?.name ?? categoryId, count: 0, data: [] };
+    }
+
+    const data = await this.prisma.tenant.findMany({
+      where: {
+        status: 'published',
+        activeReleaseId: { not: null },
+        category: { in: values },
+      },
+      select: { id: true, name: true, slug: true, logo: true, category: true, publishedAt: true },
+      orderBy: { publishedAt: 'desc' },
+      take: 50,
+    });
+    return {
+      category: canonical?.id ?? categoryId,
+      categoryLabel: canonical?.name ?? categoryId,
+      count: data.length,
+      data,
+    };
+  }
+
+  /** Discovery vertical → merchant desk-category values it represents (canonical + legacy keys). */
+  private tenantCategoryValues(categoryId: string): string[] | null {
+    const groups: Record<string, string[]> = {
+      commerce: ['Business', 'Ecommerce', 'Retail', 'Marketplace'],
+      fashion: ['Business', 'Ecommerce', 'Retail'],
+      restaurant: ['Food & Hospitality', 'Restaurant', 'Food Vendor', 'Cafe', 'Bar & Lounge', 'Bar'],
+      grocery: ['Food & Hospitality', 'Grocery', 'Farm & Produce', 'Food Vendor'],
+      salon: ['Services', 'Beauty & Salon', 'Barbershop'],
+    };
+    return groups[categoryId.toLowerCase()] ?? null;
   }
 
   async getUserProfile(userId: string) {
@@ -129,16 +181,14 @@ export class MobileBffService {
   }
 
   private getCategories() {
+    // B2C verticals live for discovery (kept in sync with discovery.service).
+    // Institutions (school/church/hotel) are off the list for now.
     return Promise.resolve([
       { id: 'commerce', name: 'Commerce', icon: 'shopping-bag' },
       { id: 'restaurant', name: 'Restaurant', icon: 'utensils' },
       { id: 'fashion', name: 'Fashion', icon: 'shirt' },
       { id: 'grocery', name: 'Grocery', icon: 'shopping-cart' },
-      { id: 'clinic', name: 'Clinic', icon: 'stethoscope' },
       { id: 'salon', name: 'Salon', icon: 'scissors' },
-      { id: 'school', name: 'School', icon: 'graduation-cap' },
-      { id: 'church', name: 'Church', icon: 'cross' },
-      { id: 'hotel', name: 'Hotel', icon: 'building' },
     ]);
   }
 }

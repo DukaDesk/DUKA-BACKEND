@@ -38,6 +38,13 @@ export class MobileBffController {
   }
 
   @Public()
+  @Get('discovery/categories/:categoryId/apps')
+  @ApiOperation({ summary: 'Get published tenant apps under a discovery category' })
+  getCategoryApps(@Param('categoryId') categoryId: string) {
+    return this.mobile.getTenantsByCategory(categoryId);
+  }
+
+  @Public()
   @Get('merchants/:merchantId/catalog')
   @ApiOperation({ summary: 'Get merchant catalog with products' })
   getCatalog(@Param('merchantId') merchantId: string, @Query() query: any) {

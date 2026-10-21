@@ -66,19 +66,15 @@ export class DiscoveryService {
   }
 
   async getCategories() {
+    // B2C verticals that are live for discovery. Institutions
+    // (law-firm/ngo/school/coaching), places of worship and clinic are off
+    // the list until those marketplaces are ready.
     const categories = [
       { id: 'commerce', name: 'Commerce', icon: 'shopping-bag' },
       { id: 'restaurant', name: 'Restaurant', icon: 'utensils' },
       { id: 'fashion', name: 'Fashion', icon: 'shirt' },
       { id: 'grocery', name: 'Grocery', icon: 'shopping-cart' },
-      { id: 'clinic', name: 'Clinic', icon: 'stethoscope' },
       { id: 'salon', name: 'Salon', icon: 'scissors' },
-      { id: 'law-firm', name: 'Law Firm', icon: 'scale' },
-      { id: 'church', name: 'Church', icon: 'cross' },
-      { id: 'mosque', name: 'Mosque', icon: 'mosque' },
-      { id: 'ngo', name: 'NGO', icon: 'heart' },
-      { id: 'school', name: 'School', icon: 'graduation-cap' },
-      { id: 'coaching', name: 'Coaching', icon: 'book-open' },
     ];
     return categories;
   }
