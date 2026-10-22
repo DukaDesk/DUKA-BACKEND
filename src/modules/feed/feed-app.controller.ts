@@ -20,6 +20,12 @@ export class FeedAppController {
     return this.tenantResolver.resolveTenantId(userId);
   }
 
+  @Get('quota')
+  @ApiOperation({ summary: 'Daily promo quota for this tenant (tier-driven, Free defaults to 5/day)' })
+  async quota(@CurrentUser('id') userId: string) {
+    return this.feed.getQuota(await this.getTenantId(userId));
+  }
+
   @Get('posts')
   @ApiOperation({ summary: 'List own promo posts with engagement counts' })
   async list(

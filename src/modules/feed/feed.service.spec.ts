@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { FeedService } from './feed.service';
 
 const prismaMock = {
@@ -6,11 +6,17 @@ const prismaMock = {
     create: jest.fn(),
     findFirst: jest.fn(),
     findUniqueOrThrow: jest.fn(),
+    findMany: jest.fn(),
     update: jest.fn(),
     delete: jest.fn(),
+    deleteMany: jest.fn(),
+    count: jest.fn().mockResolvedValue(0),
   },
   product: {
     findFirst: jest.fn(),
+  },
+  subscription: {
+    findUnique: jest.fn().mockResolvedValue(null),
   },
 };
 
@@ -31,9 +37,13 @@ describe('FeedService (merchant self-service)', () => {
         productId: null,
         ctaLabel: 'Buy Now',
         media: [{ mediaId: null, url: 'https://cdn.example.test/a.jpg', type: 'image', posterUrl: null }],
+        expiresAt: expect.any(Date),
       },
       select: expect.anything(),
     });
+    const created = prismaMock.feedPost.create.mock.calls[0][0];
+    expect(Number(created.data.expiresAt) - Number(new Date())).toBeGreaterThan(23.9 * 60 * 60 * 1000);
+    expect(Number(created.data.expiresAt) - Number(new Date())).toBeLessThanOrEqual(24 * 60 * 60 * 1000);
   });
 
   it('rejects posts without media and posts with more than one video', async () => {
@@ -75,5 +85,46 @@ describe('FeedService (merchant self-service)', () => {
     expect(prismaMock.feedPost.update).toHaveBeenCalledWith(
       expect.objectContaining({ data: { caption: null, ctaLabel: 'Buy Now' } }),
     );
+  });
+
+  it('enforces the free-tier daily quota of 5 posts', async () => {
+    prismaMock.feedPost.count.mockResolvedValue(5);
+    await expect(feed.createPost('tenant-1', { media } as any)).rejects.toThrow(ForbiddenException);
+    expect(prismaMock.feedPost.create).not.toHaveBeenCalled();
+
+    prismaMock.feedPost.count.mockResolvedValue(4);
+    prismaMock.feedPost.create.mockResolvedValue({ id: 'post-2' });
+    await expect(feed.createPost('tenant-1', { media } as any)).resolves.toMatchObject({ id: 'post-2' });
+  });
+
+  it('uses the subscribed plan\'s dailyPromoPosts limit when set', async () => {
+    prismaMock.subscription.findUnique.mockResolvedValue({
+      status: 'active',
+      endDate: null,
+      plan: { slug: 'growth', limits: { dailyPromoPosts: 20 } },
+    });
+    prismaMock.feedPost.count.mockResolvedValue(0);
+    await expect(feed.getQuota('tenant-1')).resolves.toMatchObject({ tier: 'growth', limit: 20, remaining: 20 });
+    prismaMock.feedPost.count.mockResolvedValue(20);
+    await expect(feed.createPost('tenant-1', { media } as any)).rejects.toThrow('20/20 on growth');
+  });
+
+  it('counts posts across the whole UTC day for the quota', async () => {
+    prismaMock.subscription.findUnique.mockResolvedValue(null);
+    prismaMock.feedPost.count.mockResolvedValue(2);
+    const quota = await feed.getQuota('tenant-1');
+    expect(quota).toMatchObject({ tier: 'free', limit: 5, used: 2, remaining: 3 });
+    const where = prismaMock.feedPost.count.mock.calls[0][0].where;
+    const lowerBound = where.createdAt.gte as Date;
+    expect(lowerBound.getUTCMinutes()).toBe(0);
+    expect(lowerBound.toISOString().endsWith('00:00.000Z')).toBe(true);
+  });
+
+  it('purges expired posts and their cascading likes', async () => {
+    prismaMock.feedPost.deleteMany.mockResolvedValue({ count: 3 });
+    await expect(feed.purgeExpired()).resolves.toMatchObject({ count: 3 });
+    expect(prismaMock.feedPost.deleteMany).toHaveBeenCalledWith({
+      where: { expiresAt: { lt: expect.any(Date) } },
+    });
   });
 });
