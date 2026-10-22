@@ -6,13 +6,11 @@ export class WebsiteBffService {
   constructor(private prisma: PrismaService) {}
 
   async getPublicCategories() {
+    // B2C verticals live for discovery (kept in sync with mobile discovery).
     return [
       { id: 'commerce', name: 'Commerce', icon: 'shopping-bag', description: 'Shop from amazing stores' },
       { id: 'restaurant', name: 'Restaurant', icon: 'utensils', description: 'Order from local restaurants' },
-      { id: 'clinic', name: 'Clinic', icon: 'stethoscope', description: 'Book medical appointments' },
       { id: 'salon', name: 'Salon', icon: 'scissors', description: 'Find beauty professionals' },
-      { id: 'school', name: 'School', icon: 'graduation-cap', description: 'Educational institutions' },
-      { id: 'church', name: 'Church', icon: 'cross', description: 'Religious organizations' },
     ];
   }
 
