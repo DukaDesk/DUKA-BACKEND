@@ -44,11 +44,11 @@ enum PlatformRole {
 }
 
 model Role {
-  id          String           @id @default(uuid())
-  name        String           @unique
+  id          String   @id @default(uuid())
+  name        String   @unique
   description String?
-  isSystem    Boolean          @default(false)
-  createdAt   DateTime         @default(now())
+  isSystem    Boolean  @default(false)
+  createdAt   DateTime @default(now())
 
   permissions RolePermission[]
   users       UserRole[]
@@ -57,12 +57,12 @@ model Role {
 }
 
 model Permission {
-  id          String           @id @default(uuid())
-  name        String           @unique
+  id          String   @id @default(uuid())
+  name        String   @unique
   resource    String
   action      String
   description String?
-  createdAt   DateTime         @default(now())
+  createdAt   DateTime @default(now())
 
   roles RolePermission[]
 
@@ -70,7 +70,7 @@ model Permission {
 }
 
 model RolePermission {
-  id           String   @id @default(uuid())
+  id           String @id @default(uuid())
   roleId       String
   permissionId String
 
@@ -82,10 +82,10 @@ model RolePermission {
 }
 
 model UserRole {
-  id        String  @id @default(uuid())
-  userId    String
-  roleId    String
-  tenantId  String?
+  id       String  @id @default(uuid())
+  userId   String
+  roleId   String
+  tenantId String?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
@@ -102,15 +102,15 @@ model UserRole {
 // self-serve signup (no role) is unaffected.
 
 model AdminInvite {
-  id        String   @id @default(uuid())
+  id        String    @id @default(uuid())
   email     String
   role      String
-  token     String   @unique
+  token     String    @unique
   expiresAt DateTime
   usedAt    DateTime?
   revokedAt DateTime?
   createdBy String
-  createdAt DateTime @default(now())
+  createdAt DateTime  @default(now())
 
   @@index([email])
   @@map("admin_invites")
@@ -150,16 +150,16 @@ model PasswordHistory {
 // ─── Phase 1: Tenant Platform ──────────────────────────────────
 
 model TenantConfig {
-  id            String @id @default(uuid())
-  tenantId      String @unique
-  languages     String[] @default(["en"])
-  currency      String @default("NGN")
-  timezone      String @default("Africa/Lagos")
-  region        String @default("NG")
-  offlinePolicy String @default("cache-first")
-  searchSettings Json?
+  id                String   @id @default(uuid())
+  tenantId          String   @unique
+  languages         String[] @default(["en"])
+  currency          String   @default("NGN")
+  timezone          String   @default("Africa/Lagos")
+  region            String   @default("NG")
+  offlinePolicy     String   @default("cache-first")
+  searchSettings    Json?
   notificationPrefs Json?
-  config        Json?
+  config            Json?
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
@@ -167,15 +167,15 @@ model TenantConfig {
 }
 
 model Plan {
-  id          String   @id @default(uuid())
-  name        String   @unique
-  slug        String   @unique
-  price       Decimal  @default(0)
-  currency    String   @default("NGN")
-  features    Json?
-  limits      Json?
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
+  id        String   @id @default(uuid())
+  name      String   @unique
+  slug      String   @unique
+  price     Decimal  @default(0)
+  currency  String   @default("NGN")
+  features  Json?
+  limits    Json?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
 
   subscriptions Subscription[]
 
@@ -183,14 +183,14 @@ model Plan {
 }
 
 model Subscription {
-  id         String         @id @default(uuid())
-  tenantId   String         @unique
-  planId     String
-  status     String         @default("active")
-  startDate  DateTime       @default(now())
-  endDate    DateTime?
-  autoRenew  Boolean        @default(true)
-  createdAt  DateTime       @default(now())
+  id        String    @id @default(uuid())
+  tenantId  String    @unique
+  planId    String
+  status    String    @default("active")
+  startDate DateTime  @default(now())
+  endDate   DateTime?
+  autoRenew Boolean   @default(true)
+  createdAt DateTime  @default(now())
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   plan   Plan   @relation(fields: [planId], references: [id])
@@ -264,15 +264,15 @@ model ValidationReport {
 }
 
 model DraftPage {
-  id         String   @id @default(uuid())
-  tenantId   String
-  name       String
-  slug       String
-  sortOrder  Int      @default(0)
-  isHome     Boolean  @default(false)
-  isActive   Boolean  @default(true)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id        String   @id @default(uuid())
+  tenantId  String
+  name      String
+  slug      String
+  sortOrder Int      @default(0)
+  isHome    Boolean  @default(false)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   tenant        Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   draftSections DraftSection[]
@@ -292,7 +292,7 @@ model DraftSection {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  draftPage      DraftPage      @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  draftPage       DraftPage        @relation(fields: [pageId], references: [id], onDelete: Cascade)
   draftComponents DraftComponent[]
 
   @@index([pageId])
@@ -357,18 +357,18 @@ model AssetVersion {
 // ─── Phase 2: Commerce ─────────────────────────────────────────
 
 model ProductVariant {
-  id              String  @id @default(uuid())
-  productId       String
-  name            String
-  sku             String?
-  price           Decimal @default(0)
-  compareAtPrice  Decimal?
-  stock           Int     @default(0)
-  reservedStock   Int     @default(0)
-  images          Json?
-  attributes      Json?
-  sortOrder       Int     @default(0)
-  isActive        Boolean @default(true)
+  id             String   @id @default(uuid())
+  productId      String
+  name           String
+  sku            String?
+  price          Decimal  @default(0)
+  compareAtPrice Decimal?
+  stock          Int      @default(0)
+  reservedStock  Int      @default(0)
+  images         Json?
+  attributes     Json?
+  sortOrder      Int      @default(0)
+  isActive       Boolean  @default(true)
 
   product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 
@@ -377,16 +377,16 @@ model ProductVariant {
 }
 
 model Cart {
-  id          String   @id @default(uuid())
-  tenantId    String
-  userId      String?
-  sessionId   String?
-  couponCode  String?
-  subtotal    Decimal  @default(0)
-  total       Decimal  @default(0)
-  expiresAt   DateTime?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id         String    @id @default(uuid())
+  tenantId   String
+  userId     String?
+  sessionId  String?
+  couponCode String?
+  subtotal   Decimal   @default(0)
+  total      Decimal   @default(0)
+  expiresAt  DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 
   items CartItem[]
 
@@ -396,13 +396,13 @@ model Cart {
 }
 
 model CartItem {
-  id          String  @id @default(uuid())
-  cartId      String
-  productId   String
-  variantId   String?
-  quantity    Int     @default(1)
-  unitPrice   Decimal @default(0)
-  totalPrice  Decimal @default(0)
+  id         String  @id @default(uuid())
+  cartId     String
+  productId  String
+  variantId  String?
+  quantity   Int     @default(1)
+  unitPrice  Decimal @default(0)
+  totalPrice Decimal @default(0)
 
   cart    Cart    @relation(fields: [cartId], references: [id], onDelete: Cascade)
   product Product @relation(fields: [productId], references: [id])
@@ -413,29 +413,29 @@ model CartItem {
 }
 
 model Order {
-  id              String   @id @default(uuid())
+  id              String    @id @default(uuid())
   tenantId        String
   userId          String?
   customerName    String?
   customerEmail   String?
   customerPhone   String?
   items           Json?
-  status          String   @default("pending_payment")
-  subtotal        Decimal  @default(0)
-  taxTotal        Decimal  @default(0)
-  deliveryTotal   Decimal  @default(0)
-  discountTotal   Decimal  @default(0)
-  total           Decimal  @default(0)
-  currency        String   @default("NGN")
-  paymentStatus   String   @default("pending")
+  status          String    @default("pending_payment")
+  subtotal        Decimal   @default(0)
+  taxTotal        Decimal   @default(0)
+  deliveryTotal   Decimal   @default(0)
+  discountTotal   Decimal   @default(0)
+  total           Decimal   @default(0)
+  currency        String    @default("NGN")
+  paymentStatus   String    @default("pending")
   paymentIntentId String?
   couponCode      String?
   notes           String?
-  placedAt        DateTime @default(now())
+  placedAt        DateTime  @default(now())
   paidAt          DateTime?
   fulfilledAt     DateTime?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   orderItems    OrderItem[]
   statusHistory OrderStatusHistory[]
@@ -448,14 +448,14 @@ model Order {
 }
 
 model OrderItem {
-  id          String  @id @default(uuid())
-  orderId     String
-  productId   String
-  variantId   String?
-  name        String
-  quantity    Int     @default(1)
-  unitPrice   Decimal @default(0)
-  totalPrice  Decimal @default(0)
+  id         String  @id @default(uuid())
+  orderId    String
+  productId  String
+  variantId  String?
+  name       String
+  quantity   Int     @default(1)
+  unitPrice  Decimal @default(0)
+  totalPrice Decimal @default(0)
 
   order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
   product Product @relation(fields: [productId], references: [id])
@@ -481,17 +481,17 @@ model OrderStatusHistory {
 }
 
 model Coupon {
-  id         String   @id @default(uuid())
-  tenantId   String
-  code       String
-  type       String   @default("percentage")
-  value      Decimal  @default(0)
-  minSpend   Decimal?
-  maxUses    Int?
-  usedCount  Int      @default(0)
-  expiresAt  DateTime?
-  isActive   Boolean  @default(true)
-  createdAt  DateTime @default(now())
+  id        String    @id @default(uuid())
+  tenantId  String
+  code      String
+  type      String    @default("percentage")
+  value     Decimal   @default(0)
+  minSpend  Decimal?
+  maxUses   Int?
+  usedCount Int       @default(0)
+  expiresAt DateTime?
+  isActive  Boolean   @default(true)
+  createdAt DateTime  @default(now())
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
@@ -500,15 +500,15 @@ model Coupon {
 }
 
 model Fulfillment {
-  id          String   @id @default(uuid())
+  id          String    @id @default(uuid())
   orderId     String
-  method      String   @default("delivery")
-  status      String   @default("pending")
+  method      String    @default("delivery")
+  status      String    @default("pending")
   address     String?
   notes       String?
   scheduledAt DateTime?
   completedAt DateTime?
-  createdAt   DateTime @default(now())
+  createdAt   DateTime  @default(now())
 
   order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
@@ -546,8 +546,8 @@ model BookingService {
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
 
-  tenant  Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  staff   StaffMember[]  @relation("StaffServices")
+  tenant   Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  staff    StaffMember[] @relation("StaffServices")
   bookings Booking[]
 
   @@index([tenantId])
@@ -555,15 +555,15 @@ model BookingService {
 }
 
 model StaffMember {
-  id            String  @id @default(uuid())
-  tenantId      String
-  userId        String?
-  name          String
-  role          String?
-  workingHours  Json?
-  bufferTime    Int     @default(15)
-  bookingLimit  Int?
-  isActive      Boolean @default(true)
+  id           String  @id @default(uuid())
+  tenantId     String
+  userId       String?
+  name         String
+  role         String?
+  workingHours Json?
+  bufferTime   Int     @default(15)
+  bookingLimit Int?
+  isActive     Boolean @default(true)
 
   tenant   Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   services BookingService[] @relation("StaffServices")
@@ -574,12 +574,12 @@ model StaffMember {
 }
 
 model BookingResource {
-  id        String  @id @default(uuid())
-  tenantId  String
-  name      String
-  type      String  @default("room")
-  capacity  Int     @default(1)
-  isActive  Boolean @default(true)
+  id       String  @id @default(uuid())
+  tenantId String
+  name     String
+  type     String  @default("room")
+  capacity Int     @default(1)
+  isActive Boolean @default(true)
 
   tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   bookings Booking[]
@@ -589,16 +589,16 @@ model BookingResource {
 }
 
 model Schedule {
-  id          String   @id @default(uuid())
+  id          String    @id @default(uuid())
   tenantId    String
   staffId     String?
   resourceId  String?
   dayOfWeek   Int?
   startTime   String
   endTime     String
-  isRecurring Boolean  @default(true)
+  isRecurring Boolean   @default(true)
   date        DateTime?
-  isActive    Boolean  @default(true)
+  isActive    Boolean   @default(true)
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
@@ -607,7 +607,7 @@ model Schedule {
 }
 
 model BookingLocation {
-  id           String  @id @default(uuid())
+  id           String   @id @default(uuid())
   tenantId     String
   name         String
   address      String?
@@ -616,7 +616,7 @@ model BookingLocation {
   phone        String?
   email        String?
   instructions String?
-  isActive     Boolean @default(true)
+  isActive     Boolean  @default(true)
   createdAt    DateTime @default(now())
 
   tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
@@ -627,14 +627,14 @@ model BookingLocation {
 }
 
 model CancellationPolicy {
-  id             String   @id @default(uuid())
-  tenantId       String
-  name           String
-  description    String?
-  tiers          Json?
-  isDefault      Boolean  @default(false)
-  isActive       Boolean  @default(true)
-  createdAt      DateTime @default(now())
+  id          String   @id @default(uuid())
+  tenantId    String
+  name        String
+  description String?
+  tiers       Json?
+  isDefault   Boolean  @default(false)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
@@ -643,13 +643,13 @@ model CancellationPolicy {
 }
 
 model BookingReminder {
-  id        String   @id @default(uuid())
-  bookingId String
-  type      String   @default("email")
-  minutesBefore Int  @default(60)
-  status    String   @default("pending")
-  sentAt    DateTime?
-  createdAt DateTime @default(now())
+  id            String    @id @default(uuid())
+  bookingId     String
+  type          String    @default("email")
+  minutesBefore Int       @default(60)
+  status        String    @default("pending")
+  sentAt        DateTime?
+  createdAt     DateTime  @default(now())
 
   booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
 
@@ -658,33 +658,33 @@ model BookingReminder {
 }
 
 model Booking {
-  id              String   @id @default(uuid())
-  tenantId        String
-  serviceId       String?
-  staffId         String?
-  resourceId      String?
-  locationId      String?
-  userId          String?
-  customerName    String
-  customerEmail   String?
-  customerPhone   String?
-  startTime       DateTime
-  endTime         DateTime
-  status          String   @default("requested")
+  id                   String    @id @default(uuid())
+  tenantId             String
+  serviceId            String?
+  staffId              String?
+  resourceId           String?
+  locationId           String?
+  userId               String?
+  customerName         String
+  customerEmail        String?
+  customerPhone        String?
+  startTime            DateTime
+  endTime              DateTime
+  status               String    @default("requested")
   cancellationPolicyId String?
-  cancelReason    String?
-  cancelledAt     DateTime?
-  notes           String?
-  paymentStatus   String   @default("free")
-  paymentIntentId String?
-  createdAt       DateTime @default(now())
+  cancelReason         String?
+  cancelledAt          DateTime?
+  notes                String?
+  paymentStatus        String    @default("free")
+  paymentIntentId      String?
+  createdAt            DateTime  @default(now())
 
-  service  BookingService?   @relation(fields: [serviceId], references: [id])
-  staff    StaffMember?      @relation(fields: [staffId], references: [id])
-  resource BookingResource?  @relation(fields: [resourceId], references: [id])
-  location BookingLocation?  @relation(fields: [locationId], references: [id])
+  service        BookingService?   @relation(fields: [serviceId], references: [id])
+  staff          StaffMember?      @relation(fields: [staffId], references: [id])
+  resource       BookingResource?  @relation(fields: [resourceId], references: [id])
+  location       BookingLocation?  @relation(fields: [locationId], references: [id])
   bookingHistory BookingHistory[]
-  reminders BookingReminder[]
+  reminders      BookingReminder[]
 
   @@index([tenantId])
   @@index([userId])
@@ -708,7 +708,7 @@ model BookingHistory {
 }
 
 model WaitingListEntry {
-  id            String   @id @default(uuid())
+  id            String    @id @default(uuid())
   tenantId      String
   serviceId     String
   userId        String?
@@ -716,8 +716,8 @@ model WaitingListEntry {
   customerPhone String?
   requestedDate DateTime?
   requestedTime String?
-  notified      Boolean  @default(false)
-  createdAt     DateTime @default(now())
+  notified      Boolean   @default(false)
+  createdAt     DateTime  @default(now())
 
   @@index([tenantId])
   @@map("waiting_list_entries")
@@ -748,17 +748,17 @@ model Form {
 }
 
 model FormField {
-  id              String  @id @default(uuid())
-  formId          String
-  sectionIndex    Int     @default(0)
-  type            String
-  label           String
-  placeholder     String?
-  required        Boolean @default(false)
-  options         Json?
-  validation      Json?
+  id               String  @id @default(uuid())
+  formId           String
+  sectionIndex     Int     @default(0)
+  type             String
+  label            String
+  placeholder      String?
+  required         Boolean @default(false)
+  options          Json?
+  validation       Json?
   conditionalLogic Json?
-  sortOrder       Int     @default(0)
+  sortOrder        Int     @default(0)
 
   form Form @relation(fields: [formId], references: [id], onDelete: Cascade)
 
@@ -767,18 +767,18 @@ model FormField {
 }
 
 model FormSubmission {
-  id          String   @id @default(uuid())
-  formId      String
-  formVersion Int      @default(1)
-  tenantId    String
-  userId      String?
-  answers     Json?
-  status      String   @default("submitted")
+  id            String   @id @default(uuid())
+  formId        String
+  formVersion   Int      @default(1)
+  tenantId      String
+  userId        String?
+  answers       Json?
+  status        String   @default("submitted")
   workflowState String?
-  attachments String[]
-  submittedAt DateTime @default(now())
+  attachments   String[]
+  submittedAt   DateTime @default(now())
 
-  form     Form            @relation(fields: [formId], references: [id], onDelete: Cascade)
+  form      Form           @relation(fields: [formId], references: [id], onDelete: Cascade)
   approvals FormApproval[]
 
   @@index([formId])
@@ -787,12 +787,12 @@ model FormSubmission {
 }
 
 model FormApproval {
-  id          String   @id @default(uuid())
+  id           String   @id @default(uuid())
   submissionId String
-  approverId  String?
-  action      String
-  comment     String?
-  actedAt     DateTime @default(now())
+  approverId   String?
+  action       String
+  comment      String?
+  actedAt      DateTime @default(now())
 
   submission FormSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
 
@@ -801,10 +801,10 @@ model FormApproval {
 }
 
 model FormWorkflow {
-  id        String  @id @default(uuid())
-  formId    String
-  steps     Json?
-  isActive  Boolean @default(true)
+  id       String  @id @default(uuid())
+  formId   String
+  steps    Json?
+  isActive Boolean @default(true)
 
   form Form @relation(fields: [formId], references: [id], onDelete: Cascade)
 
@@ -827,19 +827,19 @@ model PaymentProvider {
 }
 
 model TenantPaymentAccount {
-  id              String   @id @default(uuid())
-  tenantId        String
-  providerId      String
-  livePublicKey   String?
-  liveSecretKey   String?
-  webhookSecret   String?
+  id               String   @id @default(uuid())
+  tenantId         String
+  providerId       String
+  livePublicKey    String?
+  liveSecretKey    String?
+  webhookSecret    String?
   sandboxPublicKey String?
   sandboxSecretKey String?
-  environment     String   @default("sandbox")
-  isDefault       Boolean  @default(false)
-  status          String   @default("active")
-  metadata        Json?
-  createdAt       DateTime @default(now())
+  environment      String   @default("sandbox")
+  isDefault        Boolean  @default(false)
+  status           String   @default("active")
+  metadata         Json?
+  createdAt        DateTime @default(now())
 
   tenant   Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   provider PaymentProvider @relation(fields: [providerId], references: [id])
@@ -849,18 +849,18 @@ model TenantPaymentAccount {
 }
 
 model PaymentIntent {
-  id             String   @id @default(uuid())
-  tenantId       String
-  accountId      String?
-  provider       String
-  externalId     String?
-  amount         Decimal  @default(0)
-  currency       String   @default("NGN")
-  status         String   @default("created")
-  customer       Json?
-  metadata       Json?
-  createdAt      DateTime @default(now())
-  expiresAt      DateTime?
+  id         String    @id @default(uuid())
+  tenantId   String
+  accountId  String?
+  provider   String
+  externalId String?
+  amount     Decimal   @default(0)
+  currency   String    @default("NGN")
+  status     String    @default("created")
+  customer   Json?
+  metadata   Json?
+  createdAt  DateTime  @default(now())
+  expiresAt  DateTime?
 
   transactions PaymentTransaction[]
 
@@ -870,16 +870,16 @@ model PaymentIntent {
 }
 
 model PaymentTransaction {
-  id             String   @id @default(uuid())
-  intentId       String
-  type           String   @default("charge")
-  externalRef    String?
-  amount         Decimal  @default(0)
-  fees           Decimal  @default(0)
-  netAmount      Decimal?
+  id               String   @id @default(uuid())
+  intentId         String
+  type             String   @default("charge")
+  externalRef      String?
+  amount           Decimal  @default(0)
+  fees             Decimal  @default(0)
+  netAmount        Decimal?
   providerResponse Json?
-  status         String   @default("pending")
-  createdAt      DateTime @default(now())
+  status           String   @default("pending")
+  createdAt        DateTime @default(now())
 
   intent PaymentIntent @relation(fields: [intentId], references: [id], onDelete: Cascade)
 
@@ -888,15 +888,15 @@ model PaymentTransaction {
 }
 
 model WebhookEvent {
-  id                String    @id @default(uuid())
-  provider          String
-  eventType         String
-  rawPayload        Json?
-  verified          Boolean   @default(false)
-  processed         Boolean   @default(false)
+  id                 String   @id @default(uuid())
+  provider           String
+  eventType          String
+  rawPayload         Json?
+  verified           Boolean  @default(false)
+  processed          Boolean  @default(false)
   processingAttempts Int      @default(0)
-  lastError         String?
-  receivedAt        DateTime  @default(now())
+  lastError          String?
+  receivedAt         DateTime @default(now())
 
   @@index([provider])
   @@index([processed])
@@ -904,20 +904,20 @@ model WebhookEvent {
 }
 
 model Settlement {
-  id            String   @id @default(uuid())
-  tenantId      String
-  provider      String
-  reference     String   @unique
-  amount        Decimal  @default(0)
-  fees          Decimal  @default(0)
-  netAmount     Decimal  @default(0)
-  currency      String   @default("NGN")
-  status        String   @default("pending")
-  periodStart   DateTime?
-  periodEnd     DateTime?
-  settledAt     DateTime?
-  metadata      Json?
-  createdAt     DateTime @default(now())
+  id          String    @id @default(uuid())
+  tenantId    String
+  provider    String
+  reference   String    @unique
+  amount      Decimal   @default(0)
+  fees        Decimal   @default(0)
+  netAmount   Decimal   @default(0)
+  currency    String    @default("NGN")
+  status      String    @default("pending")
+  periodStart DateTime?
+  periodEnd   DateTime?
+  settledAt   DateTime?
+  metadata    Json?
+  createdAt   DateTime  @default(now())
 
   @@index([tenantId])
   @@index([status])
@@ -925,17 +925,17 @@ model Settlement {
 }
 
 model FinancialEvent {
-  id          String   @id @default(uuid())
-  tenantId    String
-  type        String
-  amount      Decimal  @default(0)
-  currency    String   @default("NGN")
+  id            String   @id @default(uuid())
+  tenantId      String
+  type          String
+  amount        Decimal  @default(0)
+  currency      String   @default("NGN")
   transactionId String?
-  settlementId String?
-  orderId     String?
-  bookingId   String?
-  metadata    Json?
-  occurredAt  DateTime @default(now())
+  settlementId  String?
+  orderId       String?
+  bookingId     String?
+  metadata      Json?
+  occurredAt    DateTime @default(now())
 
   @@index([tenantId])
   @@map("financial_events")
@@ -962,28 +962,28 @@ model NotificationTemplate {
 }
 
 model NotificationEvent {
-  id        String   @id @default(uuid())
-  tenantId  String?
-  userId    String
-  type      String
-  channel   String   @default("in_app")
+  id         String   @id @default(uuid())
+  tenantId   String?
+  userId     String
+  type       String
+  channel    String   @default("in_app")
   templateId String?
-  data      Json?
-  status    String   @default("queued")
-  priority  String   @default("normal")
-  createdAt DateTime @default(now())
+  data       Json?
+  status     String   @default("queued")
+  priority   String   @default("normal")
+  createdAt  DateTime @default(now())
 
   @@index([userId])
   @@map("notification_events")
 }
 
 model NotificationPreference {
-  id        String  @id @default(uuid())
-  userId    String
-  tenantId  String?
-  channel   String  @default("push")
-  category  String  @default("all")
-  enabled   Boolean @default(true)
+  id         String  @id @default(uuid())
+  userId     String
+  tenantId   String?
+  channel    String  @default("push")
+  category   String  @default("all")
+  enabled    Boolean @default(true)
   quietHours Json?
 
   @@unique([userId, tenantId, channel, category])
@@ -1006,16 +1006,16 @@ model DeviceToken {
 }
 
 model DeliveryResult {
-  id               String   @id @default(uuid())
-  eventId          String
-  channel          String
-  provider         String?
-  status           String
+  id                String    @id @default(uuid())
+  eventId           String
+  channel           String
+  provider          String?
+  status            String
   providerMessageId String?
-  error            String?
-  deliveredAt      DateTime?
-  clickedAt        DateTime?
-  openedAt         DateTime?
+  error             String?
+  deliveredAt       DateTime?
+  clickedAt         DateTime?
+  openedAt          DateTime?
 
   @@index([eventId])
   @@map("delivery_results")
@@ -1024,19 +1024,19 @@ model DeliveryResult {
 // ─── Phase 3b: Integration Platform ──────────────────────────
 
 model IntegrationConnector {
-  id          String   @id @default(uuid())
+  id          String    @id @default(uuid())
   tenantId    String
   name        String
   provider    String
   config      Json?
   credentials Json?
-  status      String   @default("disconnected")
-  enabled     Boolean  @default(true)
+  status      String    @default("disconnected")
+  enabled     Boolean   @default(true)
   lastSyncAt  DateTime?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
-  tenant    Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   oauthTokens OAuthToken[]
   syncJobs    SyncJob[]
 
@@ -1045,16 +1045,16 @@ model IntegrationConnector {
 }
 
 model OAuthToken {
-  id            String   @id @default(uuid())
-  connectorId   String
-  accessToken   String
-  refreshToken  String?
-  scope         String?
-  expiresAt     DateTime?
-  tokenType     String   @default("Bearer")
-  raw           Json?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id           String    @id @default(uuid())
+  connectorId  String
+  accessToken  String
+  refreshToken String?
+  scope        String?
+  expiresAt    DateTime?
+  tokenType    String    @default("Bearer")
+  raw          Json?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
   connector IntegrationConnector @relation(fields: [connectorId], references: [id], onDelete: Cascade)
 
@@ -1063,21 +1063,21 @@ model OAuthToken {
 }
 
 model WebhookOutbox {
-  id            String   @id @default(uuid())
-  tenantId      String
-  eventType     String
-  payload       Json?
-  url           String
-  method        String   @default("POST")
-  headers       Json?
-  status        String   @default("pending")
-  attempts      Int      @default(0)
-  maxAttempts   Int      @default(3)
-  lastError     String?
-  nextRetryAt   DateTime?
-  acknowledged  Boolean  @default(false)
-  createdAt     DateTime @default(now())
-  completedAt   DateTime?
+  id           String    @id @default(uuid())
+  tenantId     String
+  eventType    String
+  payload      Json?
+  url          String
+  method       String    @default("POST")
+  headers      Json?
+  status       String    @default("pending")
+  attempts     Int       @default(0)
+  maxAttempts  Int       @default(3)
+  lastError    String?
+  nextRetryAt  DateTime?
+  acknowledged Boolean   @default(false)
+  createdAt    DateTime  @default(now())
+  completedAt  DateTime?
 
   @@index([tenantId, status])
   @@index([status, nextRetryAt])
@@ -1085,16 +1085,16 @@ model WebhookOutbox {
 }
 
 model SyncJob {
-  id          String   @id @default(uuid())
+  id          String    @id @default(uuid())
   connectorId String
-  type        String   @default("full")
-  status      String   @default("pending")
+  type        String    @default("full")
+  status      String    @default("pending")
   config      Json?
   result      Json?
   startedAt   DateTime?
   completedAt DateTime?
   error       String?
-  createdAt   DateTime @default(now())
+  createdAt   DateTime  @default(now())
 
   connector IntegrationConnector @relation(fields: [connectorId], references: [id], onDelete: Cascade)
 
@@ -1132,18 +1132,22 @@ model AnalyticsEvent {
 // Public surfacing is gated on the tenant's publication (activeReleaseId),
 // not on the post itself; `status: retired` hides a post without delete.
 model FeedPost {
-  id             String   @id @default(uuid())
+  id             String    @id @default(uuid())
   tenantId       String
   caption        String?
   productId      String?
-  ctaLabel       String   @default("Buy Now")
+  ctaLabel       String    @default("Buy Now")
   media          Json
-  status         String   @default("published")
-  likeCount      Int      @default(0)
-  shareCount     Int      @default(0)
-  patronageCount Int      @default(0)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  status         String    @default("published")
+  likeCount      Int       @default(0)
+  shareCount     Int       @default(0)
+  patronageCount Int       @default(0)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  // Promo posts are ephemeral: ~24h after creation a purge job deletes
+  // them from the database. Merchant dashboards still see their own
+  // (expired) posts until the purge runs; nothing public serves them.
+  expiresAt      DateTime?
 
   tenant  Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   product Product?   @relation(fields: [productId], references: [id], onDelete: SetNull)
@@ -1151,6 +1155,7 @@ model FeedPost {
 
   @@index([tenantId, createdAt])
   @@index([status, createdAt])
+  @@index([expiresAt])
   @@map("feed_posts")
 }
 
@@ -1173,16 +1178,84 @@ model FeedLike {
   @@map("feed_likes")
 }
 
+// ─── Platform comms: broadcasts + direct messages ────────────
+// The platform (admin) is the only sender. Primary recipients are
+// merchants (dashboards), secondary recipients are mobile app users.
+// Broadcast audiences: `merchants`, `mobile`, or `both`. Product rule:
+// announcements carrying media may target the mobile audience only —
+// a pure `merchants` broadcast must be text-only. Direct messages pin
+// one recipient: a tenant (merchant) or a mobile user (actor key).
+
+model Announcement {
+  id               String   @id @default(uuid())
+  kind             String   @default("broadcast") // broadcast | direct
+  audience         String? // merchants | mobile | both (null on direct)
+  tenantId         String? // direct → merchant recipient
+  recipientUserId  String? // direct → mobile user (authenticated)
+  recipientActorId String? // direct → mobile user (anonymous device actor)
+  title            String?
+  body             String
+  media            Json?
+  status           String   @default("sent")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  tenant  Tenant?             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  replies AnnouncementReply[]
+  reads   AnnouncementRead[]
+
+  @@index([kind, createdAt])
+  @@index([audience, createdAt])
+  @@index([tenantId])
+  @@index([recipientActorId])
+  @@map("announcements")
+}
+
+// Merchant replies to platform messages; the platform can answer back in
+// the same thread (author platform replies carry the platform wording).
+model AnnouncementReply {
+  id             String   @id @default(uuid())
+  announcementId String
+  author         String   @default("merchant") // merchant | platform
+  tenantId       String? // merchant replies (platform replies are null)
+  body           String
+  media          Json?
+  createdAt      DateTime @default(now())
+
+  announcement Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  tenant       Tenant?      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([announcementId, createdAt])
+  @@map("announcement_replies")
+}
+
+// Read receipts for un-read dots: merchant reads key on tenantId,
+// mobile reads key on the feed actor (device key or signed-in user id).
+model AnnouncementRead {
+  id             String   @id @default(uuid())
+  announcementId String
+  tenantId       String?
+  actorId        String?
+  readAt         DateTime @default(now())
+
+  announcement Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+
+  @@index([announcementId])
+  @@index([tenantId])
+  @@index([actorId])
+  @@map("announcement_reads")
+}
+
 model Dashboard {
-  id        String              @id @default(uuid())
-  tenantId  String
-  name      String
-  slug      String
+  id          String   @id @default(uuid())
+  tenantId    String
+  name        String
+  slug        String
   description String?
-  layout    Json?
-  isDefault Boolean             @default(false)
-  createdAt DateTime            @default(now())
-  updatedAt DateTime            @updatedAt
+  layout      Json?
+  isDefault   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   widgets DashboardWidget[]
 
@@ -1273,10 +1346,10 @@ model SearchQuery {
 }
 
 model SearchSynonym {
-  id    String   @id @default(uuid())
+  id       String   @id @default(uuid())
   tenantId String
-  terms String[]
-  type  String   @default("one_way")
+  terms    String[]
+  type     String   @default("one_way")
 
   @@index([tenantId])
   @@map("search_synonyms")
@@ -1285,35 +1358,35 @@ model SearchSynonym {
 // ─── Phase 3b: AI Platform ────────────────────────────────────
 
 model AIProvider {
-  id         String   @id @default(uuid())
-  tenantId   String?
-  name       String
-  provider   String   @default("openai")
-  apiKeyEnc  String?
-  baseUrl    String?
-  models     String[]
-  config     Json?
-  isActive   Boolean  @default(true)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id        String   @id @default(uuid())
+  tenantId  String?
+  name      String
+  provider  String   @default("openai")
+  apiKeyEnc String?
+  baseUrl   String?
+  models    String[]
+  config    Json?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([tenantId])
   @@map("ai_providers")
 }
 
 model AIPrompt {
-  id         String   @id @default(uuid())
-  tenantId   String?
-  name       String
-  slug       String
-  prompt     String
-  variables  String[]
-  model      String?
-  config     Json?
-  version    Int      @default(1)
-  isActive   Boolean  @default(true)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id        String   @id @default(uuid())
+  tenantId  String?
+  name      String
+  slug      String
+  prompt    String
+  variables String[]
+  model     String?
+  config    Json?
+  version   Int      @default(1)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([tenantId, slug])
   @@index([tenantId])
@@ -1321,23 +1394,23 @@ model AIPrompt {
 }
 
 model AICompletion {
-  id         String   @id @default(uuid())
-  tenantId   String?
-  userId     String?
-  promptId   String?
-  provider   String
-  model      String
-  input      String
-  output     String?
-  inputTokens Int     @default(0)
-  outputTokens Int    @default(0)
-  totalTokens Int     @default(0)
-  cost       Decimal  @default(0)
-  durationMs Int?
-  status     String   @default("completed")
-  error      String?
-  metadata   Json?
-  createdAt  DateTime @default(now())
+  id           String   @id @default(uuid())
+  tenantId     String?
+  userId       String?
+  promptId     String?
+  provider     String
+  model        String
+  input        String
+  output       String?
+  inputTokens  Int      @default(0)
+  outputTokens Int      @default(0)
+  totalTokens  Int      @default(0)
+  cost         Decimal  @default(0)
+  durationMs   Int?
+  status       String   @default("completed")
+  error        String?
+  metadata     Json?
+  createdAt    DateTime @default(now())
 
   @@index([tenantId])
   @@index([userId])
@@ -1365,32 +1438,32 @@ model AIEmbedding {
 // ─── Phase 3b: Platform Administration ────────────────────────
 
 model PlatformSetting {
-  id        String   @id @default(uuid())
-  key       String   @unique
-  value     Json?
-  type      String   @default("string")
-  category  String   @default("general")
+  id          String   @id @default(uuid())
+  key         String   @unique
+  value       Json?
+  type        String   @default("string")
+  category    String   @default("general")
   description String?
-  isEncrypted Boolean @default(false)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  isEncrypted Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   @@map("platform_settings")
 }
 
 model SystemAnnouncement {
-  id        String   @id @default(uuid())
+  id        String    @id @default(uuid())
   title     String
   body      String
-  type      String   @default("info")
-  priority  String   @default("normal")
+  type      String    @default("info")
+  priority  String    @default("normal")
   audiences String[]
   startsAt  DateTime?
   expiresAt DateTime?
-  isActive  Boolean  @default(true)
+  isActive  Boolean   @default(true)
   createdBy String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 
   @@index([isActive])
   @@index([type])
@@ -1412,21 +1485,21 @@ model FeatureFlag {
 }
 
 model ApiQuota {
-  id          String   @id @default(uuid())
-  tenantId    String   @unique
-  requestsPerMin  Int  @default(60)
-  requestsPerHour Int  @default(1000)
-  requestsPerDay  Int  @default(10000)
-  burstLimit  Int      @default(100)
-  concurrentLimit Int @default(10)
-  currentMin  Int      @default(0)
-  currentHour Int      @default(0)
-  currentDay  Int      @default(0)
-  resetMinAt  DateTime?
-  resetHourAt DateTime?
-  resetDayAt  DateTime?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id              String    @id @default(uuid())
+  tenantId        String    @unique
+  requestsPerMin  Int       @default(60)
+  requestsPerHour Int       @default(1000)
+  requestsPerDay  Int       @default(10000)
+  burstLimit      Int       @default(100)
+  concurrentLimit Int       @default(10)
+  currentMin      Int       @default(0)
+  currentHour     Int       @default(0)
+  currentDay      Int       @default(0)
+  resetMinAt      DateTime?
+  resetHourAt     DateTime?
+  resetDayAt      DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   @@map("api_quotas")
 }
@@ -1434,19 +1507,19 @@ model ApiQuota {
 // ─── Phase 3c: Infrastructure & DevOps ────────────────────────
 
 model Deployment {
-  id           String   @id @default(uuid())
-  tenantId     String
-  version      String
-  branch       String   @default("main")
-  commitHash   String?
-  status       String   @default("pending")
-  buildLog     String?
-  artifactUrl  String?
-  startedAt    DateTime?
-  completedAt  DateTime?
-  triggeredBy  String?
-  metadata     Json?
-  createdAt    DateTime @default(now())
+  id          String    @id @default(uuid())
+  tenantId    String
+  version     String
+  branch      String    @default("main")
+  commitHash  String?
+  status      String    @default("pending")
+  buildLog    String?
+  artifactUrl String?
+  startedAt   DateTime?
+  completedAt DateTime?
+  triggeredBy String?
+  metadata    Json?
+  createdAt   DateTime  @default(now())
 
   @@index([tenantId])
   @@index([status])
@@ -1482,17 +1555,17 @@ model HealthCheck {
 }
 
 model Backup {
-  id         String   @id @default(uuid())
-  tenantId   String
-  type       String   @default("full")
-  status     String   @default("pending")
-  sizeBytes  Int?
-  fileUrl    String?
-  includes   String[]
-  excludes   String[]
-  startedAt  DateTime?
+  id          String    @id @default(uuid())
+  tenantId    String
+  type        String    @default("full")
+  status      String    @default("pending")
+  sizeBytes   Int?
+  fileUrl     String?
+  includes    String[]
+  excludes    String[]
+  startedAt   DateTime?
   completedAt DateTime?
-  createdAt  DateTime @default(now())
+  createdAt   DateTime  @default(now())
 
   @@index([tenantId])
   @@map("backups")
@@ -1501,36 +1574,36 @@ model Backup {
 // ─── Phase 3c: Security & Compliance ──────────────────────────
 
 model SecurityPolicy {
-  id        String   @id @default(uuid())
-  tenantId  String   @unique
-  passwordMinLength Int    @default(8)
-  passwordRequireUpper Boolean @default(true)
-  passwordRequireLower Boolean @default(true)
-  passwordRequireNumber Boolean @default(true)
-  passwordRequireSymbol Boolean @default(true)
-  passwordHistoryCount Int @default(5)
-  passwordExpiryDays Int?
-  sessionTimeoutMin Int @default(60)
-  maxLoginAttempts Int @default(5)
-  lockoutDurationMin Int @default(15)
-  mfaRequired  Boolean @default(false)
-  mfaMethods   String[] @default(["totp"])
-  ipWhitelist  String[]
-  ipBlacklist  String[]
-  allowedDomains String[]
-  blockTor     Boolean @default(false)
-  maxSessionsPerUser Int @default(5)
-  dataRetentionDays Int @default(365)
-  auditRetentionDays Int @default(730)
-  updatedBy    String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id                    String   @id @default(uuid())
+  tenantId              String   @unique
+  passwordMinLength     Int      @default(8)
+  passwordRequireUpper  Boolean  @default(true)
+  passwordRequireLower  Boolean  @default(true)
+  passwordRequireNumber Boolean  @default(true)
+  passwordRequireSymbol Boolean  @default(true)
+  passwordHistoryCount  Int      @default(5)
+  passwordExpiryDays    Int?
+  sessionTimeoutMin     Int      @default(60)
+  maxLoginAttempts      Int      @default(5)
+  lockoutDurationMin    Int      @default(15)
+  mfaRequired           Boolean  @default(false)
+  mfaMethods            String[] @default(["totp"])
+  ipWhitelist           String[]
+  ipBlacklist           String[]
+  allowedDomains        String[]
+  blockTor              Boolean  @default(false)
+  maxSessionsPerUser    Int      @default(5)
+  dataRetentionDays     Int      @default(365)
+  auditRetentionDays    Int      @default(730)
+  updatedBy             String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 
   @@map("security_policies")
 }
 
 model ApiKey {
-  id         String   @id @default(uuid())
+  id         String    @id @default(uuid())
   tenantId   String?
   userId     String?
   name       String
@@ -1539,8 +1612,8 @@ model ApiKey {
   scopes     String[]
   expiresAt  DateTime?
   lastUsedAt DateTime?
-  isActive   Boolean  @default(true)
-  createdAt  DateTime @default(now())
+  isActive   Boolean   @default(true)
+  createdAt  DateTime  @default(now())
 
   @@index([tenantId])
   @@index([userId])
@@ -1549,18 +1622,18 @@ model ApiKey {
 }
 
 model SecurityEvent {
-  id          String   @id @default(uuid())
-  tenantId    String?
-  userId      String?
-  type        String
-  severity    String   @default("info")
-  source      String?
-  ipAddress   String?
-  userAgent   String?
-  location    String?
-  details     Json?
-  metadata    Json?
-  timestamp   DateTime @default(now())
+  id        String   @id @default(uuid())
+  tenantId  String?
+  userId    String?
+  type      String
+  severity  String   @default("info")
+  source    String?
+  ipAddress String?
+  userAgent String?
+  location  String?
+  details   Json?
+  metadata  Json?
+  timestamp DateTime @default(now())
 
   @@index([tenantId, type])
   @@index([userId])
@@ -1569,15 +1642,15 @@ model SecurityEvent {
 }
 
 model ConsentAudit {
-  id         String   @id @default(uuid())
-  tenantId   String?
-  userId     String
-  action     String
+  id          String   @id @default(uuid())
+  tenantId    String?
+  userId      String
+  action      String
   consentType String
-  granted    Boolean
-  ipAddress  String?
-  userAgent  String?
-  createdAt  DateTime @default(now())
+  granted     Boolean
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime @default(now())
 
   @@index([userId])
   @@map("consent_audits")
@@ -1586,41 +1659,41 @@ model ConsentAudit {
 // ─── Phase 3c: Developer Platform ─────────────────────────────
 
 model DeveloperApp {
-  id          String   @id @default(uuid())
-  tenantId    String
-  name        String
-  description String?
-  website     String?
+  id           String   @id @default(uuid())
+  tenantId     String
+  name         String
+  description  String?
+  website      String?
   callbackUrls String[]
-  scopes      String[]
-  clientId    String   @unique
+  scopes       String[]
+  clientId     String   @unique
   clientSecret String
-  isActive    Boolean  @default(true)
-  logoUrl     String?
-  createdBy   String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  isActive     Boolean  @default(true)
+  logoUrl      String?
+  createdBy    String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   @@index([tenantId])
   @@map("developer_apps")
 }
 
 model WebhookEndpoint {
-  id          String   @id @default(uuid())
-  tenantId    String
-  appId       String?
-  name        String
-  url         String
-  events      String[]
-  secret      String?
-  isActive    Boolean  @default(true)
-  retryCount  Int      @default(3)
-  timeoutMs   Int      @default(5000)
-  headers     Json?
-  lastStatus  String?
+  id              String    @id @default(uuid())
+  tenantId        String
+  appId           String?
+  name            String
+  url             String
+  events          String[]
+  secret          String?
+  isActive        Boolean   @default(true)
+  retryCount      Int       @default(3)
+  timeoutMs       Int       @default(5000)
+  headers         Json?
+  lastStatus      String?
   lastTriggeredAt DateTime?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   @@index([tenantId])
   @@map("webhook_endpoints")
@@ -1647,29 +1720,29 @@ model WebhookEventLog {
 // ─── Phase 4: Marketplace & Plugin System ─────────────────────
 
 model MarketplaceListing {
-  id          String   @id @default(uuid())
-  name        String
-  slug        String   @unique
-  type        String   @default("plugin")
-  description String?
-  version     String   @default("1.0.0")
-  author      String?
-  price       Decimal  @default(0)
-  currency    String   @default("USD")
-  categories  String[]
-  tags        String[]
-  screenshots String[]
-  iconUrl     String?
-  readme      String?
+  id           String   @id @default(uuid())
+  name         String
+  slug         String   @unique
+  type         String   @default("plugin")
+  description  String?
+  version      String   @default("1.0.0")
+  author       String?
+  price        Decimal  @default(0)
+  currency     String   @default("USD")
+  categories   String[]
+  tags         String[]
+  screenshots  String[]
+  iconUrl      String?
+  readme       String?
   configSchema Json?
-  permissions String[]
+  permissions  String[]
   dependencies Json?
-  isPublished Boolean  @default(false)
-  isFree      Boolean  @default(true)
-  downloads   Int      @default(0)
-  rating      Float    @default(0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  isPublished  Boolean  @default(false)
+  isFree       Boolean  @default(true)
+  downloads    Int      @default(0)
+  rating       Float    @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   installations PluginInstallation[]
 
@@ -1679,16 +1752,16 @@ model MarketplaceListing {
 }
 
 model PluginInstallation {
-  id             String   @id @default(uuid())
-  tenantId       String
-  listingId      String
-  version        String   @default("1.0.0")
-  isActive       Boolean  @default(true)
-  config         Json?
-  status         String   @default("installed")
-  installedAt    DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-  lastCheckedAt  DateTime?
+  id            String    @id @default(uuid())
+  tenantId      String
+  listingId     String
+  version       String    @default("1.0.0")
+  isActive      Boolean   @default(true)
+  config        Json?
+  status        String    @default("installed")
+  installedAt   DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  lastCheckedAt DateTime?
 
   listing MarketplaceListing @relation(fields: [listingId], references: [id], onDelete: Cascade)
 
@@ -1717,11 +1790,11 @@ model AssetCollection {
 }
 
 model AssetCollectionItem {
-  id           String         @id @default(uuid())
+  id           String   @id @default(uuid())
   collectionId String
   mediaId      String
-  order        Int            @default(0)
-  addedAt      DateTime       @default(now())
+  order        Int      @default(0)
+  addedAt      DateTime @default(now())
 
   collection AssetCollection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   media      Media           @relation(fields: [mediaId], references: [id], onDelete: Cascade)
@@ -1731,17 +1804,17 @@ model AssetCollectionItem {
 }
 
 model AssetShare {
-  id         String   @id @default(uuid())
-  tenantId   String
-  mediaId    String
-  token      String   @unique
-  expiresAt  DateTime?
-  maxDownloads Int?
-  downloadCount Int  @default(0)
-  password   String?
-  isActive   Boolean  @default(true)
-  createdBy  String?
-  createdAt  DateTime @default(now())
+  id            String    @id @default(uuid())
+  tenantId      String
+  mediaId       String
+  token         String    @unique
+  expiresAt     DateTime?
+  maxDownloads  Int?
+  downloadCount Int       @default(0)
+  password      String?
+  isActive      Boolean   @default(true)
+  createdBy     String?
+  createdAt     DateTime  @default(now())
 
   media Media @relation(fields: [mediaId], references: [id], onDelete: Cascade)
 
@@ -1750,16 +1823,16 @@ model AssetShare {
 }
 
 model StorageProvider {
-  id         String   @id @default(uuid())
-  tenantId   String?
-  name       String
-  provider   String   @default("local")
-  config     Json?
-  isDefault  Boolean  @default(false)
-  isActive   Boolean  @default(true)
-  usedBytes  BigInt   @default(0)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id        String   @id @default(uuid())
+  tenantId  String?
+  name      String
+  provider  String   @default("local")
+  config    Json?
+  isDefault Boolean  @default(false)
+  isActive  Boolean  @default(true)
+  usedBytes BigInt   @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([tenantId])
   @@map("storage_providers")
@@ -1768,21 +1841,21 @@ model StorageProvider {
 // ─── Existing Models (preserved) ───────────────────────────────
 
 model User {
-  id            String     @id @default(uuid())
-  email         String     @unique
-  phoneNumber   String?
-  passwordHash  String?
-  googleId      String?    @unique
-  appleId       String?    @unique
-  firstName     String
-  lastName      String
-  status        UserStatus @default(active)
-  emailVerified Boolean    @default(false)
-  phoneVerified Boolean    @default(false)
-  deactivatedAt      DateTime?
+  id                  String     @id @default(uuid())
+  email               String     @unique
+  phoneNumber         String?
+  passwordHash        String?
+  googleId            String?    @unique
+  appleId             String?    @unique
+  firstName           String
+  lastName            String
+  status              UserStatus @default(active)
+  emailVerified       Boolean    @default(false)
+  phoneVerified       Boolean    @default(false)
+  deactivatedAt       DateTime?
   scheduledDeletionAt DateTime?
-  createdAt     DateTime   @default(now())
-  updatedAt     DateTime   @updatedAt
+  createdAt           DateTime   @default(now())
+  updatedAt           DateTime   @updatedAt
 
   profile         Profile?
   tenants         TenantUser[]
@@ -1831,57 +1904,59 @@ model RefreshToken {
 }
 
 model Tenant {
-  id          String       @id @default(uuid())
-  name        String
-  slug        String       @unique
-  email       String?
-  phone       String?
-  logo        String?
-  category    String?
-  status          TenantStatus @default(draft)
-  publishedAt     DateTime?
-  draftVersion    Int          @default(0)
-  activeReleaseId String?
+  id                 String       @id @default(uuid())
+  name               String
+  slug               String       @unique
+  email              String?
+  phone              String?
+  logo               String?
+  category           String?
+  status             TenantStatus @default(draft)
+  publishedAt        DateTime?
+  draftVersion       Int          @default(0)
+  activeReleaseId    String?
   // Two-stage approval: stage-1 merchant verification, stage-2 app approval.
   // TenantStatus (draft/published/...) keeps legacy lifecycle untouched.
-  verificationStatus String @default("pending")
+  verificationStatus String       @default("pending")
   verifiedAt         DateTime?
-  appStatus          String @default("none")
+  appStatus          String       @default("none")
   appSubmittedAt     DateTime?
   appReviewedAt      DateTime?
   appReviewNote      String?
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
 
-  users               TenantUser[]
-  consents            Consent[]
-  pages               Page[]
-  navigation          Navigation?
-  theme               Theme?
-  products            Product[]
-  categories          Category[]
-  media               Media[]
-  auditLogs           AuditLog[]
-  config              TenantConfig?
-  subscription        Subscription?
-  domains             TenantDomain[]
-  drafts              Draft[]
-  releases            Release[]
-  draftPages          DraftPage[]
-  assetFolders        AssetFolder[]
-  coupons             Coupon[]
-  taxRules            TaxRule[]
-  bookingServices     BookingService[]
-  staffMembers        StaffMember[]
-  resources           BookingResource[]
-  schedules           Schedule[]
-  bookingLocations    BookingLocation[]
-  cancellationPolicies CancellationPolicy[]
+  users                 TenantUser[]
+  consents              Consent[]
+  pages                 Page[]
+  navigation            Navigation?
+  theme                 Theme?
+  products              Product[]
+  categories            Category[]
+  media                 Media[]
+  auditLogs             AuditLog[]
+  config                TenantConfig?
+  subscription          Subscription?
+  domains               TenantDomain[]
+  drafts                Draft[]
+  releases              Release[]
+  draftPages            DraftPage[]
+  assetFolders          AssetFolder[]
+  coupons               Coupon[]
+  taxRules              TaxRule[]
+  bookingServices       BookingService[]
+  staffMembers          StaffMember[]
+  resources             BookingResource[]
+  schedules             Schedule[]
+  bookingLocations      BookingLocation[]
+  cancellationPolicies  CancellationPolicy[]
   integrationConnectors IntegrationConnector[]
-  forms               Form[]
-  paymentAccounts     TenantPaymentAccount[]
-  kycSubmissions      KycSubmission[]
-  feedPosts           FeedPost[]
+  forms                 Form[]
+  paymentAccounts       TenantPaymentAccount[]
+  kycSubmissions        KycSubmission[]
+  feedPosts             FeedPost[]
+  announcements         Announcement[]
+  announcementReplies   AnnouncementReply[]
 
   @@map("tenants")
 }
@@ -2043,29 +2118,29 @@ model Navigation {
 }
 
 model Theme {
-  id                 String   @id @default(uuid())
-  tenantId           String   @unique
-  primaryColor       String   @default("#0066FF")
-  secondaryColor     String   @default("#00CC66")
-  backgroundColor    String   @default("#FFFFFF")
-  textColor          String   @default("#1A1A1A")
-  fontFamily         String   @default("Inter")
-  borderRadius       String   @default("8px")
-  logo               String?
-  favicon            String?
-  darkPrimaryColor   String   @default("#4D9FFF")
-  darkSecondaryColor String   @default("#33DD77")
-  darkBackgroundColor String  @default("#121212")
-  darkTextColor      String   @default("#E0E0E0")
-  typography         Json?
-  spacing            Json?
-  version            Int      @default(1)
-  isActive           Boolean  @default(true)
-  custom             Json?
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  id                  String   @id @default(uuid())
+  tenantId            String   @unique
+  primaryColor        String   @default("#0066FF")
+  secondaryColor      String   @default("#00CC66")
+  backgroundColor     String   @default("#FFFFFF")
+  textColor           String   @default("#1A1A1A")
+  fontFamily          String   @default("Inter")
+  borderRadius        String   @default("8px")
+  logo                String?
+  favicon             String?
+  darkPrimaryColor    String   @default("#4D9FFF")
+  darkSecondaryColor  String   @default("#33DD77")
+  darkBackgroundColor String   @default("#121212")
+  darkTextColor       String   @default("#E0E0E0")
+  typography          Json?
+  spacing             Json?
+  version             Int      @default(1)
+  isActive            Boolean  @default(true)
+  custom              Json?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 
-  tenant   Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant   Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   versions ThemeVersion[]
 
   @@map("themes")
@@ -2110,40 +2185,40 @@ model Category {
 }
 
 model Product {
-  id             String   @id @default(uuid())
-  tenantId       String
-  categoryId     String?
-  name           String
-  slug           String
-  description    String?
+  id               String   @id @default(uuid())
+  tenantId         String
+  categoryId       String?
+  name             String
+  slug             String
+  description      String?
   shortDescription String?
-  weight         Decimal?
-  weightUnit     String?
-  length         Decimal?
-  width          Decimal?
-  height         Decimal?
-  dimensionUnit  String?
-  type           String   @default("physical")
-  price          Decimal  @default(0)
-  compareAtPrice Decimal?
-  currency       String   @default("NGN")
-  extendedPricing Json?
-  stock          Int      @default(0)
-  reservedStock  Int      @default(0)
-  sku            String?
-  badge          String?
-  tags           String[] @default([])
-  isActive       Boolean  @default(true)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  weight           Decimal?
+  weightUnit       String?
+  length           Decimal?
+  width            Decimal?
+  height           Decimal?
+  dimensionUnit    String?
+  type             String   @default("physical")
+  price            Decimal  @default(0)
+  compareAtPrice   Decimal?
+  currency         String   @default("NGN")
+  extendedPricing  Json?
+  stock            Int      @default(0)
+  reservedStock    Int      @default(0)
+  sku              String?
+  badge            String?
+  tags             String[] @default([])
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
-  tenant   Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  category Category?      @relation(fields: [categoryId], references: [id])
-  images    ProductImage[]
-  variants  ProductVariant[]
-  cartItems CartItem[]
+  tenant     Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  category   Category?        @relation(fields: [categoryId], references: [id])
+  images     ProductImage[]
+  variants   ProductVariant[]
+  cartItems  CartItem[]
   orderItems OrderItem[]
-  feedPosts FeedPost[]
+  feedPosts  FeedPost[]
 
   @@unique([tenantId, slug])
   @@index([tenantId])
@@ -2152,16 +2227,16 @@ model Product {
 }
 
 model InventoryReservation {
-  id             String   @id @default(uuid())
-  tenantId       String
-  productId      String
-  variantId      String?
-  quantity       Int      @default(1)
-  sessionId      String?
-  userId         String?
-  expiresAt      DateTime
-  status         String   @default("active")
-  createdAt      DateTime @default(now())
+  id        String   @id @default(uuid())
+  tenantId  String
+  productId String
+  variantId String?
+  quantity  Int      @default(1)
+  sessionId String?
+  userId    String?
+  expiresAt DateTime
+  status    String   @default("active")
+  createdAt DateTime @default(now())
 
   @@index([tenantId])
   @@index([productId])
@@ -2200,11 +2275,11 @@ model Media {
   tags       String[]
   createdAt  DateTime @default(now())
 
-  tenant   Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  folder   AssetFolder?  @relation(fields: [folderId], references: [id])
-  versions AssetVersion[]
+  tenant          Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  folder          AssetFolder?          @relation(fields: [folderId], references: [id])
+  versions        AssetVersion[]
   collectionItems AssetCollectionItem[]
-  shares         AssetShare[]
+  shares          AssetShare[]
 
   @@index([tenantId])
   @@index([templateId])
@@ -2257,8 +2332,8 @@ model SupportTicket {
   id          String    @id @default(uuid())
   subject     String
   description String
-  status      String    @default("open")    // open | in_progress | escalated | resolved | closed
-  priority    String    @default("normal")  // low | normal | high | urgent
+  status      String    @default("open") // open | in_progress | escalated | resolved | closed
+  priority    String    @default("normal") // low | normal | high | urgent
   category    String    @default("general")
   tenantId    String?
   reportedBy  String?
@@ -2282,7 +2357,7 @@ model SupportTicket {
 model SupportTicketEvent {
   id        String   @id @default(uuid())
   ticketId  String
-  type      String   // created | comment | assigned | escalated | resolved | status_changed
+  type      String // created | comment | assigned | escalated | resolved | status_changed
   actorId   String?
   message   String?
   metadata  Json?
@@ -2304,7 +2379,7 @@ model PlatformPolicy {
   title       String
   body        String
   category    String    @default("general")
-  status      String    @default("draft")   // draft | in_review | published | archived
+  status      String    @default("draft") // draft | in_review | published | archived
   version     Int       @default(1)
   effectiveAt DateTime?
   publishedAt DateTime?

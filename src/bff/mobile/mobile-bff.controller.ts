@@ -99,6 +99,30 @@ export class MobileBffController {
     return this.mobile.trackFeedCta(postId, userId);
   }
 
+  @UseGuards(OptionalJwtAuthGuard)
+  @Get('inbox')
+  @ApiOperation({ summary: 'Platform comms inbox: mobile broadcasts + direct messages (actor-keyed)' })
+  getInbox(
+    @Query('page') page: string,
+    @Query('limit') limit: string,
+    @Query('actorId') actorId: string,
+    @CurrentUser('id') userId?: string,
+  ) {
+    return this.mobile.getInbox(page, limit, userId ?? actorId, userId);
+  }
+
+  @UseGuards(OptionalJwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  @Post('inbox/:id/read')
+  @ApiOperation({ summary: 'Mark an inbox message read (drives unread dots)' })
+  markInboxRead(
+    @Param('id') id: string,
+    @Query('actorId') actorId: string,
+    @CurrentUser('id') userId?: string,
+  ) {
+    return this.mobile.markInboxRead(id, userId ?? actorId);
+  }
+
   @Public()
   @Get('discovery/categories/:categoryId/apps')
   @ApiOperation({ summary: 'Get published tenant apps under a discovery category' })

@@ -1,4 +1,4 @@
-import { Module, MiddlewareConsumer, NestModule } from '@nestjs/common';
+﻿import { Module, MiddlewareConsumer, NestModule } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
@@ -13,6 +13,7 @@ import { MediaModule } from './modules/media/media.module';
 import { QrModule } from './modules/qr/qr.module';
 import { DiscoveryModule } from './modules/discovery/discovery.module';
 import { FeedModule } from './modules/feed/feed.module';
+import { CommsModule } from './modules/comms/comms.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { UsersModule } from './modules/users/users.module';
@@ -85,6 +86,7 @@ import { PlatformAuditInterceptor } from './modules/admin/platform-audit.interce
     QrModule,
     DiscoveryModule,
     FeedModule,
+    CommsModule,
     AdminModule,
     NotificationsModule,
     HealthModule,

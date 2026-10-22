@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, NotFoundException, Logger } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException, ForbiddenException, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma.service';
 
 export interface FeedMediaRefLike {
@@ -7,6 +7,13 @@ export interface FeedMediaRefLike {
   type: 'image' | 'video';
   posterUrl?: string;
 }
+
+/** Posts are deleted from the database this long after they were created. */
+export const PROMO_LIFETIME_HOURS = 24;
+/** Videos longer than this never reach a feed post. */
+export const PROMO_VIDEO_MAX_SECONDS = 90;
+/** Tenants without a subscription (Free) can post this many promos per UTC day. */
+export const FREE_TIER_DAILY_PROMO_POSTS = 5;
 
 const TENANT_ONSTORE_SELECT = {
   id: true,
@@ -39,6 +46,7 @@ const POST_SELECT = {
   patronageCount: true,
   createdAt: true,
   updatedAt: true,
+  expiresAt: true,
   tenant: { select: TENANT_ONSTORE_SELECT },
   product: { select: PRODUCT_SELECT },
 } as const;
@@ -75,15 +83,102 @@ function validateMedia(media: FeedMediaRefLike[] | undefined | null) {
 }
 
 @Injectable()
-export class FeedService {
+export class FeedService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(FeedService.name);
+  private purgeTimer?: ReturnType<typeof setInterval>;
 
   constructor(private prisma: PrismaService) {}
+
+  /** Fans of the ephemeral feed never see leftovers if the timer stalls. */
+  private notExpiredWhere() {
+    return {
+      OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+    };
+  }
+
+  onModuleInit() {
+    // Purge expired posts on boot and every 5 minutes.
+    this.purgeExpired().catch((err) => this.logger.warn(`Feed purge failed: ${err?.message}`));
+    this.purgeTimer = setInterval(() => {
+      this.purgeExpired().catch((err) => this.logger.warn(`Feed purge failed: ${err?.message}`));
+    }, 5 * 60 * 1000);
+  }
+
+  onModuleDestroy() {
+    if (this.purgeTimer) clearInterval(this.purgeTimer);
+  }
+
+  /**
+   * Delete promo posts older than their lifetime (24h). Likes cascade via
+   * FK, so no manual cleanup is needed.
+   */
+  async purgeExpired() {
+    const { count } = await this.prisma.feedPost.deleteMany({
+      where: { expiresAt: { lt: new Date() } },
+    });
+    return { count };
+  }
+
+  /** Resolve a tenant's tier key; "free" when no active subscription exists. */
+  private async getTier(tenantId: string): Promise<{ tierSlug: string | null; dailyLimit: number }> {
+    const subscription = await this.prisma.subscription.findUnique({
+      where: { tenantId },
+      include: { plan: true },
+    });
+    const active = subscription &&
+      (subscription.status === 'active' || subscription.status === 'trial') &&
+      (!subscription.endDate || subscription.endDate > new Date());
+    if (!active || !subscription.plan) {
+      return { tierSlug: active && subscription?.plan ? subscription.plan.slug : null, dailyLimit: FREE_TIER_DAILY_PROMO_POSTS };
+    }
+    const limits = (subscription.plan.limits ?? {}) as Record<string, unknown>;
+    const configured = Number(limits?.dailyPromoPosts);
+    return {
+      tierSlug: subscription.plan.slug,
+      dailyLimit: Number.isFinite(configured) && configured > 0 ? configured : FREE_TIER_DAILY_PROMO_POSTS,
+    };
+  }
+
+  private startOfUtcDay(now: Date): Date {
+    return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  }
+
+  /** Quota + tier snapshot for the merchant composer. */
+  async getQuota(tenantId: string) {
+    const { tierSlug, dailyLimit } = await this.getTier(tenantId);
+    const used = dailyLimit === Infinity
+      ? await this.countPostsToday(tenantId)
+      : Math.min(await this.countPostsToday(tenantId), dailyLimit);
+    return {
+      tier: tierSlug ?? 'free',
+      limit: dailyLimit,
+      used,
+      remaining: dailyLimit === Infinity ? null : Math.max(0, dailyLimit - used),
+    };
+  }
+
+  private countPostsToday(tenantId: string) {
+    return this.prisma.feedPost.count({
+      where: { tenantId, createdAt: { gte: this.startOfUtcDay(new Date()) } },
+    });
+  }
+
+  private async assertDailyQuota(tenantId: string) {
+    const { tierSlug, dailyLimit } = await this.getTier(tenantId);
+    if (dailyLimit === Infinity) return;
+    const used = await this.countPostsToday(tenantId);
+    if (used >= dailyLimit) {
+      throw new ForbiddenException(
+        `Daily promo limit reached (${used}/${dailyLimit}${tierSlug ? ` on ${tierSlug}` : ' today'}) — your promos from today stay up, more slots unlock tomorrow`,
+      );
+    }
+  }
 
   /** Merchant dashboard: create a promo post. */
   async createPost(tenantId: string, input: CreateFeedPostInput) {
     const media = validateMedia(input.media);
     await this.assertProductBelongsToTenant(tenantId, input.productId);
+    await this.assertDailyQuota(tenantId);
 
     return this.prisma.feedPost.create({
       data: {
@@ -97,6 +192,7 @@ export class FeedService {
           type: item.type,
           posterUrl: item.posterUrl ?? null,
         })),
+        expiresAt: new Date(Date.now() + PROMO_LIFETIME_HOURS * 60 * 60 * 1000),
       },
       select: POST_SELECT as any,
     });
@@ -153,6 +249,7 @@ export class FeedService {
       where: {
         id: postId,
         status: 'published',
+        ...this.notExpiredWhere(),
         tenant: { status: 'published', activeReleaseId: { not: null } },
       },
       select: POST_SELECT as any,
