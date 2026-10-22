@@ -174,11 +174,12 @@ export class FeedService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  /** Merchant dashboard: create a promo post. */
-  async createPost(tenantId: string, input: CreateFeedPostInput) {
+  /** Merchant dashboard: create a promo post. Platform-owned posts (admin
+   * promos) pass `{ skipQuota: true }` — quotas meter merchants, not the platform. */
+  async createPost(tenantId: string, input: CreateFeedPostInput, opts?: { skipQuota?: boolean }) {
     const media = validateMedia(input.media);
     await this.assertProductBelongsToTenant(tenantId, input.productId);
-    await this.assertDailyQuota(tenantId);
+    if (!opts?.skipQuota) await this.assertDailyQuota(tenantId);
 
     return this.prisma.feedPost.create({
       data: {

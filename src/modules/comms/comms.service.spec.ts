@@ -5,9 +5,11 @@ const prismaMock = {
   tenant: {
     upsert: jest.fn(),
     findUnique: jest.fn(),
+    findMany: jest.fn(),
   },
   user: {
     findUnique: jest.fn(),
+    findMany: jest.fn(),
   },
   announcement: {
     create: jest.fn(),
@@ -33,25 +35,15 @@ const comms = new CommsService(prismaMock as any);
 describe('CommsService (platform messaging)', () => {
   beforeEach(() => jest.clearAllMocks());
 
-  it('rejects merchants audiences carrying media (mobile-only media rule)', async () => {
+  it('every audience carries media — merchant broadcasts included', async () => {
+    prismaMock.announcement.create.mockResolvedValue({ id: 'a-1', kind: 'broadcast', audience: 'merchants' });
+    const media = [{ url: 'https://cdn.example.test/a.jpg', type: 'image' } as any];
     await expect(
-      comms.createAnnouncement({
-        kind: 'broadcast',
-        audience: 'merchants',
-        body: 'Maintenance window tonight',
-        media: [{ url: 'https://cdn.example.test/a.jpg', type: 'image' } as any],
-      }),
-    ).rejects.toThrow('Media announcements can only reach mobile users');
-    // both/mobile audiences carry media fine
-    prismaMock.announcement.create.mockResolvedValue({ id: 'a-1', kind: 'broadcast', audience: 'mobile' });
-    await expect(
-      comms.createAnnouncement({
-        kind: 'broadcast',
-        audience: 'mobile',
-        body: 'New feature',
-        media: [{ url: 'https://cdn.example.test/a.jpg', type: 'image' } as any],
-      }),
-    ).resolves.toMatchObject({ audience: 'mobile' });
+      comms.createAnnouncement({ kind: 'broadcast', audience: 'merchants', body: 'Merchants receive media too', media }),
+    ).resolves.toMatchObject({ audience: 'merchants' });
+    prismaMock.announcement.create.mockResolvedValue({ id: 'a-2', audience: 'mobile' });
+    await expect(comms.createAnnouncement({ kind: 'broadcast', audience: 'mobile', body: 'New feature', media }))
+      .resolves.toMatchObject({ audience: 'mobile' });
   });
 
   it('broadcast needs a valid audience; both covers both apps surfaces', async () => {
@@ -77,14 +69,24 @@ describe('CommsService (platform messaging)', () => {
     );
   });
 
-  it('direct merchant messages cannot carry media', async () => {
+  it('direct merchant messages carry media like any other message', async () => {
     prismaMock.tenant.findUnique.mockResolvedValue({ id: 't-1' });
+    prismaMock.announcement.create.mockResolvedValue({ id: 'a-1', kind: 'direct' });
     await expect(
       comms.createAnnouncement({
         kind: 'direct', body: 'Yo', tenantId: 't-1',
         media: [{ url: 'https://cdn.example.test/a.jpg', type: 'image' } as any],
       }),
-    ).rejects.toThrow('mobile users');
+    ).resolves.toMatchObject({ kind: 'direct' });
+  });
+
+  it('recipients picker lists tenants and excludes platform staff from the user list', async () => {
+    prismaMock.tenant.findMany.mockResolvedValue([{ id: 't-1', name: 'Mama', slug: 'mama', logo: null, status: 'published' }]);
+    prismaMock.user.findMany.mockResolvedValue([]);
+    const result = await comms.listRecipients();
+    expect(result.tenants).toEqual([expect.objectContaining({ id: 't-1' })]);
+    const userWhere = (prismaMock.user.findMany.mock.calls[0][0] as any).where;
+    expect(userWhere.roles.none.role.name.in).toContain('platform_operator');
   });
 
   it('merchant inbox matches broadcasts (merchants/both) + direct tenant messages', async () => {

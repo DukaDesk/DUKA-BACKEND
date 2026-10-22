@@ -26,6 +26,12 @@ export class AdminMessagingController {
     return this.comms.createAnnouncement(dto);
   }
 
+  @Get('messages/recipients')
+  @ApiOperation({ summary: 'Recipient pickers: merchant tenants + mobile app users' })
+  async recipients() {
+    return this.comms.listRecipients();
+  }
+
   @Get('messages')
   @ApiOperation({ summary: 'List platform messaging inbox' })
   async list(@Query() query: ListAnnouncementsDto) {

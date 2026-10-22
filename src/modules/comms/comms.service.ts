@@ -2,8 +2,6 @@
 import { PrismaService } from '../../common/prisma.service';
 import type { CommsMediaRef } from './dto/comms.dto';
 
-/** Media announcements may only target the mobile (secondary) audience. */
-export const MEDIA_MOBILE_ONLY = true as const;
 /** Platform-owned "tenant" record whose DAM stores announcement media. */
 export const PLATFORM_TENANT_SLUG = 'duka-desk-platform';
 
@@ -73,22 +71,6 @@ export class CommsService {
     return platform.id;
   }
 
-  /**
-   * Product rule: a pure `merchants` announcement is text-only. Media is
-   * allowed when the audience includes mobile users, or on direct sends to
-   * a mobile recipient.
-   */
-  private assertMediaRule(input: { kind: string; audience?: string; tenantId?: string; media?: CommsMediaRef[] }) {
-    const hasMedia = Array.isArray(input.media) && input.media.length > 0;
-    if (!hasMedia) return;
-    const mobileOnly = input.kind === 'broadcast'
-      ? input.audience !== 'merchants'
-      : !input.tenantId; // direct to a mobile recipient keeps media; merchant DMs are text-only
-    if (!mobileOnly) {
-      throw new BadRequestException('Media announcements can only reach mobile users — text-only for merchants');
-    }
-  }
-
   /** Admin: compose a broadcast or a direct message. */
   async createAnnouncement(input: {
     kind: 'broadcast' | 'direct';
@@ -108,7 +90,6 @@ export class CommsService {
       if (!['merchants', 'mobile', 'both'].includes(input.audience ?? '')) {
         throw new BadRequestException('broadcast requires audience: merchants | mobile | both');
       }
-      this.assertMediaRule(input);
       return this.prisma.announcement.create({
         data: {
           kind: 'broadcast',
@@ -135,7 +116,6 @@ export class CommsService {
     if (input.tenantId) {
       const tenant = await this.prisma.tenant.findUnique({ where: { id: input.tenantId }, select: { id: true } });
       if (!tenant) throw new BadRequestException('tenantId does not exist');
-      this.assertMediaRule(input);
       return this.prisma.announcement.create({
         data: {
           kind: 'direct',
@@ -150,7 +130,6 @@ export class CommsService {
     if (input.recipientUserId) {
       const user = await this.prisma.user.findUnique({ where: { id: input.recipientUserId }, select: { id: true } });
       if (!user) throw new BadRequestException('recipientUserId does not exist');
-      this.assertMediaRule(input);
       return this.prisma.announcement.create({
         data: {
           kind: 'direct',
@@ -162,7 +141,6 @@ export class CommsService {
         select: ANNOUNCEMENT_SELECT as any,
       });
     }
-    this.assertMediaRule(input);
     return this.prisma.announcement.create({
       data: {
         kind: 'direct',
@@ -173,6 +151,50 @@ export class CommsService {
       },
       select: ANNOUNCEMENT_SELECT as any,
     });
+  }
+
+  /**
+   * Admin recipients picker: merchant tenants + mobile app users. Platform
+   * staff are excluded — direct recipients are recipients, not colleagues.
+   */
+  private static readonly PLATFORM_ROLE_NAMES = [
+    'super_admin', 'platform_admin', 'platform_operator', 'support_agent',
+  ];
+
+  async listRecipients() {
+    const [tenants, users] = await Promise.all([
+      this.prisma.tenant.findMany({
+        select: { id: true, name: true, slug: true, logo: true, status: true },
+        orderBy: { createdAt: 'asc' },
+        take: 500,
+      }),
+      this.prisma.user.findMany({
+        where: {
+          status: { in: ['active', 'pending'] },
+          roles: { none: { role: { name: { in: CommsService.PLATFORM_ROLE_NAMES } } } },
+        },
+        select: {
+          id: true, firstName: true, lastName: true, email: true,
+          status: true, createdAt: true,
+          profile: { select: { avatarUrl: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 500,
+      }),
+    ]);
+    return {
+      tenants: tenants.map(tenant => ({
+        id: tenant.id, name: tenant.name, slug: tenant.slug, logo: tenant.logo, status: tenant.status,
+      })),
+      users: users.map((user: any) => ({
+        id: user.id,
+        name: [user.profile?.name, [user.firstName, user.lastName].filter(Boolean).join(' ')].find(Boolean) || user.email,
+        email: user.email,
+        photo: user.profile?.avatarUrl ?? null,
+        status: user.status,
+        createdAt: user.createdAt,
+      })),
+    };
   }
 
   /** Admin: list everything for the messaging inbox. */

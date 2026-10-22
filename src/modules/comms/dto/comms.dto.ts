@@ -15,8 +15,6 @@ import {
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
-export const COMMS_MEDIA_MOBILE_ONLY = true as const;
-
 export class CommsMediaRef {
   @ApiPropertyOptional({ description: 'Uploaded Media asset id backing this media' })
   @IsOptional()
@@ -44,7 +42,7 @@ export class CreateAnnouncementDto {
 
   @ApiPropertyOptional({
     enum: ['merchants', 'mobile', 'both'],
-    description: 'Broadcast audience. Media is only valid when the audience includes mobile users.',
+    description: 'Broadcast audience: merchants (dashboards), mobile (app inbox) or both',
   })
   @IsOptional()
   @IsIn(['merchants', 'mobile', 'both'])

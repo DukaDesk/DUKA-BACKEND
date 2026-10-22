@@ -2,6 +2,7 @@ import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma.service';
 import { RedisService } from '../../common/redis/redis.service';
 import { ActiveReleaseService } from '../../shared/releases/active-release.service';
+import { PLATFORM_TENANT_SLUG } from '../../modules/comms/comms.service';
 
 @Injectable()
 export class MobileBffService {
@@ -150,6 +151,7 @@ export class MobileBffService {
   private privateizeFeedPost(post: any, actorId?: string) {
     return {
       ...post,
+      platform: post.tenant?.slug === PLATFORM_TENANT_SLUG,
       likedByMe: actorId ? post.likes?.length > 0 : false,
       likes: undefined,
     };
@@ -158,13 +160,23 @@ export class MobileBffService {
   async getFeedPosts(page: string | undefined, limit: string | undefined, actorId?: string) {
     const pageNum = parseInt(page || '1', 10) || 1;
     const limitNum = Math.min(parseInt(limit || '10', 10) || 10, 30);
-    const where = {
-      status: 'published' as const,
-      // Posts are ephemeral — hide any that out-lived their 24h window even
-      // if the purge sweep has not run yet.
-      OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
-      tenant: { status: 'published' as const, activeReleaseId: { not: null } },
+    // Posts are ephemeral — hide any that out-lived their 24h window even if
+    // the purge sweep has not run yet. Two surfaces feed the app: merchants
+    // running a published (live) app, and platform posts (admin promotions)
+    // published under the dedicated platform tenant.
+    const livePost = {
+      AND: [
+        { OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] },
+        { tenant: { status: 'published' as const, activeReleaseId: { not: null } } },
+      ],
     };
+    const platformPost = {
+      AND: [
+        { OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] },
+        { tenant: { slug: PLATFORM_TENANT_SLUG } },
+      ],
+    };
+    const where = { status: 'published' as const, OR: [livePost, platformPost] };
     const [rows, total] = await Promise.all([
       this.prisma.feedPost.findMany({
         where,
@@ -189,8 +201,15 @@ export class MobileBffService {
       where: {
         id: postId,
         status: 'published',
-        OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
-        tenant: { status: 'published', activeReleaseId: { not: null } },
+        AND: [
+          { OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] },
+          {
+            OR: [
+              { tenant: { status: 'published', activeReleaseId: { not: null } } },
+              { tenant: { slug: PLATFORM_TENANT_SLUG } },
+            ],
+          },
+        ],
       },
       select: { ...MobileBffService.FEED_POST_SELECT, likes: {
         select: { actorId: true },
