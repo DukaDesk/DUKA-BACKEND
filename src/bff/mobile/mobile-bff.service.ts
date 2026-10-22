@@ -160,6 +160,9 @@ export class MobileBffService {
     const limitNum = Math.min(parseInt(limit || '10', 10) || 10, 30);
     const where = {
       status: 'published' as const,
+      // Posts are ephemeral — hide any that out-lived their 24h window even
+      // if the purge sweep has not run yet.
+      OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
       tenant: { status: 'published' as const, activeReleaseId: { not: null } },
     };
     const [rows, total] = await Promise.all([
@@ -186,6 +189,7 @@ export class MobileBffService {
       where: {
         id: postId,
         status: 'published',
+        OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
         tenant: { status: 'published', activeReleaseId: { not: null } },
       },
       select: { ...MobileBffService.FEED_POST_SELECT, likes: {
@@ -197,6 +201,64 @@ export class MobileBffService {
       throw new NotFoundException({ code: 'POST_NOT_FOUND', message: 'Post not found' });
     }
     return this.privateizeFeedPost(post, actorId);
+  }
+
+  // ─── Platform comms inbox (public broadcasts + direct to the actor) ──
+  // Same actor rule as the feed: signed-in app users key receipts on their
+  // userId; anonymous devices key on the persistent device actor key.
+
+  private inboxWhereFor(actorId: string, userId?: string) {
+    const channel: any[] = [
+      { kind: 'broadcast', audience: { in: ['mobile', 'both'] } },
+    ];
+    if (userId) channel.push({ kind: 'direct', recipientUserId: userId });
+    if (actorId) channel.push({ kind: 'direct', recipientActorId: actorId });
+    return { OR: channel };
+  }
+
+  async getInbox(page: string | undefined, limit: string | undefined, actorId: string, userId?: string) {
+    const pageNum = parseInt(page || '1', 10) || 1;
+    const limitNum = Math.min(parseInt(limit || '20', 10) || 20, 50);
+    const where = this.inboxWhereFor(actorId, userId);
+    const [rows, total] = await Promise.all([
+      this.prisma.announcement.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: (pageNum - 1) * limitNum,
+        take: limitNum,
+        select: {
+          id: true, kind: true, audience: true, title: true, body: true,
+          media: true, createdAt: true,
+          reads: { where: { actorId }, select: { readAt: true } },
+        },
+      }),
+      this.prisma.announcement.count({ where }),
+    ]);
+    const data = rows.map((row: any) => ({
+      id: row.id,
+      kind: row.kind,
+      audience: row.audience,
+      title: row.title,
+      body: row.body,
+      media: row.media ?? [],
+      createdAt: row.createdAt,
+      readAt: row.reads?.[0]?.readAt ?? null,
+      unread: row.reads?.length === 0,
+    }));
+    return { data, meta: { page: pageNum, limit: limitNum, total, pages: Math.ceil(total / limitNum) }, unread: data.filter(item => item.unread).length };
+  }
+
+  async markInboxRead(announcementId: string, actorId: string) {
+    const existing = await this.prisma.announcementRead.findFirst({
+      where: { announcementId, actorId },
+      select: { id: true, readAt: true },
+    });
+    if (existing) return { id: existing.id, readAt: existing.readAt, alreadyRead: true };
+    const read = await this.prisma.announcementRead.create({
+      data: { announcementId, actorId },
+      select: { id: true, readAt: true },
+    });
+    return { id: read.id, readAt: read.readAt, alreadyRead: false };
   }
 
   /** Toggle a like. Logged-in actors dedupe by userId; anonymous by device key. */
