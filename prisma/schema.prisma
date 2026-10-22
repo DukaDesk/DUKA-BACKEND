@@ -1124,6 +1124,55 @@ model AnalyticsEvent {
   @@map("analytics_events")
 }
 
+// ─── Promo feed: merchant posts driving discovery ────────────
+// Merchants post pictures/videos (optionally tied to a product) so app
+// users can like, share, and patronize straight into the merchant's
+// published app. `media` is an array of {mediaId?, url, type, posterUrl?}
+// referencing uploaded Media URLs — string refs, same as ProductImage.
+// Public surfacing is gated on the tenant's publication (activeReleaseId),
+// not on the post itself; `status: retired` hides a post without delete.
+model FeedPost {
+  id             String   @id @default(uuid())
+  tenantId       String
+  caption        String?
+  productId      String?
+  ctaLabel       String   @default("Buy Now")
+  media          Json
+  status         String   @default("published")
+  likeCount      Int      @default(0)
+  shareCount     Int      @default(0)
+  patronageCount Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  tenant  Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  product Product?   @relation(fields: [productId], references: [id], onDelete: SetNull)
+  likes   FeedLike[]
+
+  @@index([tenantId, createdAt])
+  @@index([status, createdAt])
+  @@map("feed_posts")
+}
+
+// One row per (post, actor). Merchants only ever read aggregate counts —
+// likes are anonymous to them. `userId` is set when the actor was signed
+// in so likes can become a saved/wishlist surface later; anonymous actors
+// pass a device key as actorId.
+model FeedLike {
+  id        String   @id @default(uuid())
+  postId    String
+  actorId   String
+  userId    String?
+  createdAt DateTime @default(now())
+
+  post FeedPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@unique([postId, actorId])
+  @@index([actorId])
+  @@map("feed_likes")
+}
+
 model Dashboard {
   id        String              @id @default(uuid())
   tenantId  String
@@ -1744,6 +1793,7 @@ model User {
   passwordHistory PasswordHistory[]
   roles           UserRole[]
   notifications   Notification[]
+  feedLikes       FeedLike[]
 
   @@map("users")
 }
@@ -1831,6 +1881,7 @@ model Tenant {
   forms               Form[]
   paymentAccounts     TenantPaymentAccount[]
   kycSubmissions      KycSubmission[]
+  feedPosts           FeedPost[]
 
   @@map("tenants")
 }
@@ -2092,6 +2143,7 @@ model Product {
   variants  ProductVariant[]
   cartItems CartItem[]
   orderItems OrderItem[]
+  feedPosts FeedPost[]
 
   @@unique([tenantId, slug])
   @@index([tenantId])

@@ -32,11 +32,11 @@ export class MediaAppController {
       type: 'object',
       required: ['file'],
       properties: {
-        file: { type: 'string', format: 'binary', description: 'File to upload (max 10MB)' },
+        file: { type: 'string', format: 'binary', description: 'File to upload (max 50MB, images or video)' },
       },
     },
   })
-  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 10 * 1024 * 1024 } }))
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 50 * 1024 * 1024 } }))
   async upload(
     @CurrentUser('id') userId: string,
     @UploadedFile() file: any,

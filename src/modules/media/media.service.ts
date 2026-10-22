@@ -24,7 +24,7 @@ const ALLOWED_MIME_TYPES = [
   'audio/wav',
 ];
 
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB — promo-feed videos ride the same endpoint
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -57,7 +57,7 @@ export class MediaService {
 
     if (file.size > MAX_FILE_SIZE) {
       throw new BadRequestException(
-        `File size ${Math.round(file.size / 1024 / 1024)}MB exceeds limit of 10MB`,
+        `File size ${Math.round(file.size / 1024 / 1024)}MB exceeds limit of 50MB`,
       );
     }
 

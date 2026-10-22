@@ -12,6 +12,7 @@ import { CommerceModule } from './modules/commerce/commerce.module';
 import { MediaModule } from './modules/media/media.module';
 import { QrModule } from './modules/qr/qr.module';
 import { DiscoveryModule } from './modules/discovery/discovery.module';
+import { FeedModule } from './modules/feed/feed.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { UsersModule } from './modules/users/users.module';
@@ -83,6 +84,7 @@ import { PlatformAuditInterceptor } from './modules/admin/platform-audit.interce
     MediaModule,
     QrModule,
     DiscoveryModule,
+    FeedModule,
     AdminModule,
     NotificationsModule,
     HealthModule,
