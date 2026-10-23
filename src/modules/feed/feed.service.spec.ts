@@ -83,7 +83,7 @@ describe('FeedService (merchant self-service)', () => {
     prismaMock.feedPost.update.mockResolvedValue({ id: 'post-1' });
     await feed.updatePost('post-1', 'tenant-1', { caption: '   ', ctaLabel: '  ' });
     expect(prismaMock.feedPost.update).toHaveBeenCalledWith(
-      expect.objectContaining({ data: { caption: null, ctaLabel: 'Buy Now' } }),
+      expect.objectContaining({ data: { caption: null, ctaLabel: '' } }),
     );
   });
 

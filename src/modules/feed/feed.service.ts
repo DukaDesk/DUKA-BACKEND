@@ -186,7 +186,7 @@ export class FeedService implements OnModuleInit, OnModuleDestroy {
         tenantId,
         caption: input.caption?.trim() || null,
         productId: input.productId ?? null,
-        ctaLabel: input.ctaLabel?.trim() || 'Buy Now',
+        ctaLabel: input.ctaLabel === undefined ? 'Buy Now' : (input.ctaLabel.trim() || ''),
         media: media.map(item => ({
           mediaId: item.mediaId ?? null,
           url: item.url,
@@ -206,7 +206,7 @@ export class FeedService implements OnModuleInit, OnModuleDestroy {
 
     const data: any = {};
     if (input.caption !== undefined) data.caption = input.caption?.trim() || null;
-    if (input.ctaLabel !== undefined) data.ctaLabel = input.ctaLabel?.trim() || 'Buy Now';
+    if (input.ctaLabel !== undefined) data.ctaLabel = input.ctaLabel.trim();
     if (input.status !== undefined) data.status = input.status;
     if (input.productId !== undefined) {
       await this.assertProductBelongsToTenant(tenantId, input.productId);
